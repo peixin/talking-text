@@ -1,0 +1,29 @@
+pre-commit:
+  parallel: true
+  commands:
+    backend-ruff-check:
+      root: backend/
+      glob: "*.py"
+      run: poetry run ruff check {staged_files}
+    backend-ruff-format:
+      root: backend/
+      glob: "*.py"
+      run: poetry run ruff format --check {staged_files}
+    frontend-eslint:
+      root: frontend/
+      glob: "{app,lib,components}/**/*.{ts,tsx,js,jsx,mjs}"
+      run: pnpm exec eslint {staged_files}
+    frontend-prettier:
+      root: frontend/
+      glob: "{app,lib,components}/**/*.{ts,tsx,js,jsx,mjs,json,css,md}"
+      run: pnpm exec prettier --check {staged_files}
+    frontend-typecheck:
+      root: frontend/
+      glob: "**/*.{ts,tsx}"
+      run: pnpm exec tsc --noEmit
+
+commit-msg:
+  commands:
+    commitlint:
+      root: frontend/
+      run: pnpm exec commitlint --edit {1}

@@ -2,45 +2,47 @@
 
 > **言出成界** · Words become your world.
 
-一款面向儿童的英语口语陪练 app。让 AI 只在孩子已学的范围（加一点点踮脚够得到的新词）里和他聊天——把课本上静态的文字，变成日常敢说出口的话。
-
 An English speaking companion for children. The AI chats only within what the child has learned (plus a little stretch just beyond)—turning the static words on a textbook page into everyday spoken language.
 
 ---
 
-## 文档 · Docs
+## Docs
 
-| 文档 | 内容 |
+| Document | Content |
 |---|---|
-| [产品说明 · Product](docs/product.md) | 缘起、哲学根源（维特根斯坦 × 李白/余光中）、品牌体系、开屏词库（中 / 英） |
-| [技术架构 · Architecture](docs/architecture.md) | 技术栈、仓库结构、数据模型、Scope Computer、对话数据流、Adapter 模式、部署规划 |
-| [协作指南 · CLAUDE.md](CLAUDE.md) | 给 Claude Code 和未来贡献者的项目上下文 |
+| [Product](docs/product.md) | Origin, philosophy (Wittgenstein × Li Bai / Yu Guangzhong), brand, opening phrase library |
+| [Architecture](docs/architecture.md) | Tech stack, repo layout, data models, Scope Computer, conversation flow, Adapter pattern, deployment |
+| [Tech Stack](docs/tech-stack.md) | Every tech decision: what, why, alternatives considered, why not |
+| [Session Log](docs/session-log.md) | From idea to working scaffold — key decisions and reversals |
+| [CLAUDE.md](CLAUDE.md) | Project context for Claude Code and future contributors |
+
+Chinese versions: [README.cn.md](README.cn.md) · [docs/*.cn.md](docs/)
 
 ---
 
-## 一眼看懂
+## At a glance
 
-- **问题** · 孩子学英语时间不少，开口机会很少。通用 AI 闲聊没范围，孩子容易撞边界、生挫败。
-- **方案** · 把孩子的课本喂给 AI，让 AI 在"已学 + 10% 踮脚"范围里陪聊。每一次开口都从自信的中心出发，边界一寸一寸往外推。
-- **哲学** · 维特根斯坦：语言的边界就是世界的边界 × 余光中/李白：绣口一吐，就半个盛唐。
-- **技术** · Web PWA（Next.js 全范式 + FastAPI）· 火山方舟 STT/LLM/TTS 全家桶 · PostgreSQL + Redis + 火山 TOS。
+- **Problem** — Kids study English for hours but rarely get to speak. General-purpose AI chat has no vocabulary boundaries; kids hit the wall and get frustrated.
+- **Solution** — Feed the child's textbook to the AI, let it chat within "learned vocab + 10% stretch." Every conversation starts from a confident center and pushes the boundary outward, one inch at a time.
+- **Philosophy** — Wittgenstein: the limits of language are the limits of world × Yu Guangzhong / Li Bai: one breath from an embroidered mouth, and half the Tang Dynasty spills forth.
+- **Tech** — Web PWA (Next.js full paradigm + FastAPI) · Volcengine Ark STT/LLM/TTS · PostgreSQL + Redis + Volcengine TOS.
 
 ---
 
-## 快速开发
+## Quick start
 
 ```bash
-just install        # 一次性安装前后端依赖
-just dev            # 同时起后端和前端
-just api            # 只起后端 (http://localhost:8000)
-just web            # 只起前端 (http://localhost:3000)
-just                # 查看所有可用命令
+just install        # install backend + frontend deps
+just dev            # start both backend and frontend
+just api            # backend only (http://localhost:8000)
+just web            # frontend only (http://localhost:3000)
+just                # list all available commands
 ```
 
-需要本地 Postgres + Redis（V1 阶段不上 Docker，详见架构文档"部署"一节）。
+Requires local Postgres + Redis (no Docker in V1; see [architecture docs](docs/architecture.md) for details).
 
 ---
 
 ## License
 
-暂未发布。
+Not yet published.

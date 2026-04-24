@@ -1,243 +1,323 @@
-# CLAUDE.md — 项目协作指南
+# CLAUDE.md — Project Collaboration Guide
 
-> 本文件是写给 **Claude Code** 的项目上下文。每次新会话开启时会被自动读入。
-> 产品理念见 [`docs/product.md`](docs/product.md)。
-> 技术架构见 [`docs/architecture.md`](docs/architecture.md)。
-
----
-
-## 项目速览
-
-**Talking Text（字有天地）** — 面向儿童的英语口语陪练 Web app。
-
-**核心机制：** 把孩子的课本（词汇、句型、课文、语法、大纲）输入给 LLM，让 LLM 在"已学范围 + ~10% 进阶词"内陪孩子聊天。语音链路为 STT → LLM → TTS，V1 串行整段、V2 升级流式。
-
-**哲学内核：** 维特根斯坦的"语言边界即世界边界" × 余光中替李白的"绣口一吐就半个盛唐"——不让孩子撞边界，让他站在已知的中心开口，边界一寸一寸往外推。
-
-**目标用户：** 小学英语学习者（以及愿意一起学的家长）。
-
-**部署地：** 中国大陆，不依赖任何被墙的服务。
-
-**计费模型：** Token 消耗。家长账号下可挂 N 个 Learner，互不相扰。
+> Auto-loaded at the start of every Claude Code session.
+> Product philosophy: [`docs/product.md`](docs/product.md)
+> Architecture: [`docs/architecture.md`](docs/architecture.md)
+> Chinese version: [`CLAUDE.cn.md`](CLAUDE.cn.md)
 
 ---
 
-## 技术栈（速查）
+## Project Overview
 
-| 层 | 选择 |
+**Talking Text (字有天地)** — A Web app for children to practice English speaking.
+
+**Core mechanism:** Feed the child's textbook (vocab, sentence patterns, texts, grammar, syllabus) into an LLM, and let the LLM chat with the child within "learned scope + ~10% stretch vocab." Voice pipeline: STT → LLM → TTS — batch in V1, streaming in V2.
+
+**Philosophy:** Wittgenstein's "limits of language are limits of world" × Yu Guangzhong's tribute to Li Bai "one breath from an embroidered mouth, and half the Tang Dynasty spills forth" — don't make the child hit the boundary; let them speak from the center of their own world and push the boundary outward, one inch at a time.
+
+**Target users:** Elementary school English learners (and parents who want to learn too).
+
+**Deployment:** Mainland China — no dependency on any blocked service.
+
+**Billing model:** Token consumption. A parent Account can have N Learners, each independent.
+
+---
+
+## Tech Stack (quick reference)
+
+| Layer | Choice |
 |---|---|
-| 后端 | Python 3.12 + FastAPI + SQLAlchemy (async) + asyncpg |
-| 前端 | Next.js App Router（**全 Next 范式，不当 SPA 写**） |
-| 语音 + LLM | 火山方舟全家桶（STT + 豆包 + TTS） |
-| 主 DB | PostgreSQL 16 |
-| 缓存 | Redis |
-| 对象存储 | 火山 TOS |
-| 包管理 | backend: Poetry · frontend: pnpm |
-| 任务入口 | 根目录 `justfile` |
-| 容器化 | **V1 延后**，发布阶段一次性做 |
+| Backend | Python 3.12 + FastAPI + SQLAlchemy 2.0 (async) + asyncpg |
+| Frontend | Next.js 16 App Router (**full Next paradigm, not SPA**) + React 19.2 |
+| UI | Tailwind CSS v4 + shadcn/ui (Radix primitives) + lucide-react |
+| Voice + LLM | Volcengine Ark full stack (STT + Doubao + TTS) |
+| Primary DB | PostgreSQL 16 |
+| Cache | Redis |
+| Object storage | Volcengine TOS |
+| Package mgmt | backend: Poetry · frontend: pnpm |
+| DB migrations | Alembic (async template) |
+| Lint/Format (Py) | Ruff |
+| Type check (Py) | mypy |
+| Lint (TS) | ESLint 9 + eslint-config-next 16 (Flat Config) |
+| Format (TS/CSS) | Prettier + prettier-plugin-tailwindcss |
+| Git hooks | lefthook |
+| Commit format | commitlint + Conventional Commits |
+| Task runner | root `justfile` |
+| Containerization | **Deferred to V1 release** |
 
 ---
 
-## 仓库布局
+## Repo Layout
 
 ```
 talking-text/
-├── backend/               # Python FastAPI
+├── backend/                   # Python FastAPI
 │   ├── app/
-│   │   ├── api/           # HTTP 层
-│   │   ├── core/          # 业务核心（零外部 SDK 依赖）
-│   │   │   ├── scope/     # Scope Computer（范围计算器）
-│   │   │   ├── prompt/    # Prompt 组装 + 越界校验
-│   │   │   ├── dialog/    # 一轮对话编排
-│   │   │   └── mastery/   # V2：掌握度追踪（V1 空实现）
-│   │   ├── adapters/      # 外部服务适配器（STT/LLM/TTS）
-│   │   ├── curriculum/    # 教材录入管道
-│   │   └── storage/       # DB + 对象存储
-│   └── pyproject.toml
-├── frontend/              # Next.js（app/ 目录）
+│   │   ├── api/               # HTTP layer
+│   │   ├── core/              # Business logic (zero external SDK deps)
+│   │   │   ├── scope/         # Scope Computer
+│   │   │   ├── prompt/        # Prompt assembly + boundary check
+│   │   │   ├── dialog/        # Single-turn orchestration
+│   │   │   └── mastery/       # V2: mastery tracker (V1 stub)
+│   │   ├── adapters/          # External service adapters (STT/LLM/TTS)
+│   │   ├── curriculum/        # Curriculum ingestion pipeline
+│   │   └── storage/           # DB (Base metadata + SQLA models)
+│   ├── alembic/               # DB migrations
+│   ├── alembic.ini
+│   ├── pyproject.toml
+│   └── .env.example
+├── frontend/                  # Next.js 16 (app/ directory)
+│   ├── app/
+│   │   ├── layout.tsx         # Root layout (Server Component)
+│   │   ├── page.tsx           # Landing page (Server Component, force-dynamic)
+│   │   ├── login/             # Login (Server Component + Server Action)
+│   │   └── (app)/             # Authenticated route group
+│   ├── components/ui/         # shadcn components (auto-generated, don't edit logic)
+│   ├── lib/
+│   │   ├── backend.ts         # server-only Python backend client
+│   │   └── utils.ts           # shadcn cn() helper
+│   ├── eslint.config.mjs
+│   ├── .prettierrc.json
+│   ├── commitlint.config.mjs
+│   └── package.json
 ├── docs/
-│   ├── product.md         # 产品理念（双语）
-│   └── architecture.md    # 技术架构（中文）
-├── justfile
-├── README.md
-└── CLAUDE.md              # 本文件
+│   ├── product.md / product.cn.md
+│   ├── architecture.md / architecture.cn.md
+│   ├── tech-stack.md / tech-stack.cn.md
+│   └── session-log.md / session-log.cn.md
+├── lefthook.yml               # Git hooks
+├── justfile                   # Task runner
+├── README.md / README.cn.md
+└── CLAUDE.md / CLAUDE.cn.md   # This file
 ```
 
 ---
 
-## 八条架构纪律（违反前先问）
+## Eight Architecture Rules (ask before breaking)
 
-### 1. Adapter Pattern 是铁律
+### 1. Adapter Pattern is non-negotiable
 
-STT / LLM / TTS 一定会换。**所有外部 SDK 调用必须写在 `backend/app/adapters/` 下**，业务层（`core/`）只依赖 Protocol。新增第三方服务不要写在 `core/`。
+STT / LLM / TTS vendors will change. **All external SDK calls must live in `backend/app/adapters/`**. Business logic (`core/`) depends only on Protocols. Never put third-party calls in `core/`.
 
-### 2. Scope Computer 是核心灵魂
+### 2. Scope Computer is the product's soul
 
-每一轮对话之前，必须先问 Scope Computer："这一轮允许用哪些词？"
+Before every conversation turn, Scope Computer must be asked: "Which words are allowed this turn?"
 
-- **接口在 V1 就定死**，不允许破坏性变更
-- V1 实现：返回学习者已学全部词，stretch 为空
-- V2 扩展：加入下一单元词作为 stretch
-- V3 扩展：接入 mastery tracker 动态调整
+- **Interface is frozen at V1** — no breaking changes allowed
+- V1: returns all words the learner has studied; stretch is empty
+- V2: adds next-unit words as stretch
+- V3: integrates mastery tracker for dynamic adjustment
 
-详细接口见 `docs/architecture.md` 第五节。
+See `docs/architecture.md` §5 for the full interface.
 
-### 3. 事件日志 V1 写，V2 读
+### 3. VocabEvents: write in V1, read in V2
 
-每一轮对话都写 `vocab_event`（哪个词被 AI 说了 / 被孩子用了 / 被孩子询问了）。
+Every turn writes `vocab_event` (which word the AI used / the child used / the child asked about).
 
-**V1 不读这些数据，但必须每轮写。** 原因：V2 做 mastery 时，这是唯一训练数据来源。
+**V1 doesn't read these — but must write every turn.** Reason: V2's mastery tracker has no other training data source. Skip V1 writes → V2 starts from zero → 6 months of data lost.
 
-### 4. 语音管道 V1 串行，架构为流式设计
+### 4. Voice pipeline: batch in V1, designed for streaming
 
-- V1 实现：HTTP 整段
-- V2 升级：WebSocket 流式
-- **Adapter 接口从 V1 起就同时暴露 `invoke()` 和 `stream()` 两个方法**
+- V1: HTTP batch
+- V2: WebSocket streaming
+- **Both `invoke()` and `stream()` methods must be exposed on the Adapter interface from V1**
 
-### 5. 账号模型：Account vs Learner
+### 5. Account vs Learner model
 
-- **Account** = 登录 + 计费实体（家庭一个）
-- **Learner** = 学习档案（每个学习者一个，含想学的家长）
-- 业务逻辑只在 Learner 维度计算，不区分"孩子 / 家长"
+- **Account** = login + billing entity (one per family)
+- **Learner** = study profile (one per person; parents who want to learn are also Learners)
+- Business logic (Scope Computer, mastery tracker) operates at the Learner level only
 
-### 6. 前端全面 Next.js，不当 SPA 写
+### 6. Frontend: full Next.js paradigm, not SPA
 
-- **默认 Server Component**
-- Client Component 仅在需要交互时（主要是对话页的音频控制）
-- Server Actions 处理表单（登录、教材上传）
-- Middleware 做鉴权
-- **不使用 Next API Routes**（后端是独立 Python）
+- **Default to Server Component**
+- Client Component only where interaction is required (audio controls on chat page); **add `Client` suffix** (e.g. `ChatClient.tsx`)
+- Server Actions for forms (login, curriculum upload)
+- **Use `proxy.ts` for auth (renamed from `middleware.ts` in Next.js 16)**
+- **No Next API Routes** — backend is a separate Python service
+- Backend calls go through `lib/backend.ts` (`server-only`); Client Components must not fetch the backend directly
 
-### 7. 教材数据走统一规范
+### 7. Curriculum data follows a canonical schema
 
-所有外部输入（文本 / PDF / 图片 / MP3）最终都转成内部 `Curriculum → Unit → (articles, vocab, grammar_points, objectives, key_points)` 数据结构。转换由 AI（LLM 结构化提取）完成，家长审阅为准。
+All external input (text / PDF / image / MP3) must be converted to the internal `Curriculum → Unit → (articles, vocab, grammar_points, objectives, key_points)` structure. Conversion is done by LLM (structured extraction); parent review is the source of truth.
 
-### 8. V1 不做 Docker，但代码必须"Docker-ready"
+### 8. No Docker in V1 — but code must be Docker-ready
 
-延后 Docker 不等于可以写反 Docker 的代码。以下必须遵守：
+Deferring Docker ≠ writing Docker-hostile code. These rules apply from day one:
 
-- 所有配置走环境变量或 config 文件（DB URL、API key、端口等）
-- 日志走 stdout/stderr，不落固定路径的本地文件
-- 不依赖 `__file__` 的相对路径加载运行时资源
-- 音频等临时文件用 `tempfile` 或直接上传 TOS
-- 启动时不预设文件系统约定（如"必须存在 data/ 文件夹"）
+- All config via environment variables or config files (DB URL, API keys, ports, etc.)
+- Logs to stdout/stderr — no fixed-path local log files
+- No `__file__`-relative paths for loading runtime resources
+- Audio temp files use `tempfile` or go straight to TOS
+- No filesystem preconditions at startup (e.g., "data/ directory must exist")
 
-**目标：发布前一次性补 Dockerfile + docker-compose，不反悔。**
+**Goal: add Dockerfile + docker-compose once at release time, no regrets.**
 
 ---
 
-## 对话一轮的端到端流程（V1）
+## Next.js 16 Breaking Changes
+
+1. **`middleware.ts` → `proxy.ts`** — function also renamed from `middleware` to `proxy`; edge runtime no longer supported
+2. **Async Request APIs** — `cookies()` / `headers()` / `params` / `searchParams` are all Promises; must `await`
+3. **Turbopack by default** — no `--turbopack` flag needed
+4. **`next lint` removed** — use ESLint CLI (`pnpm lint` already configured)
+5. **`next/legacy/image` deprecated** — use `next/image` only
+6. **`serverRuntimeConfig` / `publicRuntimeConfig` removed** — use env vars + `NEXT_PUBLIC_` prefix
+
+When something doesn't match your mental model of Next.js, read `frontend/node_modules/next/dist/docs/01-app/` for the relevant section before touching anything.
+
+---
+
+## End-to-end flow — one conversation turn (V1)
 
 ```
-孩子按录音 →
-  前端 MediaRecorder 采集（整段）→
+Child presses record →
+  Frontend MediaRecorder captures (batch) →
   POST /conversation/turn (audio blob) →
-  火山 STT (整段) → 文字 →
-  Scope Computer → 本轮词表 →
-  Prompt Assembler → 完整 prompt →
-  豆包 LLM (整段) → 回复文字 →
-  越界校验（超出词表则重试一次）→
-  写 Turn + VocabEvent 到 DB →
-  火山 TTS (整段) → 音频 URL →
-  返回 {text, audio_url} →
-  前端显示文字 + 播放音频
+  Volcengine STT (batch) → text →
+  Scope Computer → allowed vocab for this turn →
+  Prompt Assembler → full prompt →
+  Doubao LLM (batch) → reply text →
+  Boundary check (out-of-scope → retry once) →
+  Write Turn + VocabEvent to DB →
+  Volcengine TTS (batch) → audio URL →
+  Return {text, audio_url} →
+  Frontend shows text + plays audio
 ```
 
-完整时序图（含 V2 流式）见 `docs/architecture.md` 第六节。
+Full sequence diagram (incl. V2 streaming) in `docs/architecture.md` §6.
 
 ---
 
-## 命令速查
+## Command Reference
 
 ```bash
-# 环境
-just install          # 安装前后端依赖
+# Setup
+just install          # install backend + frontend deps + lefthook install
 
-# 日常开发
-just dev              # 同时起前后端
-just api              # 只起后端
-just web              # 只起前端
+# Daily dev
+just dev              # start backend + frontend together
+just api              # backend only (http://localhost:8000)
+just web              # frontend only (http://localhost:3000)
 
-# 透传命令
-just be run <cmd>     # 在 backend 下跑 poetry 命令（如 just be run pytest）
-just fe <cmd>         # 在 frontend 下跑 pnpm 命令（如 just fe add zod）
+# Pass-through
+just be run <cmd>     # run poetry command in backend/
+just fe <cmd>         # run pnpm command in frontend/
 
-# 质量
+# Quality
+just lint             # ruff check + pnpm lint
+just fmt              # ruff format + pnpm format
+just typecheck        # mypy + tsc --noEmit
+just check            # read-only version of the above three (pre-commit check)
 just test
-just lint
-just fmt
+
+# DB migrations (Alembic)
+just migrate "<msg>"  # alembic revision --autogenerate -m "..."
+just db-up            # upgrade head
+just db-down          # downgrade -1
+just db-current       # show current revision
+just db-history
 ```
 
 ---
 
-## 代码约定
+## Code Conventions
+
+### Language policy
+
+- **Pure English project:** all code, comments, naming, configuration, documentation, and runtime prompts must be written in English — no exceptions
+- **Docs file convention:** each doc has two versions — default file (`xxx.md`) in English; Chinese translation in `xxx.cn.md`
 
 ### Python
-- **3.12+**，类型注解必须（包括所有函数签名和 public 属性）
-- **异步优先**：FastAPI routes 全部 `async def`，DB 走 asyncpg + SQLAlchemy async
-- **Pydantic v2** 做数据校验
-- **Ruff** 做 lint + format
-- 模块内部按"接口在上、实现在下、私有最后"的顺序组织
+- **3.12+** with full type annotations (all function signatures + public attributes)
+- **Async-first:** all FastAPI routes are `async def`; DB uses asyncpg + SQLAlchemy async
+- **Pydantic v2** for data validation
+- **Ruff** for lint + format (config in `backend/pyproject.toml` under `[tool.ruff]`)
+- **mypy** for type checking
+- Module organization: interface first, implementation below, private last
+- SQLAlchemy 2.0 style: `Mapped[T]` + `mapped_column()` + `select().where()` — not the old `Column()` / `session.query()`
 
 ### TypeScript / React
-- **严格模式**（`strict: true`）
-- **组件** PascalCase 文件名，Server Component 不加后缀，Client Component 文件名加 `Client` 后缀（如 `ChatClient.tsx`）
-- **页面** 走 Next 约定（`page.tsx` / `layout.tsx` / `actions.ts`）
-- **不在 Server Component 里调 useEffect / useState**（显然会报错，但值得作为纪律写下来）
+- **Strict mode** (`strict: true`)
+- **Components:** PascalCase filenames; Server Component has no suffix; Client Component has `Client` suffix (e.g. `ChatClient.tsx`)
+- **Pages** follow Next.js conventions (`page.tsx` / `layout.tsx` / `actions.ts` / `proxy.ts`)
+- **No `useEffect` / `useState` in Server Components**
+- **Styling:** Tailwind v4 utility classes; use shadcn for complex components (`pnpm dlx shadcn@latest add <component>`)
+- `components/ui/` is shadcn-managed — only change styles, never the structural logic
 
-### 文档语言
-- **外部文档**（README、`docs/product.md`）：双语，中英对齐
-- **内部技术文档**（`docs/architecture.md`、`CLAUDE.md`）：中文
-- **运行时 Prompt**（`backend/app/core/prompt/templates/`）：**中文指令 + 英文 few-shot 示例**
-  - 中文指令：豆包 / DeepSeek 对中文理解更贴切
-  - 英文示例：对话输出本身是英文，示例要同语言
+### Commit format (Conventional Commits, enforced by commitlint)
 
-### 提交信息
-- 中英文皆可
-- 主题行：动词开头、对象清楚
-- 不要 emoji，不要 "🤖 Generated" 之类 co-author trailer（除非被明确要求）
+Format: `<type>(<scope>): <subject>`
 
----
+| type | when |
+|---|---|
+| `feat` | new feature |
+| `fix` | bug fix |
+| `refactor` | refactor (no behavior change) |
+| `chore` | maintenance (deps, build, tooling) |
+| `docs` | documentation |
+| `test` | tests |
+| `style` | formatting only |
+| `perf` | performance |
 
-## 已知约束
-
-- **不能依赖被墙服务**：Vercel、OpenAI、Claude API、Supabase 等一律不可用
-- **儿童隐私（V1 不做合规，但自律）**：
-  - 不存身份证号 / 家庭住址等敏感字段
-  - 音频只传火山 TOS（国内），不出境
-  - V2 准备对外推广前补 COPPA / 个保法合规
-- **延后的事项（不要现在做）：**
-  - Docker 化
-  - PDF / 图片 / MP3 教材导入（V1 只支持粘贴文本）
-  - 流式语音链路
-  - 短信 / 微信登录
-  - Scope Computer 的 V2/V3 逻辑（V1 只是空壳）
+- Subject line ≤ 100 characters
+- English or Chinese both fine
+- No emoji, no "🤖 Generated" co-author trailers (unless explicitly requested)
 
 ---
 
-## 开始新任务时的建议姿势
+## Known Constraints
 
-1. **先读 `docs/architecture.md`**（或对应章节），确认任务所在层（api / core / adapters / storage / frontend）
-2. **接口先行**：如果要新增业务，先写 Protocol / Pydantic schema，再写实现
-3. **写在对的地方**：
-   - 纯业务逻辑 → `core/`
-   - 外部 SDK 调用 → `adapters/`
-   - HTTP 路由 → `api/`
-   - DB 操作 → `storage/`
-4. **事件日志**：任何涉及 vocab 的动作都要考虑是否要写 `vocab_event`
-5. **别提前优化**：先正确，再性能。
+- **No blocked services:** Vercel, OpenAI, Claude API, Supabase, Google Fonts (Chinese) — all off limits
+- **Child privacy (no compliance in V1, but self-disciplined):**
+  - No national ID numbers / home addresses stored
+  - Audio goes to Volcengine TOS only (domestic), never leaves China
+  - COPPA / PIPL compliance before any public launch
+- **Explicitly deferred (do not implement now):**
+  - Docker
+  - PDF / image / MP3 curriculum import (V1 text paste only)
+  - Streaming voice pipeline
+  - SMS / WeChat login
+  - Scope Computer V2/V3 logic (V1 is a stub)
 
 ---
 
-## 下一步 TODO（按优先级，待用户确认后执行）
+## Starting a New Task
 
-- [ ] 初始化后端骨架（api + core + adapters + storage + `/health`）
-- [ ] 初始化前端骨架（Next.js App Router + 登录前 SSR + 登录后路由组）
-- [ ] 账号系统（Account + Learner + 密码登录 + Server Action）
-- [ ] 火山方舟 LLM adapter（先把 `invoke()` 整段跑通）
-- [ ] 教材录入 MVP（粘贴文本 → LLM 提取 → 人工审阅 → 入库）
-- [ ] Scope Computer V1 空壳 + Prompt 拼装 + 越界校验
-- [ ] 对话 API（POST /conversation/turn）
-- [ ] 前端 chat 页 MVP（按住录音 → HTTP → 播放音频）
-- [ ] 火山 STT / TTS adapter
-- [ ] 内置首批教材（Tot Talk 等，由用户提供素材）
+1. **Read `docs/architecture.md`** (or the relevant section) to confirm which layer the task belongs to (api / core / adapters / storage / frontend)
+2. **Interface first:** write the Protocol / Pydantic schema / Mapped model before the implementation
+3. **Write in the right place:**
+   - Pure business logic → `core/`
+   - External SDK calls → `adapters/`
+   - HTTP routing → `api/`
+   - DB models + queries → `storage/`
+4. **After changing the DB schema:** `just migrate "<msg>"`, review the new file in `alembic/versions/`, then `just db-up`
+5. **Event logging:** any vocab-related action — consider whether it needs a `vocab_event`
+6. **Before committing:** `just check`
+7. **Don't optimize early:** correctness first, performance after a real bottleneck appears
+
+---
+
+## Current Progress
+
+**Done (scaffold + DX):**
+- ✅ Backend skeleton (`app/{api,core,adapters,curriculum,storage}` tree + `/health`)
+- ✅ Frontend skeleton (Next.js 16 App Router + landing + login/(app)/chat/parent stubs)
+- ✅ Tailwind v4 + shadcn/ui initialized (vermillion primary `oklch(0.52 0.175 25)`)
+- ✅ Alembic async template, DB connected
+- ✅ ESLint 9 + Prettier + prettier-plugin-tailwindcss
+- ✅ Ruff + mypy (backend)
+- ✅ lefthook + commitlint (Conventional Commits)
+- ✅ justfile full recipe set
+- ✅ PostgreSQL 16 + Redis local, `talking_text` DB created
+
+**Next TODO (priority order):**
+- [ ] Account system (`storage/models/account.py`, `learner.py` + Alembic migration + `api/auth.py` + frontend login Server Action)
+- [ ] `proxy.ts` auth (Next.js 16 naming)
+- [ ] Volcengine Ark LLM adapter (get `invoke()` batch working first)
+- [ ] Curriculum ingestion MVP (paste text → LLM extract → human review → DB)
+- [ ] Scope Computer V1 stub + Prompt assembly + boundary check
+- [ ] Conversation API (`POST /conversation/turn`)
+- [ ] Frontend chat page MVP (hold-to-record → HTTP → play audio)
+- [ ] Volcengine STT / TTS adapter
+- [ ] First-party textbook data (Tot Talk series — user to provide materials)
