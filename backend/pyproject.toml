@@ -1,0 +1,17 @@
+[project]
+name = "talking-text"
+version = "0.0.1"
+description = "字有天地 — an English speaking companion for children that chats only within the scope of what they've already learned."
+authors = [
+    {name = "liupeixin",email = "fengyi.mail@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["english", "speaking", "children", "education", "llm", "language-learning"]
+dependencies = [
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
