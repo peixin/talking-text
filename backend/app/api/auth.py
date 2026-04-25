@@ -75,6 +75,7 @@ class LoginRequest(BaseModel):
 class AccountOut(BaseModel):
     id: uuid.UUID
     name: str
+    last_active_learner_id: uuid.UUID | None = None
     # Returned on login/register so the Next.js Server Action can forward it
     # into the browser cookie (Next.js cannot see Set-Cookie from upstream).
     session_token: str | None = None
@@ -138,7 +139,12 @@ async def register(
 
     token = create_session_token(account.id)
     _set_session_cookie(response, account.id)
-    return AccountOut(id=account.id, name=account.name, session_token=token)
+    return AccountOut(
+        id=account.id,
+        name=account.name,
+        last_active_learner_id=account.last_active_learner_id,
+        session_token=token,
+    )
 
 
 @router.post("/login")
@@ -166,7 +172,12 @@ async def login(
 
     token = create_session_token(account.id)
     _set_session_cookie(response, account.id)
-    return AccountOut(id=account.id, name=account.name, session_token=token)
+    return AccountOut(
+        id=account.id,
+        name=account.name,
+        last_active_learner_id=account.last_active_learner_id,
+        session_token=token,
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -178,4 +189,6 @@ async def logout(response: Response) -> None:
 async def me(
     account: Annotated[Account, Depends(get_current_account)],
 ) -> AccountOut:
-    return AccountOut(id=account.id, name=account.name)
+    return AccountOut(
+        id=account.id, name=account.name, last_active_learner_id=account.last_active_learner_id
+    )

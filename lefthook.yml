@@ -4,19 +4,23 @@ pre-commit:
     backend-ruff-check:
       root: backend/
       glob: "*.py"
-      run: poetry run ruff check {staged_files}
+      run: poetry run ruff check --fix {staged_files}
+      stage_fixed: true
     backend-ruff-format:
       root: backend/
       glob: "*.py"
-      run: poetry run ruff format --check {staged_files}
+      run: poetry run ruff format {staged_files}
+      stage_fixed: true
     frontend-eslint:
       root: frontend/
       glob: "{app,lib,components}/**/*.{ts,tsx,js,jsx,mjs}"
-      run: pnpm exec eslint {staged_files}
+      run: pnpm exec eslint --fix {staged_files}
+      stage_fixed: true
     frontend-prettier:
       root: frontend/
       glob: "{app,lib,components}/**/*.{ts,tsx,js,jsx,mjs,json,css,md}"
-      run: pnpm exec prettier --check {staged_files}
+      run: pnpm exec prettier --write {staged_files}
+      stage_fixed: true
     frontend-typecheck:
       root: frontend/
       glob: "**/*.{ts,tsx}"

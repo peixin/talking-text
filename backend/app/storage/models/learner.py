@@ -21,4 +21,6 @@ class Learner(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    account: Mapped[Account] = relationship("Account", back_populates="learners")
+    account: Mapped[Account] = relationship(
+        "Account", back_populates="learners", foreign_keys=[account_id]
+    )

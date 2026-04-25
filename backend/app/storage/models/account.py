@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.storage.base import Base, TimestampMixin
@@ -19,9 +19,19 @@ class Account(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
+    last_active_learner_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("learner.id", ondelete="SET NULL"), nullable=True
+    )
+
     credentials: Mapped[list[AccountCredential]] = relationship(
-        "AccountCredential", back_populates="account", cascade="all, delete-orphan"
+        "AccountCredential",
+        back_populates="account",
+        cascade="all, delete-orphan",
+        foreign_keys="[AccountCredential.account_id]",
     )
     learners: Mapped[list[Learner]] = relationship(
-        "Learner", back_populates="account", cascade="all, delete-orphan"
+        "Learner",
+        back_populates="account",
+        cascade="all, delete-orphan",
+        foreign_keys="[Learner.account_id]",
     )
