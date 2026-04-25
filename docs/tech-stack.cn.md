@@ -176,10 +176,10 @@
 - 国内自部署可行（Node runtime，不依赖 Vercel）
 
 **重要心智：全 Next 范式，不当 SPA 写**
-- 默认 Server Component
 - Client Component 只在需要交互的地方（对话页音频交互等），文件名加 `Client` 后缀
-- Server Actions 处理登录等表单
+- Server Actions 处理登录等表单；**返回 Error Code** 交由 UI 翻译
 - **不使用 Next API Routes**（后端是独立 Python）
+- **国际化 (i18n)**：使用 `next-intl` 配合 `[locale]` 路由，文案统管于根目录 `i18n/`
 
 **不选：**
 - **Vite + React + React Router**：纯 SPA 体验简单，但落地页 SEO / 首屏被动
@@ -259,6 +259,7 @@
 
 | 库 | 用途 |
 |---|---|
+| `next-intl` | 国际化方案 (zh-CN, zh-TW, en) |
 | `lucide-react` | 和 shadcn 同一设计语言的图标库 |
 | `class-variance-authority` / `clsx` / `tailwind-merge` | shadcn 附属，class 合并 |
 | `server-only` | 标记仅服务端模块，防误导入到 Client Component |

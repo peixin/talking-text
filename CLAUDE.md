@@ -68,14 +68,23 @@ talking-text/
 │   └── .env.example
 ├── frontend/                  # Next.js 16 (app/ directory)
 │   ├── app/
-│   │   ├── layout.tsx         # Root layout (Server Component)
-│   │   ├── page.tsx           # Landing page (Server Component, force-dynamic)
-│   │   ├── login/             # Login (Server Component + Server Action)
-│   │   └── (app)/             # Authenticated route group
-│   ├── components/ui/         # shadcn components (auto-generated, don't edit logic)
+│   │   ├── [locale]/          # Localized routes (zh-CN, zh-TW, en)
+│   │   │   ├── layout.tsx     # Localized root layout
+│   │   │   ├── page.tsx       # Landing page (Server Component)
+│   │   │   ├── login/         # Login
+│   │   │   └── (app)/         # Authenticated route group (chat, parent)
+│   │   ├── favicon.ico
+│   │   └── globals.css
+│   ├── i18n/                  # next-intl configuration
+│   │   ├── messages/          # Locale JSON files (zh-CN.json, etc.)
+│   │   ├── request.ts         # next-intl server config
+│   │   └── routing.ts         # Shared routing config (Link, redirect)
+│   ├── components/            # Shared components (LocaleSwitcher, etc.)
+│   │   └── ui/                # shadcn components (auto-generated)
 │   ├── lib/
 │   │   ├── backend.ts         # server-only Python backend client
 │   │   └── utils.ts           # shadcn cn() helper
+│   ├── proxy.ts               # Auth & i18n middleware (Next.js 16)
 │   ├── eslint.config.mjs
 │   ├── .prettierrc.json
 │   ├── commitlint.config.mjs
@@ -128,16 +137,21 @@ Every turn writes `vocab_event` (which word the AI used / the child used / the c
 - **Learner** = study profile (one per person; parents who want to learn are also Learners)
 - Business logic (Scope Computer, mastery tracker) operates at the Learner level only
 
-### 6. Frontend: full Next.js paradigm, not SPA
+### 6. Frontend: Full Next.js + Internationalization
 
 - **Default to Server Component**
-- Client Component only where interaction is required (audio controls on chat page); **add `Client` suffix** (e.g. `ChatClient.tsx`)
-- Server Actions for forms (login, curriculum upload)
-- **Use `proxy.ts` for auth (renamed from `middleware.ts` in Next.js 16)**
+- Client Component only where interaction is required; **add `Client` suffix**
+- Server Actions for forms; **return Error Codes** (e.g. `AUTH_INVALID_CREDENTIALS`) instead of raw messages
+- **Internationalization (i18n):**
+  - Use `next-intl` with the `[locale]` dynamic segment
+  - All labels/messages must live in `i18n/messages/*.json`
+  - Use `Link`, `redirect`, `useRouter`, `usePathname` from `@/i18n/routing` (localized versions)
+  - Backend errors are translated in the UI via these dictionaries
+- **Auth and i18n Middleware:** Use `proxy.ts` (Next.js 16 naming)
 - **No Next API Routes** — backend is a separate Python service
-- **All backend calls must go through `lib/backend.ts` (`server-only`)** — Client Components must never fetch the Python backend directly
-- **Auth and session cookie logic lives exclusively in Server Actions** — Client Components never touch tokens or cookies
-- This pattern keeps the Python backend URL and API structure invisible to the browser, preventing scraping and simplifying debugging
+- **All backend calls must go through `lib/backend.ts` (`server-only`)**
+- **Auth and session cookie logic lives exclusively in Server Actions**
+- This pattern keeps the Python backend URL and API structure invisible to the browser.
 
 ### 7. Curriculum data follows a canonical schema
 
@@ -238,14 +252,19 @@ just db-history
 - **mypy** for type checking
 - Module organization: interface first, implementation below, private last
 - SQLAlchemy 2.0 style: `Mapped[T]` + `mapped_column()` + `select().where()` — not the old `Column()` / `session.query()`
-- **Every Model must inherit `TimestampMixin`** (see "Database Design Principles") — never hand-write `created_at` / `updated_at` on a model
+- **Every Model must inherit `TimestampMixin`** — never hand-write `created_at` / `updated_at` on a model
 
 ### TypeScript / React
 - **Strict mode** (`strict: true`)
+- **Internationalization:**
+  - Standard: `next-intl`
+  - Storage: `i18n/messages/{en,zh-CN,zh-TW}.json`
+  - Logic: Grouped in `i18n/` root folder
+  - Always use `routing.ts` helpers for navigation
 - **Components:** PascalCase filenames; Server Component has no suffix; Client Component has `Client` suffix (e.g. `ChatClient.tsx`)
-- **Pages** follow Next.js conventions (`page.tsx` / `layout.tsx` / `actions.ts` / `proxy.ts`)
+- **Pages** follow Next.js conventions (`[locale]/page.tsx`, `actions.ts`, `proxy.ts`)
 - **No `useEffect` / `useState` in Server Components**
-- **Styling:** Tailwind v4 utility classes; use shadcn for complex components (`pnpm dlx shadcn@latest add <component>`)
+- **Styling:** Tailwind v4 utility classes; use shadcn for complex components
 - `components/ui/` is shadcn-managed — only change styles, never the structural logic
 
 ### Commit format (Conventional Commits, enforced by commitlint)
@@ -265,7 +284,7 @@ Format: `<type>(<scope>): <subject>`
 
 - Subject line ≤ 100 characters
 - English or Chinese both fine
-- No emoji, no "🤖 Generated" co-author trailers (unless explicitly requested)
+- No emoji, no "🤖 Generated" co-author trailers
 
 ---
 
@@ -333,40 +352,34 @@ Rules:
 
 ## Starting a New Task
 
-1. **Read `docs/architecture.md`** (or the relevant section) to confirm which layer the task belongs to (api / core / adapters / storage / frontend)
+1. **Read `docs/architecture.md`** to confirm which layer the task belongs to (api / core / adapters / storage / frontend)
 2. **Interface first:** write the Protocol / Pydantic schema / Mapped model before the implementation
-3. **Write in the right place:**
-   - Pure business logic → `core/`
-   - External SDK calls → `adapters/`
-   - HTTP routing → `api/`
-   - DB models + queries → `storage/`
-4. **After changing the DB schema:** `just migrate "<msg>"`, review the new file in `alembic/versions/`, then `just db-up`
-5. **Event logging:** any vocab-related action — consider whether it needs a `vocab_event`
-6. **Before committing:** `just check`
-7. **Don't optimize early:** correctness first, performance after a real bottleneck appears
+3. **Write in the right place:** pure business logic → `core/`, SDK calls → `adapters/`, HTTP → `api/`, DB → `storage/`
+4. **After changing the DB schema:** `just migrate "<msg>"`, review the file, then `just db-up`
+5. **Before committing:** `just check`
+6. **Don't optimize early:** correctness first, performance after a real bottleneck appears
 
 ---
 
 ## Current Progress
 
-**Done (scaffold + DX):**
+**Done (scaffold + DX + Core Auth):**
 - ✅ Backend skeleton (`app/{api,core,adapters,curriculum,storage}` tree + `/health`)
-- ✅ Frontend skeleton (Next.js 16 App Router + landing + login/(app)/chat/parent stubs)
-- ✅ Tailwind v4 + shadcn/ui initialized (vermillion primary `oklch(0.52 0.175 25)`)
+- ✅ Frontend skeleton (Next.js 16 App Router + localized routes)
+- ✅ Internationalization (next-intl, 3 languages, LocaleSwitcher)
+- ✅ Account system (PostgreSQL models + FastAPI endpoints + session cookies)
+- ✅ `proxy.ts` auth & i18n middleware (Next.js 16 naming)
+- ✅ Tailwind v4 + shadcn/ui initialized
 - ✅ Alembic async template, DB connected
 - ✅ ESLint 9 + Prettier + prettier-plugin-tailwindcss
 - ✅ Ruff + mypy (backend)
 - ✅ lefthook + commitlint (Conventional Commits)
 - ✅ justfile full recipe set
-- ✅ PostgreSQL 16 + Redis local, `talking_text` DB created
+- ✅ PostgreSQL 16 + Redis local
 
 **Next TODO (priority order):**
-- [ ] Account system (`storage/models/account.py`, `learner.py` + Alembic migration + `api/auth.py` + frontend login Server Action)
-- [ ] `proxy.ts` auth (Next.js 16 naming)
 - [ ] Volcengine Ark LLM adapter (get `invoke()` batch working first)
 - [ ] Curriculum ingestion MVP (paste text → LLM extract → human review → DB)
 - [ ] Scope Computer V1 stub + Prompt assembly + boundary check
 - [ ] Conversation API (`POST /conversation/turn`)
-- [ ] Frontend chat page MVP (hold-to-record → HTTP → play audio)
-- [ ] Volcengine STT / TTS adapter
 - [ ] First-party textbook data (Tot Talk series — user to provide materials)

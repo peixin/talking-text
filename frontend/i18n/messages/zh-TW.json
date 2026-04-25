@@ -1,0 +1,85 @@
+{
+  "Metadata": {
+    "title": "Talking Text · 字有天地",
+    "description": "言出成界 — 一款面向兒童的英語口語陪練 app，讓 AI 只在孩子已學的範圍裡和他聊天。"
+  },
+  "Auth": {
+    "email_taken": "該信箱已被註冊",
+    "server_error": "伺服器錯誤，請稍後再試",
+    "invalid_credentials": "信箱或密碼錯誤",
+    "register": "註冊",
+    "registering": "註冊中...",
+    "name_placeholder": "你的名字",
+    "email_placeholder": "信箱",
+    "password_placeholder_register": "密碼（至少 8 位）",
+    "password_placeholder": "密碼",
+    "has_account": "已有帳號？",
+    "login": "登入",
+    "login_action": "登入",
+    "logging_in": "登入中...",
+    "no_account": "還沒有帳號？",
+    "errors": {
+      "AUTH_INVALID_CREDENTIALS": "信箱或密碼錯誤",
+      "AUTH_EMAIL_TAKEN": "該信箱已被註冊",
+      "AUTH_SERVER_ERROR": "伺服器錯誤，請稍後再試",
+      "AUTH_NAME_REQUIRED": "名稱不能為空"
+    }
+  },
+  "Navigation": {
+    "app_name": "字有天地",
+    "chat": "對話",
+    "parent": "家長",
+    "logout": "登出"
+  },
+  "Parent": {
+    "welcome": "歡迎，{name} 家長",
+    "welcome_desc": "在這裡管理孩子資訊、教材和學習進度。",
+    "my_children": "我的孩子",
+    "manage_add": "管理 / 添加",
+    "no_children": "還沒有添加任何孩子資訊",
+    "go_add": "去添加",
+    "last_used": "上次使用",
+    "feature_center": "功能中心",
+    "child_management": "孩子管理",
+    "child_management_desc": "增加、修改或刪除孩子資訊",
+    "material_management": "教材管理",
+    "material_management_desc": "規劃和導入學習材料 (即將上線)",
+    "learning_progress": "學習進度",
+    "learning_progress_desc": "查看孩子的掌握情況 (即將上線)"
+  },
+  "Learners": {
+    "back": "返回",
+    "page_title": "孩子管理",
+    "confirm_delete": "確定要刪除嗎？",
+    "name_placeholder": "輸入孩子名字...",
+    "add_child": "添加孩子",
+    "no_children_hint": "暫無孩子，請先添加。",
+    "save": "保存",
+    "cancel": "取消",
+    "edit": "編輯",
+    "delete": "刪除",
+    "switch_current": "切換為當前",
+    "errors": {
+      "LEARNER_NAME_REQUIRED": "名稱不能為空",
+      "LEARNER_CREATE_FAILED": "添加失敗",
+      "LEARNER_UPDATE_FAILED": "修改失敗",
+      "LEARNER_DELETE_FAILED": "刪除失敗"
+    }
+  },
+  "Chat": {
+    "title": "對話",
+    "welcome": "你好，{name}！準備好開始今天的學習了嗎？",
+    "current_child": "當前孩子：",
+    "no_chat": "還沒有對話。按住下方按鈕開始說話。",
+    "history_count": "歷史 {count} 條",
+    "no_learners_title": "還沒有添加學習者",
+    "no_learners_desc": "請先在家長後台添加孩子資訊，然後再開始對話。",
+    "go_add_child": "去添加孩子"
+  },
+  "Home": {
+    "brand_title": "字有天地",
+    "brand_tagline": "言出成界",
+    "login": "登入",
+    "register": "註冊"
+  }
+}

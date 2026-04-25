@@ -13,29 +13,29 @@ async function getHeaders() {
 
 export async function createLearner(formData: FormData) {
   const name = String(formData.get("name") ?? "");
-  if (!name.trim()) return { error: "名称不能为空" };
+  if (!name.trim()) return { error: "LEARNER_NAME_REQUIRED" };
 
   try {
     await backend.learners.create(name, await getHeaders());
     revalidatePath("/parent/learners");
     revalidatePath("/chat");
     return { success: true };
-  } catch (e: any) {
-    return { error: e.detail || "添加失败" };
+  } catch {
+    return { error: "LEARNER_CREATE_FAILED" };
   }
 }
 
 export async function updateLearner(id: string, formData: FormData) {
   const name = String(formData.get("name") ?? "");
-  if (!name.trim()) return { error: "名称不能为空" };
+  if (!name.trim()) return { error: "LEARNER_NAME_REQUIRED" };
 
   try {
     await backend.learners.update(id, name, await getHeaders());
     revalidatePath("/parent/learners");
     revalidatePath("/chat");
     return { success: true };
-  } catch (e: any) {
-    return { error: e.detail || "修改失败" };
+  } catch {
+    return { error: "LEARNER_UPDATE_FAILED" };
   }
 }
 
@@ -45,7 +45,7 @@ export async function deleteLearner(id: string) {
     revalidatePath("/parent/learners");
     revalidatePath("/chat");
     return { success: true };
-  } catch (e: any) {
-    return { error: e.detail || "删除失败" };
+  } catch {
+    return { error: "LEARNER_DELETE_FAILED" };
   }
 }

@@ -1,31 +1,60 @@
-import { NextResponse } from "next/server";
+import createIntlMiddleware from "next-intl/middleware";
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { routing } from "./i18n/routing";
+
+const intlMiddleware = createIntlMiddleware(routing);
 
 const COOKIE_NAME = "session";
 
+// Paths that are accessible without auth (after stripping locale prefix)
 const PUBLIC_PATHS = new Set(["/", "/login", "/register"]);
 
-export function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+function stripLocale(pathname: string): string {
+  // Remove leading locale segment, e.g. /zh-CN/chat -> /chat
+  for (const locale of routing.locales) {
+    if (pathname === `/${locale}` || pathname.startsWith(`/${locale}/`)) {
+      return pathname.slice(`/${locale}`.length) || "/";
+    }
+  }
+  return pathname;
+}
 
+export default function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const pathWithoutLocale = stripLocale(pathname);
   const hasCookie = request.cookies.has(COOKIE_NAME);
 
-  if (PUBLIC_PATHS.has(pathname)) {
+  // Detect current locale from pathname
+  const locale =
+    routing.locales.find((l) => pathname === `/${l}` || pathname.startsWith(`/${l}/`)) ||
+    routing.defaultLocale;
+
+  // If the user is authenticated and tries to access public pages, redirect to /chat
+  if (PUBLIC_PATHS.has(pathWithoutLocale)) {
     if (hasCookie) {
-      return NextResponse.redirect(new URL("/chat", request.url));
+      const chatUrl = new URL(`/${locale}/chat`, request.url);
+      return NextResponse.redirect(chatUrl);
     }
-    return NextResponse.next();
+    return intlMiddleware(request);
   }
 
+  // If not authenticated, redirect to /login
   if (!hasCookie) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
+    // Let intlMiddleware determine the locale first so we can build the redirect URL
+    const locale =
+      routing.locales.find((l) => pathname.startsWith(`/${l}/`) || pathname === `/${l}`) ||
+      routing.defaultLocale;
+    const loginUrl = new URL(`/${locale}/login`, request.url);
+    loginUrl.searchParams.set("next", pathWithoutLocale);
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  // Authenticated — run intl middleware normally
+  return intlMiddleware(request);
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Match all paths except Next.js internals, static files, and API routes
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };

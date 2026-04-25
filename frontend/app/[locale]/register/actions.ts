@@ -1,28 +1,33 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { getLocale } from "next-intl/server";
+import { redirect } from "@/i18n/routing";
 
 import { BackendError, backend } from "@/lib/backend";
 
 const COOKIE_NAME = "session";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // must match config.toml [auth] session_max_age_days
 
-export type LoginState = { error: string } | null;
+export type RegisterState = { error: string } | null;
 
-export async function login(_prevState: LoginState, formData: FormData): Promise<LoginState> {
+export async function register(
+  _prevState: RegisterState,
+  formData: FormData,
+): Promise<RegisterState> {
+  const name = String(formData.get("name") ?? "");
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
 
   let sessionToken: string | undefined;
   try {
-    const result = await backend.auth.login(email, password);
+    const result = await backend.auth.register(name, email, password);
     sessionToken = result.session_token;
   } catch (e) {
-    if (e instanceof BackendError && e.status === 401) {
-      return { error: "邮箱或密码错误" };
+    if (e instanceof BackendError && e.status === 409) {
+      return { error: "AUTH_EMAIL_TAKEN" };
     }
-    return { error: "服务器错误，请稍后再试" };
+    return { error: "AUTH_SERVER_ERROR" };
   }
 
   if (sessionToken) {
@@ -35,5 +40,7 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
     });
   }
 
-  redirect("/chat");
+  const locale = await getLocale();
+  redirect({ href: "/chat", locale });
+  return null;
 }

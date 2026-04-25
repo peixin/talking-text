@@ -47,22 +47,24 @@ talking-text/
 │
 ├── frontend/                      # Next.js App Router
 │   ├── app/
-│   │   ├── layout.tsx             # 根布局（Server Component）
-│   │   ├── page.tsx               # 落地页（Server Component + SEO）
-│   │   ├── login/
-│   │   │   ├── page.tsx           # 登录页（Server Component）
-│   │   │   └── actions.ts         # Server Actions（登录 → 调 Python）
-│   │   ├── (app)/                 # 登录后路由组
-│   │   │   ├── layout.tsx         # 鉴权 + 应用 shell
-│   │   │   ├── chat/
-│   │   │   │   ├── page.tsx       # Server Component：首屏数据 SSR
-│   │   │   │   └── ChatClient.tsx # Client Component：音频交互
-│   │   │   └── parent/
-│   │   │       └── page.tsx       # 家长后台（大部分 Server Component）
-│   │   └── middleware.ts          # 边缘鉴权
+│   │   ├── [locale]/              # Localized routes (zh-CN, zh-TW, en)
+│   │   │   ├── layout.tsx         # Localized root layout
+│   │   │   ├── page.tsx           # Landing page
+│   │   │   ├── login/
+│   │   │   └── (app)/             # Authenticated route group
+│   │   │       ├── layout.tsx     # App shell + Nav
+│   │   │       ├── chat/
+│   │   │       └── parent/
+│   │   ├── favicon.ico
+│   │   └── globals.css
+│   ├── i18n/                      # next-intl configuration
+│   │   ├── messages/              # JSON dictionaries
+│   │   ├── request.ts             # Server configuration
+│   │   └── routing.ts             # Navigation helpers (Link, redirect)
+│   ├── proxy.ts                   # Auth & i18n middleware (Next.js 16)
+│   ├── components/                # Shared components (LocaleSwitcher, etc.)
 │   ├── lib/
-│   │   └── backend.ts             # Python backend 的 HTTP 客户端（server-side）
-│   ├── components/
+│   │   └── backend.ts             # Python backend client
 │   └── package.json
 │
 ├── docs/
@@ -83,14 +85,14 @@ talking-text/
 
 ### 每类页面的默认形态
 
-| 页面 | 渲染模式 | 原因 |
+| Page | Rendering Mode | Reason |
 |---|---|---|
-| 落地页 `/` | Server Component | SEO + 首屏性能 |
-| 登录 `/login` | Server Component + Server Action | 表单无需 JS 即可提交 |
-| 注册 `/register` | 同上 | 同上 |
-| 应用入口 `(app)/layout.tsx` | Server Component | 鉴权 + 用户信息 SSR |
-| 对话页 `(app)/chat` | Server Component（外壳） + Client Component（音频） | 对话历史 SSR，音频交互独立组件 |
-| 家长后台 `(app)/parent` | Server Component | 数据全部 SSR |
+| Landing `/[locale]` | Server Component | SEO + First-load performance |
+| Login `/[locale]/login` | Server Component + Server Action | Form submission without JS |
+| Register `/[locale]/register` | Same as above | Same as above |
+| App Entrance `/[locale]/(app)/layout.tsx` | Server Component | Auth + User SSR |
+| Chat `/[locale]/(app)/chat` | Server Component (shell) + Client Component (audio) | History SSR, audio interactive |
+| Parent `/[locale]/(app)/parent` | Server Component | All data SSR |
 
 ### 前后端通信
 

@@ -1,13 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { LearnerOut } from "@/lib/backend";
 import { createLearner, deleteLearner, updateLearner } from "./actions";
 
 export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
+  const t = useTranslations("Learners");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  function translateError(code: string): string {
+    const key = `errors.${code}` as Parameters<typeof t>[0];
+    return t.has(key) ? t(key) : code;
+  }
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -15,7 +22,7 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
     setError("");
     const res = await createLearner(new FormData(e.currentTarget));
     if (res.error) {
-      setError(res.error);
+      setError(translateError(res.error));
     } else {
       (e.target as HTMLFormElement).reset();
     }
@@ -28,7 +35,7 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
     setError("");
     const res = await updateLearner(id, new FormData(e.currentTarget));
     if (res.error) {
-      setError(res.error);
+      setError(translateError(res.error));
     } else {
       setEditingId(null);
     }
@@ -36,11 +43,11 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("确定要删除吗？")) return;
+    if (!confirm(t("confirm_delete"))) return;
     setLoading(true);
     const res = await deleteLearner(id);
     if (res.error) {
-      setError(res.error);
+      setError(translateError(res.error));
     }
     setLoading(false);
   }
@@ -53,7 +60,7 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
         <input 
           type="text" 
           name="name" 
-          placeholder="输入孩子名字..." 
+          placeholder={t("name_placeholder")}
           className="border-border bg-background rounded border px-3 py-2 text-sm focus:outline-none"
           required
         />
@@ -62,12 +69,12 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
           disabled={loading}
           className="bg-primary text-primary-foreground rounded px-4 py-2 text-sm disabled:opacity-50"
         >
-          添加孩子
+          {t("add_child")}
         </button>
       </form>
 
       {learners.length === 0 ? (
-        <div className="text-muted-foreground text-sm">暂无孩子，请先添加。</div>
+        <div className="text-muted-foreground text-sm">{t("no_children_hint")}</div>
       ) : (
         <div className="space-y-4">
           {learners.map((l) => (
@@ -81,15 +88,15 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
                     className="border-border bg-background flex-1 rounded border px-3 py-1 text-sm focus:outline-none"
                     required
                   />
-                  <button type="submit" disabled={loading} className="text-sm text-green-600 hover:underline">保存</button>
-                  <button type="button" onClick={() => setEditingId(null)} className="text-muted-foreground text-sm hover:underline">取消</button>
+                  <button type="submit" disabled={loading} className="text-sm text-green-600 hover:underline">{t("save")}</button>
+                  <button type="button" onClick={() => setEditingId(null)} className="text-muted-foreground text-sm hover:underline">{t("cancel")}</button>
                 </form>
               ) : (
                 <>
                   <span className="font-medium">{l.name}</span>
                   <div className="flex gap-3 text-sm">
-                    <button onClick={() => setEditingId(l.id)} className="text-blue-500 hover:underline">编辑</button>
-                    <button onClick={() => handleDelete(l.id)} disabled={loading} className="text-red-500 hover:underline disabled:opacity-50">删除</button>
+                    <button onClick={() => setEditingId(l.id)} className="text-blue-500 hover:underline">{t("edit")}</button>
+                    <button onClick={() => handleDelete(l.id)} disabled={loading} className="text-red-500 hover:underline disabled:opacity-50">{t("delete")}</button>
                   </div>
                 </>
               )}

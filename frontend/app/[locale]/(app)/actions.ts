@@ -1,7 +1,8 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { getLocale } from "next-intl/server";
+import { redirect } from "@/i18n/routing";
 
 import { backend } from "@/lib/backend";
 
@@ -21,5 +22,7 @@ export async function logout(): Promise<void> {
 
   const jar = await cookies();
   jar.delete(COOKIE_NAME);
-  redirect("/login");
+  
+  const locale = await getLocale();
+  redirect({ href: "/login", locale });
 }

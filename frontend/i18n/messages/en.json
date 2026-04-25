@@ -1,0 +1,85 @@
+{
+  "Metadata": {
+    "title": "Talking Text",
+    "description": "Talking Text - A spoken English practice app for children, where AI only chats within what the child has learned."
+  },
+  "Auth": {
+    "email_taken": "Email is already registered",
+    "server_error": "Server error, please try again later",
+    "invalid_credentials": "Invalid email or password",
+    "register": "Register",
+    "registering": "Registering...",
+    "name_placeholder": "Your name",
+    "email_placeholder": "Email",
+    "password_placeholder_register": "Password (min 8 chars)",
+    "password_placeholder": "Password",
+    "has_account": "Already have an account?",
+    "login": "Login",
+    "login_action": "Log In",
+    "logging_in": "Logging in...",
+    "no_account": "Don't have an account?",
+    "errors": {
+      "AUTH_INVALID_CREDENTIALS": "Invalid email or password",
+      "AUTH_EMAIL_TAKEN": "Email is already registered",
+      "AUTH_SERVER_ERROR": "Server error, please try again later",
+      "AUTH_NAME_REQUIRED": "Name is required"
+    }
+  },
+  "Navigation": {
+    "app_name": "Talking Text",
+    "chat": "Chat",
+    "parent": "Parent",
+    "logout": "Log Out"
+  },
+  "Parent": {
+    "welcome": "Welcome, Parent {name}",
+    "welcome_desc": "Manage children, learning materials, and progress here.",
+    "my_children": "My Children",
+    "manage_add": "Manage / Add",
+    "no_children": "No children added yet",
+    "go_add": "Add Now",
+    "last_used": "Last Used",
+    "feature_center": "Feature Center",
+    "child_management": "Child Management",
+    "child_management_desc": "Add, modify, or delete children",
+    "material_management": "Material Management",
+    "material_management_desc": "Plan and import materials (Coming soon)",
+    "learning_progress": "Learning Progress",
+    "learning_progress_desc": "View mastery status (Coming soon)"
+  },
+  "Learners": {
+    "back": "Back",
+    "page_title": "Child Management",
+    "confirm_delete": "Are you sure you want to delete?",
+    "name_placeholder": "Enter child's name...",
+    "add_child": "Add Child",
+    "no_children_hint": "No children yet, please add one.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "switch_current": "Set as Current",
+    "errors": {
+      "LEARNER_NAME_REQUIRED": "Name is required",
+      "LEARNER_CREATE_FAILED": "Failed to add",
+      "LEARNER_UPDATE_FAILED": "Failed to update",
+      "LEARNER_DELETE_FAILED": "Failed to delete"
+    }
+  },
+  "Chat": {
+    "title": "Chat",
+    "welcome": "Hello, {name}! Ready to start learning today?",
+    "current_child": "Current child:",
+    "no_chat": "No chat yet. Press the button below to start speaking.",
+    "history_count": "{count} histories",
+    "no_learners_title": "No learners added yet",
+    "no_learners_desc": "Please add a child in the parent dashboard first, then start a conversation.",
+    "go_add_child": "Add a Child"
+  },
+  "Home": {
+    "brand_title": "Talking Text",
+    "brand_tagline": "Words become your world.",
+    "login": "Log In",
+    "register": "Register"
+  }
+}

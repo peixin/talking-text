@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { LearnerOut } from "@/lib/backend";
 import { setActiveLearner } from "./actions";
 
@@ -15,8 +16,9 @@ export function ChatClient({
   activeLearner: LearnerOut;
   learners: LearnerOut[];
 }) {
-  // Automatically save the selected active learner to cookie if not already set, 
-  // or just ensure the server state is sync'd when component mounts
+  const t = useTranslations("Chat");
+
+  // Automatically sync active learner to backend on mount
   useEffect(() => {
     setActiveLearner(activeLearner.id);
   }, [activeLearner.id]);
@@ -25,13 +27,13 @@ export function ChatClient({
     <div className="mx-auto max-w-2xl">
       <div className="mb-6 flex items-center justify-between border-b border-border pb-4">
         <div>
-          <h1 className="text-xl font-medium">对话</h1>
-          <p className="text-muted-foreground mt-1 text-sm">你好，{activeLearner.name}！准备好开始今天的学习了吗？</p>
+          <h1 className="text-xl font-medium">{t("title")}</h1>
+          <p className="text-muted-foreground mt-1 text-sm">{t("welcome", { name: activeLearner.name })}</p>
         </div>
         
         {learners.length > 1 && (
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">当前孩子：</span>
+            <span className="text-muted-foreground">{t("current_child")}</span>
             <select 
               value={activeLearner.id}
               onChange={(e) => {
@@ -51,11 +53,8 @@ export function ChatClient({
       
       <div className="text-muted-foreground">
         {initialHistory.length === 0
-          ? "还没有对话。按住下方按钮开始说话。"
-          : `历史 ${initialHistory.length} 条`}
-      </div>
-      <div className="text-muted-foreground mt-8 text-sm">
-        TODO: MediaRecorder + POST /conversation/turn + 音频播放
+          ? t("no_chat")
+          : t("history_count", { count: initialHistory.length })}
       </div>
     </div>
   );

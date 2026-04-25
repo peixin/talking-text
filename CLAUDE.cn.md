@@ -67,14 +67,23 @@ talking-text/
 │   └── .env.example
 ├── frontend/                  # Next.js 16（app/ 目录）
 │   ├── app/
-│   │   ├── layout.tsx         # 根布局 (Server Component)
-│   │   ├── page.tsx           # 落地页 (Server Component, force-dynamic)
-│   │   ├── login/             # 登录（Server Component + Server Action）
-│   │   └── (app)/             # 登录后路由组
-│   ├── components/ui/         # shadcn 组件（自动生成，勿手动编辑逻辑）
+│   │   ├── [locale]/          # 多语言路由 (zh-CN, zh-TW, en)
+│   │   │   ├── layout.tsx     # 本地化根布局
+│   │   │   ├── page.tsx       # 落地页
+│   │   │   ├── login/         # 登录
+│   │   │   └── (app)/         # 登录后路由组 (chat, parent)
+│   │   ├── favicon.ico
+│   │   └── globals.css
+│   ├── i18n/                  # next-intl 配置
+│   │   ├── messages/          # 语言包 JSON (zh-CN.json 等)
+│   │   ├── request.ts         # next-intl 服务端配置
+│   │   └── routing.ts         # 共享路由配置 (Link, redirect)
+│   ├── components/            # 共享组件 (LocaleSwitcher 等)
+│   │   └── ui/                # shadcn 组件（自动生成）
 │   ├── lib/
 │   │   ├── backend.ts         # server-only Python backend 客户端
 │   │   └── utils.ts           # shadcn cn() helper
+│   ├── proxy.ts               # 鉴权与国际化中间件 (Next.js 16)
 │   ├── eslint.config.mjs
 │   ├── .prettierrc.json
 │   ├── commitlint.config.mjs
@@ -127,16 +136,21 @@ STT / LLM / TTS 一定会换。**所有外部 SDK 调用必须写在 `backend/ap
 - **Learner** = 学习档案（每个学习者一个，含想学的家长）
 - 业务逻辑只在 Learner 维度计算，不区分"孩子 / 家长"
 
-### 6. 前端全面 Next.js，不当 SPA 写
+### 6. 前端全面 Next.js + 国际化
 
 - **默认 Server Component**
-- Client Component 仅在需要交互时（主要是对话页的音频控制），**文件名加 `Client` 后缀**（如 `ChatClient.tsx`）
-- Server Actions 处理表单（登录、教材上传）
-- **用 `proxy.ts` 做鉴权（Next.js 16 起 `middleware.ts` 已重命名为 `proxy.ts`）**
+- Client Component 仅在需要交互时，**文件名加 `Client` 后缀**
+- Server Actions 处理表单；**返回 Error Code**（如 `AUTH_INVALID_CREDENTIALS`）而非原始错误字符串
+- **国际化 (i18n)：**
+  - 使用 `next-intl` 配合 `[locale]` 动态段
+  - 所有文案必须存放在 `i18n/messages/*.json`
+  - 使用 `@/i18n/routing` 导出的 `Link`, `redirect`, `useRouter`, `usePathname`（本地化版本）
+  - 后端错误代码通过这些词典在 UI 层翻译
+- **鉴权与 i18n 中间件：使用 `proxy.ts` (Next.js 16 命名)**
 - **不使用 Next API Routes**（后端是独立 Python）
-- **所有后端调用必须走 `lib/backend.ts`（`server-only`）**，Client Component 绝对不能直接 fetch Python 后端
-- **Auth 和 session cookie 逻辑只能在 Server Action 里处理**，Client Component 不接触任何 token 或 cookie
-- 这个模式让浏览器看不到 Python 后端地址和接口结构，防止数据被直接扒取，也方便调试
+- **所有后端调用必须走 `lib/backend.ts`（`server-only`）**
+- **Auth 和 session cookie 逻辑只能在 Server Action 里处理**
+- 这个模式让浏览器看不到 Python 后端地址和接口结构。
 
 ### 7. 教材数据走统一规范
 
@@ -241,10 +255,15 @@ just db-history
 
 ### TypeScript / React
 - **严格模式**（`strict: true`）
+- **国际化：**
+  - 标准：`next-intl`
+  - 存储：`i18n/messages/{en,zh-CN,zh-TW}.json`
+  - 逻辑：统一收纳在根目录 `i18n/`
+  - 始终使用 `routing.ts` 导出的助手函数进行跳转
 - **组件** PascalCase 文件名；Server Component 不加后缀，Client Component 文件名加 `Client` 后缀（如 `ChatClient.tsx`）
-- **页面** 走 Next 约定（`page.tsx` / `layout.tsx` / `actions.ts` / `proxy.ts`）
+- **页面** 走 Next 约定（`[locale]/page.tsx`、`actions.ts`、`proxy.ts`）
 - **不在 Server Component 里调 useEffect / useState**
-- **样式** 用 Tailwind v4 utility classes；需要复杂组件时用 shadcn（`pnpm dlx shadcn@latest add <component>`）
+- **样式** 用 Tailwind v4 utility classes；需要复杂组件时用 shadcn
 - `components/ui/` 是 shadcn 管理，手动修改只改样式不改结构逻辑
 
 ### Commit 信息（Conventional Commits，commitlint 会强制）
@@ -349,20 +368,21 @@ just db-history
 
 ## 当前进度
 
-**已完成（脚手架 + DX）：**
+**已完成（脚手架 + DX + 核心鉴权）：**
 - ✅ 后端骨架（`app/{api,core,adapters,curriculum,storage}` 目录树 + `/health`）
-- ✅ 前端骨架（Next.js 16 App Router + 落地页 + login/(app)/chat/parent 占位）
-- ✅ Tailwind v4 + shadcn/ui 初始化（朱红 primary）
+- ✅ 前端骨架（Next.js 16 App Router + 多语言路由）
+- ✅ 国际化实现 (next-intl, 三语支持, LocaleSwitcher)
+- ✅ 账号系统 (Postgres 模型 + FastAPI 接口 + Session Cookie)
+- ✅ `proxy.ts` 鉴权与 i18n 中间件 (Next.js 16 命名)
+- ✅ Tailwind v4 + shadcn/ui 初始化
 - ✅ Alembic 异步模板，DB 连通
 - ✅ ESLint 9 + Prettier + prettier-plugin-tailwindcss
 - ✅ Ruff + mypy（backend）
 - ✅ lefthook + commitlint（Conventional Commits）
 - ✅ justfile 完整 recipe
-- ✅ PostgreSQL 16 + Redis 本地就绪，dev DB `talking_text` 已建
+- ✅ PostgreSQL 16 + Redis 本地就绪
 
 **下一步 TODO（按优先级）：**
-- [ ] 账号系统（`storage/models/account.py`、`learner.py` + Alembic migration + `api/auth.py` + 前端 login Server Action）
-- [ ] `proxy.ts` 鉴权（Next.js 16 命名）
 - [ ] 火山方舟 LLM adapter（先把 `invoke()` 整段跑通）
 - [ ] 教材录入 MVP（粘贴文本 → LLM 提取 → 人工审阅 → 入库）
 - [ ] Scope Computer V1 空壳 + Prompt 拼装 + 越界校验
