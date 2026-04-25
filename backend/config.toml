@@ -1,0 +1,8 @@
+# Business configuration — committed to git, no secrets.
+# Secrets and infrastructure URLs belong in .env
+
+[auth]
+# Session cookie lifetime in days
+session_max_age_days = 365
+# Maximum failed login attempts before lockout (future use)
+max_login_attempts = 5

@@ -135,7 +135,9 @@ Every turn writes `vocab_event` (which word the AI used / the child used / the c
 - Server Actions for forms (login, curriculum upload)
 - **Use `proxy.ts` for auth (renamed from `middleware.ts` in Next.js 16)**
 - **No Next API Routes** — backend is a separate Python service
-- Backend calls go through `lib/backend.ts` (`server-only`); Client Components must not fetch the backend directly
+- **All backend calls must go through `lib/backend.ts` (`server-only`)** — Client Components must never fetch the Python backend directly
+- **Auth and session cookie logic lives exclusively in Server Actions** — Client Components never touch tokens or cookies
+- This pattern keeps the Python backend URL and API structure invisible to the browser, preventing scraping and simplifying debugging
 
 ### 7. Curriculum data follows a canonical schema
 
@@ -236,6 +238,7 @@ just db-history
 - **mypy** for type checking
 - Module organization: interface first, implementation below, private last
 - SQLAlchemy 2.0 style: `Mapped[T]` + `mapped_column()` + `select().where()` — not the old `Column()` / `session.query()`
+- **Every Model must inherit `TimestampMixin`** (see "Database Design Principles") — never hand-write `created_at` / `updated_at` on a model
 
 ### TypeScript / React
 - **Strict mode** (`strict: true`)
@@ -263,6 +266,52 @@ Format: `<type>(<scope>): <subject>`
 - Subject line ≤ 100 characters
 - English or Chinese both fine
 - No emoji, no "🤖 Generated" co-author trailers (unless explicitly requested)
+
+---
+
+## Configuration Layering
+
+Two layers of config — never mix them:
+
+| Layer | File | What goes here | In git? |
+|---|---|---|---|
+| **Env config** | `.env` (loaded by pydantic-settings) | Secrets, infra URLs, ports | ❌ No (gitignored) |
+| **Business config** | `backend/config.toml` (loaded by `app/app_config.py`) | Tunable business params | ✅ Yes |
+
+**Env config examples:** `DATABASE_URL`, `SESSION_SECRET`, `VOLC_API_KEY`, `DEBUG`
+
+**Business config examples:** `session_max_age_days`, `max_login_attempts`, `llm_temperature`, `max_tokens`
+
+Rules:
+- Adding a new business-logic parameter → `config.toml` + `AppConfig` dataclass
+- Adding a new secret or infra address → `.env` + `Settings` field + `.env.example` entry
+- Never put secrets in `config.toml`; never put business params in `.env`
+
+---
+
+## Database Design Principles
+
+1. **Every table must have `created_at` and `updated_at`**
+   - Injected via `TimestampMixin` (`app/storage/base.py`); all Models must inherit it
+   - `created_at`: auto-set by the DB at insert time (`server_default=now()`); never written by application code
+   - `updated_at`: auto-refreshed by the DB on every update (`onupdate=now()`); never written by application code
+   - Both columns must be declared explicitly in Alembic migrations (`server_default=sa.text("now()")`)
+
+2. **Primary keys are always UUID** (`uuid.uuid4`, generated in the application layer) — no auto-increment integers
+
+3. **Every foreign key must declare cascade behavior** (`ondelete="CASCADE"` or `ondelete="RESTRICT"`) — never leave it implicit
+
+4. **Column lengths must reflect their business meaning** (e.g. `String(254)` = max email length, `String(72)` = bcrypt hash length)
+
+5. **Add indexes only when driven by queries** — use `unique=True` for uniqueness constraints and `index=True` for filtered lookups; avoid over-indexing
+
+---
+
+## Collaboration Rules
+
+1. **No git operations** — all `git add / commit / push` etc. are the user's responsibility; AI must not trigger them
+2. **Verification is user-initiated** — after completing a feature segment, the user starts the service and reports results back; AI must not run the service unless explicitly told to
+3. **DB schema changes require user confirmation first** — for any new table, new/modified column, or index change, AI must present the proposed schema for discussion and get explicit approval before writing code or migration files
 
 ---
 

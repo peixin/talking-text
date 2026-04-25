@@ -129,6 +129,8 @@ export function ChatClient({ initialHistory }) {
 
 ## 四、数据模型
 
+> **详见完整字段说明：[`data-dictionary.cn.md`](data-dictionary.cn.md)**
+
 ### 账号与学习者
 
 ```

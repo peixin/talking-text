@@ -134,7 +134,9 @@ STT / LLM / TTS 一定会换。**所有外部 SDK 调用必须写在 `backend/ap
 - Server Actions 处理表单（登录、教材上传）
 - **用 `proxy.ts` 做鉴权（Next.js 16 起 `middleware.ts` 已重命名为 `proxy.ts`）**
 - **不使用 Next API Routes**（后端是独立 Python）
-- 对后端的调用走 `lib/backend.ts`（`server-only`），Client Component 不要直接 fetch 后端
+- **所有后端调用必须走 `lib/backend.ts`（`server-only`）**，Client Component 绝对不能直接 fetch Python 后端
+- **Auth 和 session cookie 逻辑只能在 Server Action 里处理**，Client Component 不接触任何 token 或 cookie
+- 这个模式让浏览器看不到 Python 后端地址和接口结构，防止数据被直接扒取，也方便调试
 
 ### 7. 教材数据走统一规范
 
@@ -235,6 +237,7 @@ just db-history
 - **mypy** 做类型检查
 - 模块内部按"接口在上、实现在下、私有最后"的顺序组织
 - SQLAlchemy 2.0 风格：`Mapped[T]` + `mapped_column()` + `select().where()`，不要用老的 `Column()` / `session.query()`
+- **所有 Model 必须继承 `TimestampMixin`**（见"数据库设计基本原则"），禁止在 Model 里手写 `created_at` / `updated_at`
 
 ### TypeScript / React
 - **严格模式**（`strict: true`）
@@ -265,7 +268,54 @@ just db-history
 
 ---
 
+## 配置分层原则
+
+两层配置，绝对不混用：
+
+| 层 | 文件 | 存什么 | 进 git？ |
+|---|---|---|---|
+| **环境配置** | `.env`（pydantic-settings 读取） | 密钥、基础设施地址、端口 | ❌ 不进（gitignore） |
+| **业务配置** | `backend/config.toml`（`app/app_config.py` 读取） | 可调业务参数 | ✅ 进 |
+
+**环境配置举例：** `DATABASE_URL`、`SESSION_SECRET`、`VOLC_API_KEY`、`DEBUG`
+
+**业务配置举例：** `session_max_age_days`、`max_login_attempts`、`llm_temperature`、`max_tokens`
+
+规则：
+- 新增业务逻辑参数 → 加到 `config.toml` + `AppConfig` dataclass
+- 新增密钥或基础设施地址 → 加到 `.env` + `Settings` 字段 + `.env.example`
+- `config.toml` 里绝对不放密钥；`.env` 里绝对不放业务参数
+
+---
+
+## 数据库设计基本原则
+
+1. **每张表必须有 `created_at` 和 `updated_at`**
+   - 统一由 `TimestampMixin`（`app/storage/base.py`）注入，所有 `Model` 都要继承它
+   - `created_at`：行创建时由 DB 自动填入（`server_default=now()`），应用层不写
+   - `updated_at`：行更新时由 DB 自动刷新（`onupdate=now()`），应用层不写
+   - Alembic migration 里两列都要显式声明（`server_default=sa.text("now()")`）
+
+2. **主键统一用 UUID**（`uuid.uuid4`，应用层生成），不用自增 int
+
+3. **外键必须声明级联行为**（`ondelete="CASCADE"` 或 `ondelete="RESTRICT"`），不留默认
+
+4. **字段长度有业务含义时必须标注**（如 `String(254)` 对应 email 最大长度，`String(72)` 对应 bcrypt hash 长度）
+
+5. **索引按查询需要加，不滥加**；唯一约束用 `unique=True`，普通查询过滤用 `index=True`
+
+---
+
+## 协作规则
+
+1. **不做 git 操作** — 所有 `git add / commit / push` 等操作由用户自己执行，AI 不主动触发
+2. **验证由用户启动** — 完成一段需求后，由用户自行启动服务验证，并把结果反馈给 AI；除非用户明确说"你自己跑来验证"，否则 AI 不主动执行服务
+3. **DB Schema 变更需先与用户确认** — 任何新增表、新增/修改字段、索引变更，AI 必须先列出方案与用户讨论，用户确认后再动手写代码和迁移文件
+
+---
+
 ## 已知约束
+
 
 - **不能依赖被墙服务**：Vercel、OpenAI、Claude API、Supabase 等一律不可用
 - **儿童隐私（V1 不做合规，但自律）**：
