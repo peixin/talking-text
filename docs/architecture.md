@@ -444,41 +444,46 @@ Schema:
 所有外部服务通过 adapter 隔离。**无论 HTTP / SSE / WebSocket，对外接口一致。**
 
 ```python
-# adapters/llm/base.py
+# adapters/llm/protocol.py
 class LLMAdapter(Protocol):
-    async def invoke(self, messages: list[Message], **kwargs) -> str: ...
-    async def stream(self, messages: list[Message], **kwargs) -> AsyncIterator[str]: ...
+    async def invoke(self, messages: list[LLMMessage], **kwargs) -> LLMResponse: ...
+    def stream(self, messages: list[LLMMessage], **kwargs) -> AsyncIterator[str]: ...
 
-# adapters/llm/doubao.py       ← V1 用这个
-class DoubaoAdapter(LLMAdapter): ...
+# adapters/llm/volc.py     ← V1 实现（火山方舟 / 豆包）
+class VolcLLMAdapter(LLMAdapter): ...
 
-# adapters/llm/deepseek.py     ← 将来可无缝切换
+# adapters/llm/deepseek.py ← 将来添加，接口不变
 class DeepSeekAdapter(LLMAdapter): ...
-
-# adapters/stt/iflytek.py
-class IflytekSttAdapter(SttAdapter): ...  # 内部走 WebSocket
 ```
 
-业务层依赖注入使用：
+**Factory 统一创建，业务层零感知：**
 
 ```python
-# core/dialog/service.py
-class DialogService:
-    def __init__(self, llm: LLMAdapter, stt: SttAdapter, tts: TtsAdapter, ...):
-        self.llm, self.stt, self.tts = llm, stt, tts
+# adapters/factory.py — 启动时读 config.toml，创建共享单例
+from app.app_config import app_config
+
+def _make_llm() -> LLMAdapter:
+    match app_config.adapter.llm_provider:
+        case "volc_ark": return VolcLLMAdapter()
+        case "deepseek": return DeepSeekAdapter()   # 将来加
+        case other: raise ValueError(other)
+
+llm: LLMAdapter = _make_llm()
+stt: STTAdapter = _make_stt()
+tts: TTSAdapter = _make_tts()
+orchestrator = DialogOrchestrator(stt=stt, llm=llm, tts=tts)
 ```
 
-**切换供应商 = 改 config.yaml 一行：**
+**切换供应商 = 改 `config.toml` 一行：**
 
-```yaml
-llm:
-  provider: doubao      # → deepseek / qwen / glm
-  api_key_env: DOUBAO_API_KEY
-stt:
-  provider: volcengine  # → iflytek / aliyun
-tts:
-  provider: volcengine  # → iflytek / azure
+```toml
+[adapter]
+llm_provider = "volc_ark"   # → "deepseek" / "qwen" / "glm"
+stt_provider = "volc"       # → "iflytek" / "aliyun"
+tts_provider = "volc"       # → "iflytek" / "azure"
 ```
+
+供应商的 API key / endpoint 放在 `.env`（gitignored），adapter 实现内部读取；`config.toml` 只存选择，不存密钥。
 
 即便 V2 全流式，adapter 内部协议换成 WebSocket，业务层仍然是同样的 `async for chunk in adapter.stream(...)`。**架构不会锁死供应商，可以任意混搭**（讯飞 STT + DeepSeek LLM + 火山 TTS 等）。
 

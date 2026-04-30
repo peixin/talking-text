@@ -382,10 +382,24 @@ Rules:
 - ✅ Volcengine LLM adapter (Ark OpenAI-compatible, Doubao)
 - ✅ Volcengine TTS adapter (HTTP Chunked, Tina 2.0 voice)
 - ✅ `audio_codec.py` — webm → ogg re-mux via ffmpeg
-- ✅ `POST /conversation/turn` API (multipart audio upload, base64 audio response)
+- ✅ `POST /sessions/{session_id}/turns` API (multipart audio upload, base64 audio response)
 - ✅ Chat UI — record / upload / playback (`ChatClient.tsx`)
 - ✅ `Turn` model + Alembic migration — billing fields persisted per turn
 - ✅ Stale session → graceful redirect to login (`lib/session.ts` + `proxy.ts ?expired=1`)
+
+**Done (Session & audio improvements):**
+- ✅ `Turn.sequence` — explicit integer ordering within a session (Alembic migration `c9e4f72a1d38`)
+- ✅ Backend-managed conversation history — orchestrator queries `turn` by `sequence ASC`; `history` form field removed from API and frontend
+- ✅ Audio stored per session: `AUDIO_STORAGE_DIR/{learner_id}/{session_id}/{turn_id}_{in|out}.ext`
+- ✅ `GET /sessions/{session_id}/turns/{turn_id}/audio?dir=in|out` — authenticated audio endpoint (`FileResponse`)
+- ✅ Chat UI — per-message play/stop buttons; lazy-load audio via Server Action; singleton `<audio>` element
+- ✅ `TurnOut.has_audio_in` / `has_audio_out` — frontend knows which bubbles have playback
+
+**Done (Adapter factory):**
+- ✅ `config.toml [adapter]` — `llm_provider` / `stt_provider` / `tts_provider` selector
+- ✅ `AdapterConfig` dataclass in `app/app_config.py`
+- ✅ `app/adapters/factory.py` — reads config, creates shared singleton adapters + orchestrator
+- ✅ `session.py` / `conversation.py` import from factory; no direct vendor instantiation
 
 **Next TODO (priority order):**
 - [ ] Scope Computer V1 stub + Prompt assembler (wire Tina persona + vocab scope into system prompt)

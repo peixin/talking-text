@@ -12,6 +12,13 @@ _CONFIG_PATH = Path(__file__).parent.parent / "config.toml"
 
 
 @dataclass(frozen=True)
+class AdapterConfig:
+    llm_provider: str
+    stt_provider: str
+    tts_provider: str
+
+
+@dataclass(frozen=True)
 class AuthConfig:
     session_max_age_days: int
     max_login_attempts: int
@@ -23,18 +30,25 @@ class AuthConfig:
 
 @dataclass(frozen=True)
 class AppConfig:
+    adapter: AdapterConfig
     auth: AuthConfig
 
 
 def _load() -> AppConfig:
     with open(_CONFIG_PATH, "rb") as f:
         raw = tomllib.load(f)
+    adapter = raw["adapter"]
     auth = raw["auth"]
     return AppConfig(
+        adapter=AdapterConfig(
+            llm_provider=adapter["llm_provider"],
+            stt_provider=adapter["stt_provider"],
+            tts_provider=adapter["tts_provider"],
+        ),
         auth=AuthConfig(
             session_max_age_days=auth["session_max_age_days"],
             max_login_attempts=auth["max_login_attempts"],
-        )
+        ),
     )
 
 

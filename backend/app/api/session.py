@@ -15,14 +15,13 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.factory import llm as _llm
+from app.adapters.factory import orchestrator as _orchestrator
 from app.adapters.llm.protocol import LLMMessage
-from app.adapters.llm.volc import VolcLLMAdapter
-from app.adapters.stt.volc import VolcSTTAdapter
-from app.adapters.tts.volc import VolcTTSAdapter
 from app.api.auth import get_current_account
 from app.audio_codec import webm_opus_to_ogg
 from app.config import settings
-from app.core.dialog import DialogOrchestrator, EmptyTranscriptionError
+from app.core.dialog import EmptyTranscriptionError
 from app.storage.db import get_db
 from app.storage.models.account import Account
 from app.storage.models.learner import Learner
@@ -31,11 +30,6 @@ from app.storage.models.turn import Turn
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/sessions", tags=["sessions"])
-
-_llm = VolcLLMAdapter()
-_stt = VolcSTTAdapter()
-_tts = VolcTTSAdapter()
-_orchestrator = DialogOrchestrator(stt=_stt, llm=_llm, tts=_tts)
 
 _TITLE_PROMPT = (
     "You label English practice sessions for Chinese elementary school children. "
@@ -257,7 +251,7 @@ async def create_turn(
         raise HTTPException(status_code=422, detail="EMPTY_TRANSCRIPTION") from e
 
     # Touch session + generate title on first turn.
-    session_title = await _after_turn(
+    session_title = await after_turn(
         session_id=session_id,
         text_user=result.text_user,
         text_ai=result.text_ai,
@@ -277,7 +271,7 @@ async def create_turn(
 # ── Post-turn helpers ──────────────────────────────────────────────────────────
 
 
-async def _after_turn(
+async def after_turn(
     *,
     session_id: uuid.UUID,
     text_user: str,

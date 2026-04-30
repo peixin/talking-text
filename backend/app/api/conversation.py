@@ -32,14 +32,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.llm.volc import VolcLLMAdapter
-from app.adapters.stt.volc import VolcSTTAdapter
-from app.adapters.tts.volc import VolcTTSAdapter
+from app.adapters.factory import orchestrator as _orchestrator
 from app.api.auth import get_current_account
 from app.api.session import after_turn
 from app.audio_codec import webm_opus_to_ogg
 from app.config import settings
-from app.core.dialog import DialogOrchestrator, EmptyTranscriptionError
+from app.core.dialog import EmptyTranscriptionError
 from app.storage.db import get_db
 from app.storage.models.account import Account
 from app.storage.models.learner import Learner
@@ -48,15 +46,6 @@ from app.storage.models.session import Session
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
-
-
-# Module-level singletons. Each adapter is a thin stateless wrapper around an
-# async client, so sharing one instance across requests is safe and avoids
-# reconnecting / re-handshaking per turn.
-_llm = VolcLLMAdapter()
-_stt = VolcSTTAdapter()
-_tts = VolcTTSAdapter()
-_orchestrator = DialogOrchestrator(stt=_stt, llm=_llm, tts=_tts)
 
 
 class TurnResponse(BaseModel):
