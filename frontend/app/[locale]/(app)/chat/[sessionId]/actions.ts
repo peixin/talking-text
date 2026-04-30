@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getLocale } from "next-intl/server";
 
-import { BackendError, SessionOut, TurnOut, TurnResponse, backend } from "@/lib/backend";
+import { BackendError, SessionOut, TurnResponse, backend } from "@/lib/backend";
 import { createApi } from "@/lib/api";
 
 // ── Auth helper (no redirect — lets callers decide) ───────────────────────────
@@ -39,7 +39,12 @@ export async function setActiveLearner(learnerId: string): Promise<void> {
 
 // ── Turn action ───────────────────────────────────────────────────────────────
 
-export type Message = { role: "user" | "assistant"; text: string };
+export type Message = {
+  role: "user" | "assistant";
+  text: string;
+  turnId?: string;
+  hasAudio?: boolean;
+};
 
 export type SendTurnResult =
   | {
@@ -90,6 +95,30 @@ export async function sendTurn(
       if (e.status === 404) {
         return { ok: false, error: "CHAT_SESSION_REQUIRED" };
       }
+    }
+    return { ok: false, error: "CHAT_TURN_FAILED" };
+  }
+}
+
+export type GetAudioResult =
+  | { ok: true; audio_b64: string; audio_format: string }
+  | { ok: false; error: string };
+
+export async function getAudio(
+  sessionId: string,
+  turnId: string,
+  dir: "in" | "out",
+): Promise<GetAudioResult> {
+  const api = await createApi();
+  try {
+    const { data, contentType } = await api.sessions.getTurnAudio(sessionId, turnId, dir);
+    const audio_b64 = Buffer.from(data).toString("base64");
+    const audio_format = contentType.includes("mpeg") ? "mp3" : "ogg_opus";
+    return { ok: true, audio_b64, audio_format };
+  } catch (e) {
+    if (e instanceof BackendError && e.status === 401) {
+      const locale = await getLocale();
+      redirect(`/${locale}/login?expired=1`);
     }
     return { ok: false, error: "CHAT_TURN_FAILED" };
   }

@@ -71,6 +71,7 @@
     "welcome": "你好，{name}！准备好开始今天的学习了吗？",
     "current_child": "当前孩子：",
     "no_chat": "点击下方按钮开始说话。",
+    "play_audio": "播放语音",
     "history_count": "历史 {count} 条",
     "no_learners_title": "还没有添加学习者",
     "no_learners_desc": "请先在家长后台添加孩子信息，然后再开始对话。",

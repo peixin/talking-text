@@ -71,6 +71,7 @@
     "welcome": "Hello, {name}! Ready to start learning today?",
     "current_child": "Current child:",
     "no_chat": "Tap the button below to start speaking.",
+    "play_audio": "Play audio",
     "history_count": "{count} histories",
     "no_learners_title": "No learners added yet",
     "no_learners_desc": "Please add a child in the parent dashboard first, then start a conversation.",

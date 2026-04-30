@@ -129,6 +129,7 @@ class DialogOrchestrator:
         audio_in_path, audio_out_path = _maybe_persist_audio(
             turn_id=turn_id,
             learner_id=learner_id,
+            session_id=session_id,
             audio_in=audio_in,
             audio_in_format=audio_in_format,
             audio_out=tts_result.audio,
@@ -170,6 +171,7 @@ def _maybe_persist_audio(
     *,
     turn_id: uuid.UUID,
     learner_id: uuid.UUID,
+    session_id: uuid.UUID,
     audio_in: bytes,
     audio_in_format: STTAudioFormat,
     audio_out: bytes,
@@ -178,7 +180,7 @@ def _maybe_persist_audio(
     if not settings.audio_storage_enabled:
         return None, None
 
-    base = Path(settings.audio_storage_dir) / str(learner_id)
+    base = Path(settings.audio_storage_dir) / str(learner_id) / str(session_id)
     base.mkdir(parents=True, exist_ok=True)
 
     in_ext = "ogg" if audio_in_format == "ogg" else audio_in_format

@@ -6,9 +6,11 @@ import base64
 import logging
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,6 +69,8 @@ class TurnOut(BaseModel):
     id: uuid.UUID
     text_user: str
     text_ai: str
+    has_audio_out: bool
+    has_audio_in: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -84,9 +88,7 @@ class TurnResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-async def _require_learner(
-    learner_id: uuid.UUID, account: Account, db: AsyncSession
-) -> Learner:
+async def _require_learner(learner_id: uuid.UUID, account: Account, db: AsyncSession) -> Learner:
     row = await db.execute(
         select(Learner).where(Learner.id == learner_id, Learner.account_id == account.id)
     )
@@ -96,9 +98,7 @@ async def _require_learner(
     return learner
 
 
-async def _require_session(
-    session_id: uuid.UUID, account: Account, db: AsyncSession
-) -> Session:
+async def _require_session(session_id: uuid.UUID, account: Account, db: AsyncSession) -> Session:
     row = await db.execute(
         select(Session)
         .join(Learner, Session.learner_id == Learner.id)
@@ -176,14 +176,46 @@ async def get_session_turns(
     session_id: uuid.UUID,
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> list[Turn]:
+) -> list[TurnOut]:
     await _require_session(session_id, account, db)
     rows = await db.execute(
-        select(Turn)
-        .where(Turn.session_id == session_id)
-        .order_by(Turn.sequence.asc())
+        select(Turn).where(Turn.session_id == session_id).order_by(Turn.sequence.asc())
     )
-    return list(rows.scalars().all())
+    return [
+        TurnOut(
+            id=t.id,
+            text_user=t.text_user,
+            text_ai=t.text_ai,
+            has_audio_out=t.audio_out_path is not None,
+            has_audio_in=t.audio_in_path is not None,
+            created_at=t.created_at,
+        )
+        for t in rows.scalars().all()
+    ]
+
+
+@router.get("/{session_id}/turns/{turn_id}/audio")
+async def get_turn_audio(
+    session_id: uuid.UUID,
+    turn_id: uuid.UUID,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    dir: str = "out",
+) -> FileResponse:
+    await _require_session(session_id, account, db)
+    row = await db.execute(select(Turn).where(Turn.id == turn_id, Turn.session_id == session_id))
+    turn = row.scalar_one_or_none()
+    if not turn:
+        raise HTTPException(status_code=404, detail="Turn not found")
+    audio_path = turn.audio_in_path if dir == "in" else turn.audio_out_path
+    if not audio_path:
+        raise HTTPException(status_code=404, detail="Audio not found")
+    path = Path(audio_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found on disk")
+    ext = path.suffix.lstrip(".")
+    media_type = "audio/mpeg" if ext == "mp3" else "audio/ogg"
+    return FileResponse(path, media_type=media_type)
 
 
 @router.post("/{session_id}/turns", response_model=TurnResponse)
@@ -261,9 +293,7 @@ async def _after_turn(
     session.updated_at = datetime.now(UTC)
 
     if session.title is None:
-        count = await db.scalar(
-            select(func.count()).where(Turn.session_id == session_id)
-        )
+        count = await db.scalar(select(func.count()).where(Turn.session_id == session_id))
         if count == 1:
             try:
                 resp = await _llm.invoke(

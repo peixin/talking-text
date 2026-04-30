@@ -27,8 +27,8 @@ function audioDataUrl(b64: string, fmt: string): string {
 
 function turnsToMessages(turns: TurnOut[]): Message[] {
   return turns.flatMap((t) => [
-    { role: "user" as const, text: t.text_user },
-    { role: "assistant" as const, text: t.text_ai },
+    { role: "user" as const, text: t.text_user, turnId: t.id, hasAudio: t.has_audio_in },
+    { role: "assistant" as const, text: t.text_ai, turnId: t.id, hasAudio: t.has_audio_out },
   ]);
 }
 
@@ -210,8 +210,8 @@ export function ChatClient({
 
     setMessages((prev) => [
       ...prev,
-      { role: "user", text: result.text_user },
-      { role: "assistant", text: result.text_ai },
+      { role: "user", text: result.text_user, turnId: result.turn_id, hasAudio: true },
+      { role: "assistant", text: result.text_ai, turnId: result.turn_id, hasAudio: true },
     ]);
     setLastAudioUrl(audioDataUrl(result.audio_b64, result.audio_format));
 
@@ -291,7 +291,7 @@ export function ChatClient({
           )}
         </div>
 
-        <MessageListClient messages={messages} />
+        <MessageListClient messages={messages} sessionId={activeSession.id} />
 
         <audio ref={audioRef} hidden />
 
