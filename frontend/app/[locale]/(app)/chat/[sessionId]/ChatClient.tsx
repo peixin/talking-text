@@ -11,8 +11,6 @@ import { SessionSidebarClient } from "./SessionSidebarClient";
 import { MessageListClient } from "./MessageListClient";
 import { RecordButtonClient, Mode } from "./RecordButtonClient";
 
-const HISTORY_TURNS = 6;
-
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
   const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
@@ -199,11 +197,9 @@ export function ChatClient({
       return;
     }
 
-    const recent = messages.slice(-HISTORY_TURNS);
     const fd = new FormData();
     const ext = (mimeRef.current || "audio/webm").includes("mp4") ? "mp4" : "webm";
     fd.append("audio", blob, `recording.${ext}`);
-    fd.append("history", JSON.stringify(recent));
 
     const result = await sendTurn(activeSession.id, fd);
     if (!result.ok) {

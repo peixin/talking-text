@@ -20,6 +20,7 @@ class Turn(Base, TimestampMixin):
     session_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("session.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
 
     text_user: Mapped[str] = mapped_column(Text, nullable=False)
     text_ai: Mapped[str] = mapped_column(Text, nullable=False)

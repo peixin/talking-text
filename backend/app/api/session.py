@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import base64
-import json
 import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +20,7 @@ from app.adapters.tts.volc import VolcTTSAdapter
 from app.api.auth import get_current_account
 from app.audio_codec import webm_opus_to_ogg
 from app.config import settings
-from app.core.dialog import DialogOrchestrator, EmptyTranscriptionError, HistoryMessage
+from app.core.dialog import DialogOrchestrator, EmptyTranscriptionError
 from app.storage.db import get_db
 from app.storage.models.account import Account
 from app.storage.models.learner import Learner
@@ -71,11 +70,6 @@ class TurnOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
-
-
-class HistoryItem(BaseModel):
-    role: str
-    text: str
 
 
 class TurnResponse(BaseModel):
@@ -187,7 +181,7 @@ async def get_session_turns(
     rows = await db.execute(
         select(Turn)
         .where(Turn.session_id == session_id)
-        .order_by(Turn.created_at.asc())
+        .order_by(Turn.sequence.asc())
     )
     return list(rows.scalars().all())
 
@@ -198,26 +192,9 @@ async def create_turn(
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
     audio: Annotated[UploadFile, File()],
-    history: Annotated[str | None, Form()] = None,
 ) -> TurnResponse:
     session = await _require_session(session_id, account, db)
     learner_id = session.learner_id
-
-    # Parse optional conversation history.
-    parsed_history: list[HistoryMessage] = []
-    if history:
-        try:
-            raw = json.loads(history)
-        except json.JSONDecodeError as e:
-            raise HTTPException(status_code=400, detail=f"history is not valid JSON: {e}") from e
-        if not isinstance(raw, list):
-            raise HTTPException(status_code=400, detail="history must be a JSON array")
-        for item in raw:
-            try:
-                msg = HistoryItem.model_validate(item)
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"invalid history item: {e}") from e
-            parsed_history.append(HistoryMessage(role=msg.role, text=msg.text))
 
     # Read upload + transcode webm -> ogg/opus.
     audio_bytes = await audio.read()
@@ -243,7 +220,6 @@ async def create_turn(
             audio_in=audio_bytes,
             audio_in_format="ogg",
             audio_in_sample_rate=settings.volc_stt_sample_rate,
-            recent_history=parsed_history,
         )
     except EmptyTranscriptionError as e:
         raise HTTPException(status_code=422, detail="EMPTY_TRANSCRIPTION") from e

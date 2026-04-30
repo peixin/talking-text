@@ -21,6 +21,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.llm.protocol import LLMAdapter, LLMMessage
@@ -43,12 +44,6 @@ _SYSTEM_PROMPT = (
     "harshly. Each turn, ask exactly one short follow-up question to keep "
     "the conversation going."
 )
-
-
-@dataclass(frozen=True)
-class HistoryMessage:
-    role: str  # "user" | "assistant"
-    text: str
 
 
 @dataclass(frozen=True)
@@ -82,7 +77,6 @@ class DialogOrchestrator:
         audio_in: bytes,
         audio_in_format: STTAudioFormat,
         audio_in_sample_rate: int,
-        recent_history: list[HistoryMessage],
         voice: str | None = None,
     ) -> TurnResult:
         # 1. STT
@@ -99,11 +93,16 @@ class DialogOrchestrator:
                 "STT returned empty text. The child may not have spoken loudly enough."
             )
 
-        # 2. LLM
+        # 2. Load session history from DB.
+        history_rows = await db.execute(
+            select(Turn.text_user, Turn.text_ai)
+            .where(Turn.session_id == session_id)
+            .order_by(Turn.sequence.asc())
+        )
         messages: list[LLMMessage] = [LLMMessage(role="system", content=_SYSTEM_PROMPT)]
-        for h in recent_history:
-            role: str = "assistant" if h.role == "assistant" else "user"
-            messages.append(LLMMessage(role=role, content=h.text))  # type: ignore[arg-type]
+        for row in history_rows:
+            messages.append(LLMMessage(role="user", content=row.text_user))
+            messages.append(LLMMessage(role="assistant", content=row.text_ai))
         messages.append(LLMMessage(role="user", content=text_user))
         llm_response = await self._llm.invoke(messages, max_tokens=200)
         text_ai = llm_response.text.strip()
@@ -120,7 +119,12 @@ class DialogOrchestrator:
             )
         )
 
-        # 4. Persist
+        # 4. Persist — compute next sequence within this session.
+        seq_result = await db.execute(
+            select(func.coalesce(func.max(Turn.sequence), 0)).where(Turn.session_id == session_id)
+        )
+        next_sequence: int = seq_result.scalar_one() + 1
+
         turn_id = uuid.uuid4()
         audio_in_path, audio_out_path = _maybe_persist_audio(
             turn_id=turn_id,
@@ -135,6 +139,7 @@ class DialogOrchestrator:
             id=turn_id,
             learner_id=learner_id,
             session_id=session_id,
+            sequence=next_sequence,
             text_user=text_user,
             text_ai=text_ai,
             audio_in_path=audio_in_path,

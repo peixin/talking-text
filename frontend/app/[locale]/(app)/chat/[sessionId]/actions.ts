@@ -58,7 +58,6 @@ export async function sendTurn(
   formData: FormData,
 ): Promise<SendTurnResult> {
   const audio = formData.get("audio");
-  const history = String(formData.get("history") ?? "[]");
 
   if (!(audio instanceof File) || audio.size === 0) {
     return { ok: false, error: "CHAT_AUDIO_EMPTY" };
@@ -66,7 +65,6 @@ export async function sendTurn(
 
   const upstream = new FormData();
   upstream.append("audio", audio, audio.name || "recording.webm");
-  upstream.append("history", history);
 
   const h = await authHeaders();
   try {
