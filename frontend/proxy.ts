@@ -30,9 +30,16 @@ export default function proxy(request: NextRequest) {
     routing.locales.find((l) => pathname === `/${l}` || pathname.startsWith(`/${l}/`)) ||
     routing.defaultLocale;
 
-  // If the user is authenticated and tries to access public pages, redirect to /chat
+  // If the user is authenticated and tries to access public pages, redirect to /chat —
+  // unless ?expired=1 is set, which means the backend invalidated the session and we
+  // need to clear the stale cookie and show the login page.
   if (PUBLIC_PATHS.has(pathWithoutLocale)) {
     if (hasCookie) {
+      if (request.nextUrl.searchParams.get("expired") === "1") {
+        const response = intlMiddleware(request);
+        response.cookies.delete(COOKIE_NAME);
+        return response;
+      }
       const chatUrl = new URL(`/${locale}/chat`, request.url);
       return NextResponse.redirect(chatUrl);
     }

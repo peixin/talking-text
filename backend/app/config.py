@@ -21,5 +21,29 @@ class Settings(BaseSettings):
 
     session_secret: str = "change-me-in-production"
 
+    # --- Volcengine Ark (LLM) ---
+    volc_ark_api_key: str = ""
+    volc_ark_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
+    volc_ark_model: str = "doubao-seed-2-0-mini-260215"
+
+    # --- Volcengine Speech (shared by STT + TTS) ---
+    volc_speech_app_id: str = ""
+    volc_speech_access_key: str = ""
+
+    # --- TTS ---
+    volc_tts_resource_id: str = "seed-tts-2.0"
+    volc_tts_default_voice: str = "zh_female_yingyujiaoxue_uranus_bigtts"
+    volc_tts_audio_format: str = "mp3"
+    volc_tts_sample_rate: int = 24000
+
+    # --- STT ---
+    volc_stt_resource_id: str = "volc.seedasr.sauc.duration"
+    volc_stt_model_name: str = "bigmodel"
+    volc_stt_sample_rate: int = 16000
+
+    # --- Audio storage (V1 local fs, V2 TOS) ---
+    audio_storage_enabled: bool = True
+    audio_storage_dir: str = "./tmp/audio"
+
 
 settings = Settings()

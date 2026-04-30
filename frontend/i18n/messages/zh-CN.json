@@ -70,11 +70,23 @@
     "title": "对话",
     "welcome": "你好，{name}！准备好开始今天的学习了吗？",
     "current_child": "当前孩子：",
-    "no_chat": "还没有对话。按住下方按钮开始说话。",
+    "no_chat": "点击下方按钮开始说话。",
     "history_count": "历史 {count} 条",
     "no_learners_title": "还没有添加学习者",
     "no_learners_desc": "请先在家长后台添加孩子信息，然后再开始对话。",
-    "go_add_child": "去添加孩子"
+    "go_add_child": "去添加孩子",
+    "press_to_talk": "点一下，开始说话",
+    "stop": "停止录音",
+    "recording_hint": "正在录音…再点一下结束",
+    "uploading_hint": "正在思考…",
+    "errors": {
+      "CHAT_AUDIO_EMPTY": "没有录到声音，请再试一次",
+      "CHAT_LEARNER_REQUIRED": "请先选择一个孩子",
+      "CHAT_LEARNER_NOT_FOUND": "找不到这个孩子，请刷新后再试",
+      "CHAT_EMPTY_TRANSCRIPTION": "没听清，请再说一次",
+      "CHAT_MIC_DENIED": "无法访问麦克风，请检查浏览器权限",
+      "CHAT_TURN_FAILED": "对话失败，请稍后再试"
+    }
   },
   "Home": {
     "brand_title": "字有天地",

@@ -119,11 +119,11 @@ Before every conversation turn, Scope Computer must be asked: "Which words are a
 
 See `docs/architecture.md` §5 for the full interface.
 
-### 3. VocabEvents: write in V1, read in V2
+### 3. Word mastery: derive from Turn text, not a separate event table
 
-Every turn writes `vocab_event` (which word the AI used / the child used / the child asked about).
+`vocab_event` was removed (2026-04-30). Word frequency data is derivable from `turn.text_user` / `turn.text_ai` at any time via string splitting — it is not an independent source of truth.
 
-**V1 doesn't read these — but must write every turn.** Reason: V2's mastery tracker has no other training data source. Skip V1 writes → V2 starts from zero → 6 months of data lost.
+**V2 mastery tracker plan:** add `learner_word_stats (learner_id, word)` with incremental upsert per turn. Backfill history from turn text when the feature ships. Do not re-introduce a per-word-per-turn event table.
 
 ### 4. Voice pipeline: batch in V1, designed for streaming
 
@@ -377,9 +377,18 @@ Rules:
 - ✅ justfile full recipe set
 - ✅ PostgreSQL 16 + Redis local
 
+**Done (Voice pipeline — 2026-04-30):**
+- ✅ Volcengine STT adapter (`bigmodel_nostream` WebSocket, ogg/opus)
+- ✅ Volcengine LLM adapter (Ark OpenAI-compatible, Doubao)
+- ✅ Volcengine TTS adapter (HTTP Chunked, Tina 2.0 voice)
+- ✅ `audio_codec.py` — webm → ogg re-mux via ffmpeg
+- ✅ `POST /conversation/turn` API (multipart audio upload, base64 audio response)
+- ✅ Chat UI — record / upload / playback (`ChatClient.tsx`)
+- ✅ `Turn` model + Alembic migration — billing fields persisted per turn
+- ✅ Stale session → graceful redirect to login (`lib/session.ts` + `proxy.ts ?expired=1`)
+
 **Next TODO (priority order):**
-- [ ] Volcengine Ark LLM adapter (get `invoke()` batch working first)
+- [ ] Scope Computer V1 stub + Prompt assembler (wire Tina persona + vocab scope into system prompt)
 - [ ] Curriculum ingestion MVP (paste text → LLM extract → human review → DB)
-- [ ] Scope Computer V1 stub + Prompt assembly + boundary check
-- [ ] Conversation API (`POST /conversation/turn`)
 - [ ] First-party textbook data (Tot Talk series — user to provide materials)
+- [ ] `learner_word_stats` mastery table (V2, when mastery tracker is needed)

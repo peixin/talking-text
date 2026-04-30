@@ -70,11 +70,23 @@
     "title": "對話",
     "welcome": "你好，{name}！準備好開始今天的學習了嗎？",
     "current_child": "當前孩子：",
-    "no_chat": "還沒有對話。按住下方按鈕開始說話。",
+    "no_chat": "點一下下方按鈕，開始說話。",
     "history_count": "歷史 {count} 條",
     "no_learners_title": "還沒有添加學習者",
     "no_learners_desc": "請先在家長後台添加孩子資訊，然後再開始對話。",
-    "go_add_child": "去添加孩子"
+    "go_add_child": "去添加孩子",
+    "press_to_talk": "點一下，開始說話",
+    "stop": "停止錄音",
+    "recording_hint": "錄音中…再點一下結束",
+    "uploading_hint": "正在思考…",
+    "errors": {
+      "CHAT_AUDIO_EMPTY": "沒有錄到聲音，請再試一次",
+      "CHAT_LEARNER_REQUIRED": "請先選擇一個孩子",
+      "CHAT_LEARNER_NOT_FOUND": "找不到這個孩子，請重新整理後再試",
+      "CHAT_EMPTY_TRANSCRIPTION": "沒聽清楚，請再說一次",
+      "CHAT_MIC_DENIED": "無法存取麥克風，請檢查瀏覽器權限",
+      "CHAT_TURN_FAILED": "對話失敗，請稍後再試"
+    }
   },
   "Home": {
     "brand_title": "字有天地",

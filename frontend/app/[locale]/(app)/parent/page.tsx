@@ -1,17 +1,14 @@
-import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { backend } from "@/lib/backend";
+import { withSession } from "@/lib/session";
 import { Link } from "@/i18n/routing";
 
 export default async function ParentDashboard() {
   const t = await getTranslations("Parent");
-  const jar = await cookies();
-  const session = jar.get("session")?.value;
-  const headers = session ? { Cookie: `session=${session}` } : undefined;
 
   const [account, learners] = await Promise.all([
-    backend.auth.me(headers),
-    backend.learners.list(headers),
+    withSession((h) => backend.auth.me(h)),
+    withSession((h) => backend.learners.list(h)),
   ]);
 
   return (

@@ -70,11 +70,23 @@
     "title": "Chat",
     "welcome": "Hello, {name}! Ready to start learning today?",
     "current_child": "Current child:",
-    "no_chat": "No chat yet. Press the button below to start speaking.",
+    "no_chat": "Tap the button below to start speaking.",
     "history_count": "{count} histories",
     "no_learners_title": "No learners added yet",
     "no_learners_desc": "Please add a child in the parent dashboard first, then start a conversation.",
-    "go_add_child": "Add a Child"
+    "go_add_child": "Add a Child",
+    "press_to_talk": "Tap to talk",
+    "stop": "Stop recording",
+    "recording_hint": "Recording… tap again to stop",
+    "uploading_hint": "Thinking…",
+    "errors": {
+      "CHAT_AUDIO_EMPTY": "No audio captured. Please try again.",
+      "CHAT_LEARNER_REQUIRED": "Please select a child first.",
+      "CHAT_LEARNER_NOT_FOUND": "Child not found. Please refresh and try again.",
+      "CHAT_EMPTY_TRANSCRIPTION": "Couldn't catch that — please say it again.",
+      "CHAT_MIC_DENIED": "Microphone access denied. Check your browser permissions.",
+      "CHAT_TURN_FAILED": "Chat failed. Please try again later."
+    }
   },
   "Home": {
     "brand_title": "Talking Text",
