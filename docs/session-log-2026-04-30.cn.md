@@ -153,6 +153,101 @@ STT 完成 → LLM stream → 每出一句 → TTS 合成这句 → 立刻推给
 
 ---
 
+## 阶段六：Session 概念设计与实现
+
+### 背景
+
+随着 turn 持续累积，历史上下文会无限增长，token 消耗剧增。需要一个用户可控的分组单位。
+
+### 设计决策
+
+| 决策点 | 结论 | 理由 |
+|---|---|---|
+| 有没有 `ended_at` | 无 | session 没有"结束"状态，`updated_at` 已反映最后活动时间 |
+| 软删除字段 | `deleted BOOLEAN DEFAULT FALSE` | `deleted + updated_at` 已能表示删除时间，不需要 `deleted_at` |
+| `turn.session_id` | `NOT NULL` | 所有 turn 必须属于 session，强约束 |
+| 标题 | NULL 直到 LLM 生成，用户可随时改 | 第一轮结束后异步生成，≤8 个汉字 |
+| 进入 chat 无 session | 自动创建一个 | 用户不应感知到"还没有 session"的空白态 |
+
+**DB schema（新增 `session` 表）：**
+
+```
+session
+  id           UUID PK
+  learner_id   UUID FK→learner (CASCADE)
+  title        VARCHAR(200) NULL
+  deleted      BOOLEAN DEFAULT FALSE
+  created_at   TIMESTAMPTZ
+  updated_at   TIMESTAMPTZ
+
+turn.session_id UUID FK→session (CASCADE) NOT NULL
+```
+
+**API（backend）：**
+
+```
+GET    /sessions?learner_id=    列表（按 updated_at DESC）
+POST   /sessions                新建
+PATCH  /sessions/{id}           改标题
+DELETE /sessions/{id}           软删
+GET    /sessions/{id}/turns     历史记录
+POST   /sessions/{id}/turns     发一轮对话（从 /conversation/turn 迁移过来）
+```
+
+`POST /sessions/{id}/turns` 响应新增 `session_title` 字段——第一轮完成后直接返回 LLM 生成的标题，前端不需要再单独 fetch。
+
+---
+
+## 阶段七：前端重构——URL 反映 session、withSession 消灭、组件拆分、骨架屏
+
+### 四个需求
+
+1. **URL 上反映 session id**——方便刷新、分享、前进/后退
+2. **消灭 `withSession` 回调地狱**——`withSession((h) => backend.sessions.list(activeLearner.id, h))` 里两个 session 概念混在一起，读起来恶心
+3. **`ChatClient.tsx` 拆组件**——900 行单文件，不可维护
+4. **所有页面加骨架屏**——Server Component 流式渲染的价值，不做白搭
+
+### 技术方案
+
+**`lib/api.ts`（新）**
+
+`createApi()` 工厂函数，一次调用获得带 auth 头的全部 API 方法，401 自动 redirect：
+
+```typescript
+const api = await createApi();
+const [account, learners] = await Promise.all([api.auth.me(), api.learners.list()]);
+const sessions = await api.sessions.list(activeLearner.id);
+```
+
+取代原来的 `withSession((h) => backend.xxx(h))` 写法，两种 session 概念彻底隔离。
+
+**路由结构**
+
+```
+chat/page.tsx              → 加载数据后 redirect 到 /chat/{latestSessionId}
+chat/[sessionId]/page.tsx  → Server Component，fetch turns，渲染 ChatClient
+chat/[sessionId]/loading.tsx → 骨架屏，Next.js 导航时自动展示
+```
+
+session 切换由 `router.push('/chat/{id}')` 完成，URL 变化触发服务端重新 fetch turns，`loading.tsx` 骨架屏处理过渡动画。
+
+**组件拆分**
+
+```
+ChatClient.tsx            状态协调层（recording / messages / title editing）
+SessionSidebarClient.tsx  左侧 session 列表 + learner 切换
+MessageListClient.tsx     对话气泡 + 自动滚动
+RecordButtonClient.tsx    录音按钮 + 状态 + 错误提示
+```
+
+**骨架屏范围**
+
+- `chat/[sessionId]/loading.tsx`：侧栏 + 标题栏 + 气泡区 + 录音按钮
+- `parent/loading.tsx`：概览页
+- `parent/learners/loading.tsx`：子女管理列表
+
+---
+
 ## 值得在新 Session 开头重新念一遍
 
 承接前两份 session log，新增：
@@ -161,6 +256,9 @@ STT 完成 → LLM stream → 每出一句 → TTS 合成这句 → 立刻推给
 - **Volcengine 旧版控制台**：开通服务 ≠ APP 有权限。APP 和资源需在控制台显式关联。
 - **vocab_event 已删**。turn 表的 `text_user / text_ai` 是词频数据的源头，需要时从文本计算。
 - **V2 mastery 方向**：`learner_word_stats` 增量 upsert，不是重建 vocab_event。
+- **`/conversation/turn` 已删**，迁移为 `POST /sessions/{id}/turns`，响应带 `session_title`。
+- **`withSession` 已废弃**，用 `lib/api.ts` 的 `createApi()` 替代。
+- **Server Action 里 `redirect()` 必须在 try/catch 外，或在 catch 里作为新的 throw 抛出**——不能被外层 catch 吞掉。
 
 ---
 

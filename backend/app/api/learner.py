@@ -72,7 +72,7 @@ async def update_learner(
     return LearnerOut(id=learner.id, name=learner.name)
 
 
-@router.delete("/{learner_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{learner_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_learner(
     learner_id: uuid.UUID,
     account: Annotated[Account, Depends(get_current_account)],

@@ -1,0 +1,311 @@
+"""Session CRUD endpoints + turn handling."""
+
+from __future__ import annotations
+
+import base64
+import json
+import logging
+import uuid
+from datetime import UTC, datetime
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.adapters.llm.protocol import LLMMessage
+from app.adapters.llm.volc import VolcLLMAdapter
+from app.adapters.stt.volc import VolcSTTAdapter
+from app.adapters.tts.volc import VolcTTSAdapter
+from app.api.auth import get_current_account
+from app.audio_codec import webm_opus_to_ogg
+from app.config import settings
+from app.core.dialog import DialogOrchestrator, EmptyTranscriptionError, HistoryMessage
+from app.storage.db import get_db
+from app.storage.models.account import Account
+from app.storage.models.learner import Learner
+from app.storage.models.session import Session
+from app.storage.models.turn import Turn
+
+log = logging.getLogger(__name__)
+router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+_llm = VolcLLMAdapter()
+_stt = VolcSTTAdapter()
+_tts = VolcTTSAdapter()
+_orchestrator = DialogOrchestrator(stt=_stt, llm=_llm, tts=_tts)
+
+_TITLE_PROMPT = (
+    "You label English practice sessions for Chinese elementary school children. "
+    "Given one conversation turn, output a SHORT title (≤ 8 Chinese characters). "
+    "Output the title only — no punctuation, no explanation."
+)
+
+
+# ── Schemas ──────────────────────────────────────────────────────────────────
+
+
+class SessionOut(BaseModel):
+    id: uuid.UUID
+    learner_id: uuid.UUID
+    title: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CreateSessionBody(BaseModel):
+    learner_id: uuid.UUID
+
+
+class UpdateSessionBody(BaseModel):
+    title: str
+
+
+class TurnOut(BaseModel):
+    id: uuid.UUID
+    text_user: str
+    text_ai: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class HistoryItem(BaseModel):
+    role: str
+    text: str
+
+
+class TurnResponse(BaseModel):
+    turn_id: uuid.UUID
+    text_user: str
+    text_ai: str
+    audio_b64: str
+    audio_format: str
+    session_title: str | None
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+async def _require_learner(
+    learner_id: uuid.UUID, account: Account, db: AsyncSession
+) -> Learner:
+    row = await db.execute(
+        select(Learner).where(Learner.id == learner_id, Learner.account_id == account.id)
+    )
+    learner = row.scalar_one_or_none()
+    if not learner:
+        raise HTTPException(status_code=404, detail="Learner not found")
+    return learner
+
+
+async def _require_session(
+    session_id: uuid.UUID, account: Account, db: AsyncSession
+) -> Session:
+    row = await db.execute(
+        select(Session)
+        .join(Learner, Session.learner_id == Learner.id)
+        .where(
+            Session.id == session_id,
+            Session.deleted.is_(False),
+            Learner.account_id == account.id,
+        )
+    )
+    session = row.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+
+@router.get("", response_model=list[SessionOut])
+async def list_sessions(
+    learner_id: uuid.UUID,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[Session]:
+    await _require_learner(learner_id, account, db)
+    rows = await db.execute(
+        select(Session)
+        .where(Session.learner_id == learner_id, Session.deleted.is_(False))
+        .order_by(Session.updated_at.desc())
+    )
+    return list(rows.scalars().all())
+
+
+@router.post("", response_model=SessionOut, status_code=status.HTTP_201_CREATED)
+async def create_session(
+    body: CreateSessionBody,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Session:
+    await _require_learner(body.learner_id, account, db)
+    session = Session(learner_id=body.learner_id)
+    db.add(session)
+    await db.commit()
+    await db.refresh(session)
+    return session
+
+
+@router.patch("/{session_id}", response_model=SessionOut)
+async def update_session(
+    session_id: uuid.UUID,
+    body: UpdateSessionBody,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Session:
+    session = await _require_session(session_id, account, db)
+    session.title = body.title.strip() or None
+    await db.commit()
+    await db.refresh(session)
+    return session
+
+
+@router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def delete_session(
+    session_id: uuid.UUID,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    session = await _require_session(session_id, account, db)
+    session.deleted = True
+    await db.commit()
+
+
+@router.get("/{session_id}/turns", response_model=list[TurnOut])
+async def get_session_turns(
+    session_id: uuid.UUID,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[Turn]:
+    await _require_session(session_id, account, db)
+    rows = await db.execute(
+        select(Turn)
+        .where(Turn.session_id == session_id)
+        .order_by(Turn.created_at.asc())
+    )
+    return list(rows.scalars().all())
+
+
+@router.post("/{session_id}/turns", response_model=TurnResponse)
+async def create_turn(
+    session_id: uuid.UUID,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audio: Annotated[UploadFile, File()],
+    history: Annotated[str | None, Form()] = None,
+) -> TurnResponse:
+    session = await _require_session(session_id, account, db)
+    learner_id = session.learner_id
+
+    # Parse optional conversation history.
+    parsed_history: list[HistoryMessage] = []
+    if history:
+        try:
+            raw = json.loads(history)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"history is not valid JSON: {e}") from e
+        if not isinstance(raw, list):
+            raise HTTPException(status_code=400, detail="history must be a JSON array")
+        for item in raw:
+            try:
+                msg = HistoryItem.model_validate(item)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"invalid history item: {e}") from e
+            parsed_history.append(HistoryMessage(role=msg.role, text=msg.text))
+
+    # Read upload + transcode webm -> ogg/opus.
+    audio_bytes = await audio.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="audio is empty")
+
+    content_type = (audio.content_type or "").lower()
+    if "webm" in content_type or (audio.filename and audio.filename.endswith(".webm")):
+        try:
+            audio_bytes = await webm_opus_to_ogg(
+                audio_bytes, sample_rate=settings.volc_stt_sample_rate
+            )
+        except RuntimeError as e:
+            log.exception("ffmpeg failed for upload from learner=%s", learner_id)
+            raise HTTPException(status_code=500, detail=f"audio transcode failed: {e}") from e
+
+    # Orchestrate the turn.
+    try:
+        result = await _orchestrator.single_turn(
+            db=db,
+            learner_id=learner_id,
+            session_id=session_id,
+            audio_in=audio_bytes,
+            audio_in_format="ogg",
+            audio_in_sample_rate=settings.volc_stt_sample_rate,
+            recent_history=parsed_history,
+        )
+    except EmptyTranscriptionError as e:
+        raise HTTPException(status_code=422, detail="EMPTY_TRANSCRIPTION") from e
+
+    # Touch session + generate title on first turn.
+    session_title = await _after_turn(
+        session_id=session_id,
+        text_user=result.text_user,
+        text_ai=result.text_ai,
+        db=db,
+    )
+
+    return TurnResponse(
+        turn_id=result.turn_id,
+        text_user=result.text_user,
+        text_ai=result.text_ai,
+        audio_b64=base64.b64encode(result.audio_out).decode("ascii"),
+        audio_format=result.audio_out_format,
+        session_title=session_title,
+    )
+
+
+# ── Post-turn helpers ──────────────────────────────────────────────────────────
+
+
+async def _after_turn(
+    *,
+    session_id: uuid.UUID,
+    text_user: str,
+    text_ai: str,
+    db: AsyncSession,
+) -> str | None:
+    """Touch session updated_at, generate title after first turn, return current title."""
+    row = await db.execute(select(Session).where(Session.id == session_id))
+    session = row.scalar_one_or_none()
+    if not session:
+        return None
+
+    session.updated_at = datetime.now(UTC)
+
+    if session.title is None:
+        count = await db.scalar(
+            select(func.count()).where(Turn.session_id == session_id)
+        )
+        if count == 1:
+            try:
+                resp = await _llm.invoke(
+                    [
+                        LLMMessage(role="system", content=_TITLE_PROMPT),
+                        LLMMessage(
+                            role="user",
+                            content=f"Child: {text_user}\nAI: {text_ai}",
+                        ),
+                    ],
+                    max_tokens=20,
+                    temperature=0.3,
+                )
+                title = resp.text.strip()
+                if title:
+                    session.title = title
+            except Exception:
+                log.exception("Title generation failed for session=%s", session_id)
+
+    await db.commit()
+    return session.title

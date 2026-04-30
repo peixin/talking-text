@@ -1,13 +1,13 @@
 import { getTranslations } from "next-intl/server";
-import { backend } from "@/lib/backend";
-import { withSession } from "@/lib/session";
+import { createApi } from "@/lib/api";
 import { Link } from "@/i18n/routing";
 import { LearnerClient } from "./LearnerClient";
 
 export default async function LearnersPage() {
   const t = await getTranslations("Learners");
 
-  const learners = await withSession((h) => backend.learners.list(h));
+  const api = await createApi();
+  const learners = await api.learners.list();
 
   return (
     <div className="mx-auto max-w-2xl">

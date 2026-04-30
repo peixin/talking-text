@@ -37,12 +37,14 @@ from app.adapters.llm.volc import VolcLLMAdapter
 from app.adapters.stt.volc import VolcSTTAdapter
 from app.adapters.tts.volc import VolcTTSAdapter
 from app.api.auth import get_current_account
+from app.api.session import after_turn
 from app.audio_codec import webm_opus_to_ogg
 from app.config import settings
 from app.core.dialog import DialogOrchestrator, EmptyTranscriptionError, HistoryMessage
 from app.storage.db import get_db
 from app.storage.models.account import Account
 from app.storage.models.learner import Learner
+from app.storage.models.session import Session
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +78,7 @@ async def conversation_turn(
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
     learner_id: Annotated[uuid.UUID, Form()],
+    session_id: Annotated[uuid.UUID, Form()],
     audio: Annotated[UploadFile, File()],
     history: Annotated[str | None, Form()] = None,
 ) -> TurnResponse:
@@ -86,6 +89,17 @@ async def conversation_turn(
     learner = learner_row.scalar_one_or_none()
     if not learner:
         raise HTTPException(status_code=404, detail="Learner not found")
+
+    # 1b. Validate session belongs to the learner.
+    session_row = await db.execute(
+        select(Session).where(
+            Session.id == session_id,
+            Session.learner_id == learner_id,
+            Session.deleted.is_(False),
+        )
+    )
+    if not session_row.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Session not found")
 
     # 2. Parse optional history.
     parsed_history: list[HistoryMessage] = []
@@ -123,6 +137,7 @@ async def conversation_turn(
         result = await _orchestrator.single_turn(
             db=db,
             learner_id=learner_id,
+            session_id=session_id,
             audio_in=audio_bytes,
             audio_in_format="ogg",
             audio_in_sample_rate=settings.volc_stt_sample_rate,
@@ -130,6 +145,14 @@ async def conversation_turn(
         )
     except EmptyTranscriptionError as e:
         raise HTTPException(status_code=422, detail="EMPTY_TRANSCRIPTION") from e
+
+    # 5. Touch session updated_at and generate title on first turn.
+    await after_turn(
+        session_id=session_id,
+        text_user=result.text_user,
+        text_ai=result.text_ai,
+        db=db,
+    )
 
     return TurnResponse(
         turn_id=result.turn_id,

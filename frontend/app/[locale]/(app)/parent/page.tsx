@@ -1,14 +1,14 @@
 import { getTranslations } from "next-intl/server";
-import { backend } from "@/lib/backend";
-import { withSession } from "@/lib/session";
+import { createApi } from "@/lib/api";
 import { Link } from "@/i18n/routing";
 
 export default async function ParentDashboard() {
   const t = await getTranslations("Parent");
 
+  const api = await createApi();
   const [account, learners] = await Promise.all([
-    withSession((h) => backend.auth.me(h)),
-    withSession((h) => backend.learners.list(h)),
+    api.auth.me(),
+    api.learners.list(),
   ]);
 
   return (

@@ -9,18 +9,16 @@ from app.storage.base import Base, TimestampMixin
 
 
 class Turn(Base, TimestampMixin):
-    """One conversation turn: child speaks, AI replies.
-
-    A turn is the atomic unit of billing and the parent of any vocab_event rows
-    written from it. We deliberately do not introduce a Session entity in V1;
-    short-term context is carried by the frontend per request.
-    """
+    """One conversation turn: child speaks, AI replies."""
 
     __tablename__ = "turn"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     learner_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("learner.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("session.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     text_user: Mapped[str] = mapped_column(Text, nullable=False)

@@ -78,6 +78,7 @@ class DialogOrchestrator:
         *,
         db: AsyncSession,
         learner_id: uuid.UUID,
+        session_id: uuid.UUID,
         audio_in: bytes,
         audio_in_format: STTAudioFormat,
         audio_in_sample_rate: int,
@@ -133,6 +134,7 @@ class DialogOrchestrator:
         turn = Turn(
             id=turn_id,
             learner_id=learner_id,
+            session_id=session_id,
             text_user=text_user,
             text_ai=text_ai,
             audio_in_path=audio_in_path,

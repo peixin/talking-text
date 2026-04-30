@@ -1,14 +1,13 @@
-import { getTranslations } from "next-intl/server";
+import { redirect } from "next/navigation";
+import { getTranslations, getLocale } from "next-intl/server";
 import { Link } from "@/i18n/routing";
-import { backend } from "@/lib/backend";
-import { withSession } from "@/lib/session";
-import { ChatClient } from "./ChatClient";
-import type { Message } from "./actions";
+import { createApi } from "@/lib/api";
 
 export default async function ChatPage() {
   const t = await getTranslations("Chat");
+  const api = await createApi();
 
-  const learners = await withSession((h) => backend.learners.list(h));
+  const learners = await api.learners.list();
 
   if (learners.length === 0) {
     return (
@@ -25,13 +24,16 @@ export default async function ChatPage() {
     );
   }
 
-  const account = await withSession((h) => backend.auth.me(h));
+  const account = await api.auth.me();
   const activeLearnerId = account.last_active_learner_id;
-  let activeLearner = learners.find((l) => l.id === activeLearnerId);
-  if (!activeLearner) {
-    activeLearner = learners[0];
+  const activeLearner = learners.find((l) => l.id === activeLearnerId) ?? learners[0];
+
+  let sessions = await api.sessions.list(activeLearner.id);
+  if (sessions.length === 0) {
+    const created = await api.sessions.create(activeLearner.id);
+    sessions = [created];
   }
 
-  const initialHistory: Message[] = [];
-  return <ChatClient initialHistory={initialHistory} activeLearner={activeLearner} learners={learners} />;
+  const locale = await getLocale();
+  redirect(`/${locale}/chat/${sessions[0].id}`);
 }
