@@ -7,7 +7,7 @@ packets and get one accurate transcription back at the end. For short
 utterances (≤ 15 s) the result is returned within ~300-400 ms after the last
 chunk lands. From our caller's perspective this is a synchronous request.
 
-Wire protocol (custom binary; see Volcengine docs §"WebSocket 二进制协议"):
+Wire protocol (custom binary; see Volcengine docs §"WebSocket binary protocol"):
 
     Byte 0 — protocol version (0x1) | header size (0x1)
     Byte 1 — message type (4 bits) | message-type flags (4 bits)

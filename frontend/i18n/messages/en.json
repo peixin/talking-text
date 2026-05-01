@@ -84,8 +84,13 @@
     "session_delete_confirm": "Delete this conversation?",
     "session_rename": "Rename",
     "session_title_placeholder": "Name this conversation…",
+    "switch_to_text": "Switch to text",
+    "switch_to_voice": "Switch to voice",
+    "text_placeholder": "Type a message, Enter to send, Shift+Enter for newline",
+    "send": "Send",
     "errors": {
       "CHAT_AUDIO_EMPTY": "No audio captured. Please try again.",
+      "CHAT_INPUT_EMPTY": "Input cannot be empty.",
       "CHAT_LEARNER_REQUIRED": "Please select a child first.",
       "CHAT_SESSION_REQUIRED": "Please select a conversation first.",
       "CHAT_LEARNER_NOT_FOUND": "Child not found. Please refresh and try again.",

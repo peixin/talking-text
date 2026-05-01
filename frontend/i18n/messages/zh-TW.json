@@ -84,8 +84,13 @@
     "session_delete_confirm": "確定要刪除這個對話嗎？",
     "session_rename": "重新命名",
     "session_title_placeholder": "給這次對話起個名字…",
+    "switch_to_text": "切換文字輸入",
+    "switch_to_voice": "切換語音輸入",
+    "text_placeholder": "輸入訊息，Enter 發送，Shift+Enter 換行",
+    "send": "發送",
     "errors": {
       "CHAT_AUDIO_EMPTY": "沒有錄到聲音，請再試一次",
+      "CHAT_INPUT_EMPTY": "內容不能為空",
       "CHAT_LEARNER_REQUIRED": "請先選擇一個孩子",
       "CHAT_SESSION_REQUIRED": "請先選擇一個對話",
       "CHAT_LEARNER_NOT_FOUND": "找不到這個孩子，請重新整理後再試",

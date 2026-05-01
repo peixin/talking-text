@@ -1,21 +1,18 @@
 "use client";
 
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+import "dayjs/locale/en";
+import "dayjs/locale/zh-cn";
+import "dayjs/locale/zh-tw";
 import { Plus, Trash2 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { LearnerOut, SessionOut } from "@/lib/backend";
-import { setActiveLearner } from "./actions";
 import { useRouter } from "@/i18n/routing";
+import { setActiveLearner } from "./actions";
 
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "刚刚";
-  if (mins < 60) return `${mins} 分钟前`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} 小时前`;
-  return `${Math.floor(hrs / 24)} 天前`;
-}
+dayjs.extend(relativeTime);
 
 interface Props {
   sessions: SessionOut[];
@@ -36,6 +33,7 @@ export function SessionSidebarClient({
 }: Props) {
   const t = useTranslations("Chat");
   const router = useRouter();
+  const locale = useLocale();
 
   async function switchLearner(learnerId: string) {
     await setActiveLearner(learnerId);
@@ -86,7 +84,9 @@ export function SessionSidebarClient({
                 <span className="inline-block h-3.5 w-3/4 animate-pulse rounded bg-muted-foreground/20" />
               )}
             </span>
-            <span className="text-xs text-muted-foreground/60">{relativeTime(s.updated_at)}</span>
+            <span className="text-xs text-muted-foreground/60">
+              {dayjs(s.updated_at).locale(locale.toLowerCase()).fromNow()}
+            </span>
 
             <span
               role="button"

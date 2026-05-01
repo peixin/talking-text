@@ -16,6 +16,8 @@ function audioDataUrl(b64: string, fmt: string): string {
   return `data:${mime};base64,${b64}`;
 }
 
+type PlayingState = { turnId: string; dir: "in" | "out" } | null;
+
 function PlayButton({
   turnId,
   dir,
@@ -26,8 +28,8 @@ function PlayButton({
 }: {
   turnId: string;
   dir: "in" | "out";
-  loading: { turnId: string; dir: "in" | "out" } | null;
-  playing: { turnId: string; dir: "in" | "out" } | null;
+  loading: PlayingState;
+  playing: PlayingState;
   onPlay: (turnId: string, dir: "in" | "out") => void;
   title: string;
 }) {
@@ -55,8 +57,9 @@ export function MessageListClient({ messages, sessionId }: Props) {
   const t = useTranslations("Chat");
   const endRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [loading, setLoading] = useState<{ turnId: string; dir: "in" | "out" } | null>(null);
-  const [playing, setPlaying] = useState<{ turnId: string; dir: "in" | "out" } | null>(null);
+  const audioCacheRef = useRef<Map<string, string>>(new Map());
+  const [loading, setLoading] = useState<PlayingState>(null);
+  const [playing, setPlaying] = useState<PlayingState>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -65,7 +68,7 @@ export function MessageListClient({ messages, sessionId }: Props) {
   async function handlePlay(turnId: string, dir: "in" | "out") {
     if (loading) return;
 
-    // Toggle stop if already playing this exact audio.
+    // Toggle stop if already playing this exact clip.
     if (playing?.turnId === turnId && playing?.dir === dir && audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -73,11 +76,26 @@ export function MessageListClient({ messages, sessionId }: Props) {
       return;
     }
 
+    const cacheKey = `${turnId}:${dir}`;
+    const cached = audioCacheRef.current.get(cacheKey);
+
+    if (cached) {
+      if (audioRef.current) {
+        audioRef.current.src = cached;
+        audioRef.current.play().catch(() => {});
+        setPlaying({ turnId, dir });
+      }
+      return;
+    }
+
     setLoading({ turnId, dir });
+    // The backend endpoint returns stored audio or generates TTS on demand.
     const result = await getAudio(sessionId, turnId, dir);
     setLoading(null);
     if (result.ok && audioRef.current) {
-      audioRef.current.src = audioDataUrl(result.audio_b64, result.audio_format);
+      const url = audioDataUrl(result.audio_b64, result.audio_format);
+      audioCacheRef.current.set(cacheKey, url);
+      audioRef.current.src = url;
       audioRef.current.play().catch(() => {});
       setPlaying({ turnId, dir });
     }
@@ -106,7 +124,7 @@ export function MessageListClient({ messages, sessionId }: Props) {
           {m.role === "assistant" ? (
             <>
               <div className="rounded-2xl bg-muted px-4 py-2">{m.text}</div>
-              {m.hasAudio && m.turnId && (
+              {m.turnId && (
                 <PlayButton
                   turnId={m.turnId}
                   dir="out"
@@ -119,7 +137,7 @@ export function MessageListClient({ messages, sessionId }: Props) {
             </>
           ) : (
             <>
-              {m.hasAudio && m.turnId && (
+              {m.turnId && (
                 <PlayButton
                   turnId={m.turnId}
                   dir="in"

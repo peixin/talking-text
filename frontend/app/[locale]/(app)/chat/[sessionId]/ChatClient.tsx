@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Check, Pencil, X } from "lucide-react";
+import { Check, Keyboard, Mic, Pencil, Send, X } from "lucide-react";
 
 import { LearnerOut, SessionOut, TurnOut } from "@/lib/backend";
 import { useRouter } from "@/i18n/routing";
@@ -27,8 +27,8 @@ function audioDataUrl(b64: string, fmt: string): string {
 
 function turnsToMessages(turns: TurnOut[]): Message[] {
   return turns.flatMap((t) => [
-    { role: "user" as const, text: t.text_user, turnId: t.id, hasAudio: t.has_audio_in },
-    { role: "assistant" as const, text: t.text_ai, turnId: t.id, hasAudio: t.has_audio_out },
+    { role: "user" as const, text: t.text_user, turnId: t.id },
+    { role: "assistant" as const, text: t.text_ai, turnId: t.id },
   ]);
 }
 
@@ -46,14 +46,16 @@ export function ChatClient({
   learners: LearnerOut[];
 }) {
   const t = useTranslations("Chat");
+  const tErr = useTranslations("Chat.errors");
   const router = useRouter();
 
   const [sessions, setSessions] = useState<SessionOut[]>(initialSessions);
   const [activeSession, setActiveSession] = useState<SessionOut>(initialActiveSession);
   const [messages, setMessages] = useState<Message[]>(turnsToMessages(initialTurns));
-  const [mode, setMode] = useState<Mode>("idle");
+  const [recordMode, setRecordMode] = useState<Mode>("idle");
+  const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
+  const [textDraft, setTextDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [lastAudioUrl, setLastAudioUrl] = useState<string | null>(null);
 
   // Title editing
   const [editingTitle, setEditingTitle] = useState(false);
@@ -68,16 +70,9 @@ export function ChatClient({
 
   useEffect(() => {
     return () => {
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((tr) => tr.stop());
     };
   }, []);
-
-  useEffect(() => {
-    if (lastAudioUrl && audioRef.current) {
-      audioRef.current.src = lastAudioUrl;
-      audioRef.current.play().catch(() => {});
-    }
-  }, [lastAudioUrl]);
 
   useEffect(() => {
     if (editingTitle && titleInputRef.current) {
@@ -86,7 +81,7 @@ export function ChatClient({
     }
   }, [editingTitle]);
 
-  // ── Session management ────────────────────────────────────────────────────
+  // ── Session management ─────────────────────────────────────────────────────
 
   async function handleNewSession() {
     try {
@@ -117,7 +112,7 @@ export function ChatClient({
     }
   }
 
-  // ── Title editing ─────────────────────────────────────────────────────────
+  // ── Title editing ──────────────────────────────────────────────────────────
 
   function startEditTitle() {
     setTitleDraft(activeSession.title ?? "");
@@ -141,7 +136,29 @@ export function ChatClient({
     setEditingTitle(false);
   }
 
-  // ── Recording ─────────────────────────────────────────────────────────────
+  // ── Shared post-turn update ────────────────────────────────────────────────
+
+  function applyTurnResult(
+    text_user: string,
+    text_ai: string,
+    turn_id: string,
+    session_title: string | null,
+  ) {
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", text: text_user, turnId: turn_id },
+      { role: "assistant", text: text_ai, turnId: turn_id },
+    ]);
+    setSessions((prev) => [
+      { ...activeSession, title: session_title ?? activeSession.title },
+      ...prev.filter((s) => s.id !== activeSession.id),
+    ]);
+    if (session_title && !activeSession.title) {
+      setActiveSession((s) => ({ ...s, title: session_title }));
+    }
+  }
+
+  // ── Voice input ────────────────────────────────────────────────────────────
 
   async function startRecording() {
     setError(null);
@@ -163,37 +180,37 @@ export function ChatClient({
         const blob = new Blob(chunksRef.current, {
           type: mime || recorder.mimeType || "audio/webm",
         });
-        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current?.getTracks().forEach((tr) => tr.stop());
         streamRef.current = null;
-        void uploadTurn(blob);
+        void submitVoiceTurn(blob);
       };
 
       recorder.start();
-      setMode("recording");
+      setRecordMode("recording");
     } catch {
       setError("CHAT_MIC_DENIED");
-      setMode("idle");
+      setRecordMode("idle");
     }
   }
 
   function stopRecording() {
     if (recorderRef.current?.state === "recording") {
       recorderRef.current.stop();
-      setMode("uploading");
+      setRecordMode("uploading");
     } else {
-      setMode("idle");
+      setRecordMode("idle");
     }
   }
 
   function handleRecordToggle() {
-    if (mode === "recording") stopRecording();
-    else if (mode === "idle") startRecording();
+    if (recordMode === "recording") stopRecording();
+    else if (recordMode === "idle") startRecording();
   }
 
-  async function uploadTurn(blob: Blob) {
+  async function submitVoiceTurn(blob: Blob) {
     if (blob.size === 0) {
       setError("CHAT_AUDIO_EMPTY");
-      setMode("idle");
+      setRecordMode("idle");
       return;
     }
 
@@ -204,37 +221,47 @@ export function ChatClient({
     const result = await sendTurn(activeSession.id, fd);
     if (!result.ok) {
       setError(result.error);
-      setMode("idle");
+      setRecordMode("idle");
       return;
     }
 
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text: result.text_user, turnId: result.turn_id, hasAudio: true },
-      { role: "assistant", text: result.text_ai, turnId: result.turn_id, hasAudio: true },
-    ]);
-    setLastAudioUrl(audioDataUrl(result.audio_b64, result.audio_format));
+    applyTurnResult(result.text_user, result.text_ai, result.turn_id, result.session_title);
 
-    // Update title if LLM just generated one on the first turn
-    if (result.session_title && !activeSession.title) {
-      const updated = { ...activeSession, title: result.session_title };
-      setActiveSession(updated);
-      setSessions((prev) => [
-        updated,
-        ...prev.filter((s) => s.id !== updated.id),
-      ]);
-    } else {
-      // Move to top (updated_at was touched)
-      setSessions((prev) => [
-        { ...activeSession, title: result.session_title ?? activeSession.title },
-        ...prev.filter((s) => s.id !== activeSession.id),
-      ]);
+    // Auto-play AI response (voice mode always returns audio).
+    if (result.audio_b64 && result.audio_format && audioRef.current) {
+      audioRef.current.src = audioDataUrl(result.audio_b64, result.audio_format);
+      audioRef.current.play().catch(() => {});
     }
 
-    setMode("idle");
+    setRecordMode("idle");
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Text input ─────────────────────────────────────────────────────────────
+
+  async function submitTextTurn() {
+    const text = textDraft.trim();
+    if (!text || recordMode === "uploading") return;
+    setError(null);
+    setTextDraft("");
+    setRecordMode("uploading");
+
+    const fd = new FormData();
+    fd.append("text", text);
+
+    const result = await sendTurn(activeSession.id, fd);
+    if (!result.ok) {
+      setError(result.error);
+      setRecordMode("idle");
+      return;
+    }
+
+    applyTurnResult(result.text_user, result.text_ai, result.turn_id, result.session_title);
+    // Text mode: no auto-play. User clicks the play button to generate audio on demand.
+
+    setRecordMode("idle");
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
@@ -293,13 +320,73 @@ export function ChatClient({
 
         <MessageListClient messages={messages} sessionId={activeSession.id} />
 
+        {/* Singleton audio element for auto-play in voice mode */}
         <audio ref={audioRef} hidden />
 
-        <RecordButtonClient
-          mode={mode}
-          error={error}
-          onRecordToggle={handleRecordToggle}
-        />
+        <div className="border-t border-border">
+          {/* Mode toggle */}
+          <div className="flex justify-end px-4 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setInputMode((m) => (m === "voice" ? "text" : "voice"));
+              }}
+              className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
+            >
+              {inputMode === "voice" ? (
+                <><Keyboard className="h-3.5 w-3.5" />{t("switch_to_text")}</>
+              ) : (
+                <><Mic className="h-3.5 w-3.5" />{t("switch_to_voice")}</>
+              )}
+            </button>
+          </div>
+
+          {inputMode === "voice" ? (
+            <RecordButtonClient
+              mode={recordMode}
+              error={error}
+              onRecordToggle={handleRecordToggle}
+            />
+          ) : (
+            <div className="flex flex-col gap-2 px-4 pb-4 pt-2">
+              {error && (
+                <p className="text-destructive text-center text-sm">
+                  {tErr(error as Parameters<typeof tErr>[0])}
+                </p>
+              )}
+              <div className="flex items-end gap-2">
+                <textarea
+                  value={textDraft}
+                  onChange={(e) => setTextDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void submitTextTurn();
+                    }
+                  }}
+                  disabled={recordMode === "uploading"}
+                  placeholder={t("text_placeholder")}
+                  rows={2}
+                  className="flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => void submitTextTurn()}
+                  disabled={!textDraft.trim() || recordMode === "uploading"}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label={t("send")}
+                >
+                  {recordMode === "uploading" ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

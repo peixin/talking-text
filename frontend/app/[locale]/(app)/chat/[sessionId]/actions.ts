@@ -7,7 +7,7 @@ import { getLocale } from "next-intl/server";
 import { BackendError, SessionOut, TurnResponse, backend } from "@/lib/backend";
 import { createApi } from "@/lib/api";
 
-// ── Auth helper (no redirect — lets callers decide) ───────────────────────────
+// ── Auth helper ───────────────────────────────────────────────────────────────
 
 async function authHeaders(): Promise<HeadersInit> {
   const jar = await cookies();
@@ -15,7 +15,7 @@ async function authHeaders(): Promise<HeadersInit> {
   return token ? { Cookie: `session=${token}` } : {};
 }
 
-// ── Session actions ──────────────────────────────────────────────────────────
+// ── Session actions ───────────────────────────────────────────────────────────
 
 export async function createSession(learnerId: string): Promise<SessionOut> {
   const api = await createApi();
@@ -37,13 +37,12 @@ export async function setActiveLearner(learnerId: string): Promise<void> {
   await api.learners.setActive(learnerId);
 }
 
-// ── Turn action ───────────────────────────────────────────────────────────────
+// ── Turn types ────────────────────────────────────────────────────────────────
 
 export type Message = {
   role: "user" | "assistant";
   text: string;
   turnId?: string;
-  hasAudio?: boolean;
 };
 
 export type SendTurnResult =
@@ -52,28 +51,33 @@ export type SendTurnResult =
       turn_id: string;
       text_user: string;
       text_ai: string;
-      audio_b64: string;
-      audio_format: string;
+      audio_b64: string | null;    // null in text mode
+      audio_format: string | null; // null in text mode
       session_title: string | null;
     }
   | { ok: false; error: string };
+
+// ── Turn action ───────────────────────────────────────────────────────────────
 
 export async function sendTurn(
   sessionId: string,
   formData: FormData,
 ): Promise<SendTurnResult> {
   const audio = formData.get("audio");
-
-  if (!(audio instanceof File) || audio.size === 0) {
-    return { ok: false, error: "CHAT_AUDIO_EMPTY" };
-  }
+  const text = formData.get("text");
 
   const upstream = new FormData();
-  upstream.append("audio", audio, audio.name || "recording.webm");
+  if (audio instanceof File && audio.size > 0) {
+    upstream.append("audio", audio, audio.name || "recording.webm");
+  } else if (typeof text === "string" && text.trim()) {
+    upstream.append("text", text.trim());
+  } else {
+    return { ok: false, error: "CHAT_INPUT_EMPTY" };
+  }
 
   const h = await authHeaders();
   try {
-    const result = await backend.sessions.sendTurn(sessionId, upstream, h);
+    const result: TurnResponse = await backend.sessions.sendTurn(sessionId, upstream, h);
     return {
       ok: true,
       turn_id: result.turn_id,
@@ -100,10 +104,16 @@ export async function sendTurn(
   }
 }
 
+// ── Audio action ──────────────────────────────────────────────────────────────
+
 export type GetAudioResult =
   | { ok: true; audio_b64: string; audio_format: string }
   | { ok: false; error: string };
 
+/**
+ * Fetch audio for one turn direction. The backend generates TTS on demand
+ * when no audio file is stored (text-mode turns or storage disabled).
+ */
 export async function getAudio(
   sessionId: string,
   turnId: string,

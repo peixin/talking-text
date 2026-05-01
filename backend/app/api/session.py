@@ -2,22 +2,27 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.factory import llm as _llm
 from app.adapters.factory import orchestrator as _orchestrator
+from app.adapters.factory import tts as _tts
 from app.adapters.llm.protocol import LLMMessage
+from app.adapters.tts.protocol import TTSRequest
 from app.api.auth import get_current_account
 from app.audio_codec import webm_opus_to_ogg
 from app.config import settings
@@ -30,6 +35,40 @@ from app.storage.models.turn import Turn
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+# ── In-process concurrency guards (single-process; sufficient for V1) ─────────
+#
+# _tts_gen_locks      — one asyncio.Lock per (turn_id, dir).
+#                       Prevents concurrent TTS generation for the same slot.
+# _session_turn_locks — one asyncio.Lock per session_id.
+#                       Serialises turn creation so LLM history is consistent.
+#
+# Both dicts are pruned immediately after each use: once a lock is released and
+# no other coroutine is waiting on it, the entry is deleted. This keeps memory
+# bounded regardless of how long the server runs.
+#
+# Safety note: asyncio is single-threaded. There is no await between the
+# lock.locked() check and dict.pop(), so the check-then-delete is atomic from
+# the event-loop's perspective.
+
+_tts_gen_locks: dict[str, asyncio.Lock] = {}
+_session_turn_locks: dict[str, asyncio.Lock] = {}
+
+
+@asynccontextmanager
+async def _scoped_lock(lock_dict: dict[str, asyncio.Lock], key: str) -> AsyncIterator[None]:
+    """Acquire (or create) a named lock, then prune it when no longer needed."""
+    if key not in lock_dict:
+        lock_dict[key] = asyncio.Lock()
+    lock = lock_dict[key]
+    async with lock:
+        yield
+    # Prune: if no other waiter is queued, remove the entry so memory stays bounded.
+    # Waiters already hold a direct reference to `lock`, so deleting the dict entry
+    # does not affect them — they will still acquire and release the same object.
+    if lock_dict.get(key) is lock and not lock.locked():
+        lock_dict.pop(key, None)
+
 
 _TITLE_PROMPT = (
     "You label English practice sessions for Chinese elementary school children. "
@@ -63,8 +102,6 @@ class TurnOut(BaseModel):
     id: uuid.UUID
     text_user: str
     text_ai: str
-    has_audio_out: bool
-    has_audio_in: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -74,8 +111,8 @@ class TurnResponse(BaseModel):
     turn_id: uuid.UUID
     text_user: str
     text_ai: str
-    audio_b64: str
-    audio_format: str
+    audio_b64: str | None  # present only in voice mode
+    audio_format: str | None  # present only in voice mode
     session_title: str | None
 
 
@@ -170,22 +207,12 @@ async def get_session_turns(
     session_id: uuid.UUID,
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> list[TurnOut]:
+) -> list[Turn]:
     await _require_session(session_id, account, db)
     rows = await db.execute(
         select(Turn).where(Turn.session_id == session_id).order_by(Turn.sequence.asc())
     )
-    return [
-        TurnOut(
-            id=t.id,
-            text_user=t.text_user,
-            text_ai=t.text_ai,
-            has_audio_out=t.audio_out_path is not None,
-            has_audio_in=t.audio_in_path is not None,
-            created_at=t.created_at,
-        )
-        for t in rows.scalars().all()
-    ]
+    return list(rows.scalars().all())
 
 
 @router.get("/{session_id}/turns/{turn_id}/audio")
@@ -195,21 +222,64 @@ async def get_turn_audio(
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
     dir: str = "out",
-) -> FileResponse:
+) -> Response:
+    """Return audio for a turn direction.
+
+    Serves the stored file when available. When not available (text-mode turns
+    or storage disabled), generates TTS on demand and optionally saves the
+    result so subsequent requests are served from disk.
+    """
     await _require_session(session_id, account, db)
     row = await db.execute(select(Turn).where(Turn.id == turn_id, Turn.session_id == session_id))
     turn = row.scalar_one_or_none()
     if not turn:
         raise HTTPException(status_code=404, detail="Turn not found")
-    audio_path = turn.audio_in_path if dir == "in" else turn.audio_out_path
-    if not audio_path:
-        raise HTTPException(status_code=404, detail="Audio not found")
-    path = Path(audio_path)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Audio file not found on disk")
-    ext = path.suffix.lstrip(".")
-    media_type = "audio/mpeg" if ext == "mp3" else "audio/ogg"
-    return FileResponse(path, media_type=media_type)
+
+    stored_path = turn.audio_in_path if dir == "in" else turn.audio_out_path
+    if stored_path:
+        p = Path(stored_path)
+        if p.exists():
+            media_type = "audio/mpeg" if p.suffix == ".mp3" else "audio/ogg"
+            return FileResponse(p, media_type=media_type)
+
+    # Generate TTS on demand — serialised per (turn_id, dir) to avoid duplicate
+    # API calls when multiple tabs request the same missing audio simultaneously.
+    async with _scoped_lock(_tts_gen_locks, f"{turn_id}:{dir}"):
+        # Double-check: another waiter may have generated and saved the file.
+        await db.refresh(turn)
+        stored_path = turn.audio_in_path if dir == "in" else turn.audio_out_path
+        if stored_path:
+            p = Path(stored_path)
+            if p.exists():
+                media_type = "audio/mpeg" if p.suffix == ".mp3" else "audio/ogg"
+                return FileResponse(p, media_type=media_type)
+
+        text = turn.text_user if dir == "in" else turn.text_ai
+        tts_fmt: str = settings.volc_tts_audio_format
+        tts_result = await _tts.invoke(
+            TTSRequest(
+                text=text,
+                voice=settings.volc_tts_default_voice,
+                audio_format=tts_fmt,  # type: ignore[arg-type]
+                sample_rate=settings.volc_tts_sample_rate,
+            )
+        )
+
+        # Save to disk and update the turn record so next request is a cache hit.
+        if settings.audio_storage_enabled:
+            base = Path(settings.audio_storage_dir) / str(turn.learner_id) / str(session_id)
+            base.mkdir(parents=True, exist_ok=True)
+            ext = "mp3" if tts_fmt == "mp3" else tts_fmt
+            audio_file = base / f"{turn_id}_{dir}.{ext}"
+            audio_file.write_bytes(tts_result.audio)
+            if dir == "in":
+                turn.audio_in_path = str(audio_file)
+            else:
+                turn.audio_out_path = str(audio_file)
+            await db.commit()
+
+    media_type = "audio/mpeg" if tts_fmt == "mp3" else "audio/ogg"
+    return Response(content=tts_result.audio, media_type=media_type)
 
 
 @router.post("/{session_id}/turns", response_model=TurnResponse)
@@ -217,41 +287,64 @@ async def create_turn(
     session_id: uuid.UUID,
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    audio: Annotated[UploadFile, File()],
+    audio: Annotated[UploadFile | None, File()] = None,
+    text: Annotated[str | None, Form()] = None,
 ) -> TurnResponse:
+    """Create a turn from voice (audio file) or text input.
+
+    Voice mode: STT -> LLM -> TTS. Returns audio_b64 for immediate playback.
+    Text mode:  text -> LLM.        Returns audio_b64=null; audio generated
+                                    on demand via GET …/audio.
+    """
     session = await _require_session(session_id, account, db)
     learner_id = session.learner_id
 
-    # Read upload + transcode webm -> ogg/opus.
-    audio_bytes = await audio.read()
-    if not audio_bytes:
-        raise HTTPException(status_code=400, detail="audio is empty")
+    text_stripped = (text or "").strip()
 
-    content_type = (audio.content_type or "").lower()
-    if "webm" in content_type or (audio.filename and audio.filename.endswith(".webm")):
+    # Read the audio bytes before acquiring the lock (I/O outside critical section).
+    audio_bytes: bytes | None = None
+    if audio is not None:
+        audio_bytes = await audio.read()
+        if not audio_bytes:
+            raise HTTPException(status_code=400, detail="audio file is empty")
+        content_type = (audio.content_type or "").lower()
+        if "webm" in content_type or (audio.filename or "").endswith(".webm"):
+            try:
+                audio_bytes = await webm_opus_to_ogg(
+                    audio_bytes, sample_rate=settings.volc_stt_sample_rate
+                )
+            except RuntimeError as e:
+                log.exception("ffmpeg transcode failed for learner=%s", learner_id)
+                raise HTTPException(status_code=500, detail=f"audio transcode failed: {e}") from e
+    elif not text_stripped:
+        raise HTTPException(status_code=400, detail="Provide either an audio file or text")
+
+    # Serialise turn creation per session: guarantees sequential history and
+    # prevents duplicate turns from network retries that arrive concurrently.
+    async with _scoped_lock(_session_turn_locks, str(session_id)):
         try:
-            audio_bytes = await webm_opus_to_ogg(
-                audio_bytes, sample_rate=settings.volc_stt_sample_rate
-            )
-        except RuntimeError as e:
-            log.exception("ffmpeg failed for upload from learner=%s", learner_id)
-            raise HTTPException(status_code=500, detail=f"audio transcode failed: {e}") from e
+            if audio_bytes is not None:
+                result = await _orchestrator.single_turn(
+                    db=db,
+                    learner_id=learner_id,
+                    session_id=session_id,
+                    audio_in=audio_bytes,
+                    audio_in_format="ogg",
+                    audio_in_sample_rate=settings.volc_stt_sample_rate,
+                    generate_audio=True,
+                )
+            else:
+                result = await _orchestrator.single_turn(
+                    db=db,
+                    learner_id=learner_id,
+                    session_id=session_id,
+                    text_user=text_stripped,
+                    generate_audio=False,
+                )
+        except EmptyTranscriptionError as e:
+            raise HTTPException(status_code=422, detail="EMPTY_TRANSCRIPTION") from e
 
-    # Orchestrate the turn.
-    try:
-        result = await _orchestrator.single_turn(
-            db=db,
-            learner_id=learner_id,
-            session_id=session_id,
-            audio_in=audio_bytes,
-            audio_in_format="ogg",
-            audio_in_sample_rate=settings.volc_stt_sample_rate,
-        )
-    except EmptyTranscriptionError as e:
-        raise HTTPException(status_code=422, detail="EMPTY_TRANSCRIPTION") from e
-
-    # Touch session + generate title on first turn.
-    session_title = await after_turn(
+    session_title = await _after_turn(
         session_id=session_id,
         text_user=result.text_user,
         text_ai=result.text_ai,
@@ -262,7 +355,11 @@ async def create_turn(
         turn_id=result.turn_id,
         text_user=result.text_user,
         text_ai=result.text_ai,
-        audio_b64=base64.b64encode(result.audio_out).decode("ascii"),
+        audio_b64=(
+            base64.b64encode(result.audio_out).decode("ascii")
+            if result.audio_out is not None
+            else None
+        ),
         audio_format=result.audio_out_format,
         session_title=session_title,
     )
@@ -271,7 +368,7 @@ async def create_turn(
 # ── Post-turn helpers ──────────────────────────────────────────────────────────
 
 
-async def after_turn(
+async def _after_turn(
     *,
     session_id: uuid.UUID,
     text_user: str,
