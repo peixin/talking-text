@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Check, Keyboard, Menu, Mic, Pencil, Send, X } from "lucide-react";
+import { useLocale } from "next-intl";
 
 import { LearnerOut, SessionOut, TurnOut } from "@/lib/backend";
 import { useRouter } from "@/i18n/routing";
-import { Message, createSession, deleteSession, renameSession, sendTurn } from "./actions";
+import { Message, createSession, deleteSession, getAudio, renameSession, setActiveLearner } from "./actions";
 import { SessionSidebarClient } from "./SessionSidebarClient";
-import { MessageListClient } from "./MessageListClient";
+import { MessageListClient, AudioState } from "./MessageListClient";
 import { RecordButtonClient, Mode } from "./RecordButtonClient";
 
 function pickMimeType(): string {
@@ -48,6 +49,7 @@ export function ChatClient({
   const t = useTranslations("Chat");
   const tErr = useTranslations("Chat.errors");
   const router = useRouter();
+  const locale = useLocale();
 
   const [sessions, setSessions] = useState<SessionOut[]>(initialSessions);
   const [activeSession, setActiveSession] = useState<SessionOut>(initialActiveSession);
@@ -62,12 +64,21 @@ export function ChatClient({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
 
+  // Recording
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const mimeRef = useRef<string>("");
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ── Unified audio (singleton <audio> owned by ChatClient) ─────────────────
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCacheRef = useRef<Map<string, string>>(new Map());
+  const [audioState, setAudioState] = useState<AudioState>({
+    playingTurnId: null,
+    playingDir: null,
+    loadingKey: null,
+  });
 
   useEffect(() => {
     return () => {
@@ -82,7 +93,46 @@ export function ChatClient({
     }
   }, [editingTitle]);
 
-  // ── Session management ─────────────────────────────────────────────────────
+  // ── Audio management ──────────────────────────────────────────────────────
+
+  function playAudioUrl(url: string, turnId: string, dir: "in" | "out") {
+    if (!audioRef.current) return;
+    audioRef.current.src = url;
+    audioRef.current.play().catch(() => {});
+    setAudioState({ playingTurnId: turnId, playingDir: dir, loadingKey: null });
+  }
+
+  async function handlePlay(turnId: string, dir: "in" | "out") {
+    if (audioState.loadingKey) return;
+
+    const key = `${turnId}:${dir}`;
+
+    // Toggle stop if this clip is currently playing.
+    if (audioState.playingTurnId === turnId && audioState.playingDir === dir && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setAudioState({ playingTurnId: null, playingDir: null, loadingKey: null });
+      return;
+    }
+
+    const cached = audioCacheRef.current.get(key);
+    if (cached) {
+      playAudioUrl(cached, turnId, dir);
+      return;
+    }
+
+    setAudioState((s) => ({ ...s, loadingKey: key }));
+    const result = await getAudio(activeSession.id, turnId, dir);
+    if (result.ok) {
+      const url = audioDataUrl(result.audio_b64, result.audio_format);
+      audioCacheRef.current.set(key, url);
+      playAudioUrl(url, turnId, dir);
+    } else {
+      setAudioState((s) => ({ ...s, loadingKey: null }));
+    }
+  }
+
+  // ── Session management ────────────────────────────────────────────────────
 
   async function handleNewSession() {
     try {
@@ -113,7 +163,7 @@ export function ChatClient({
     }
   }
 
-  // ── Title editing ──────────────────────────────────────────────────────────
+  // ── Title editing ─────────────────────────────────────────────────────────
 
   function startEditTitle() {
     setTitleDraft(activeSession.title ?? "");
@@ -137,29 +187,148 @@ export function ChatClient({
     setEditingTitle(false);
   }
 
-  // ── Shared post-turn update ────────────────────────────────────────────────
+  // ── Unified streaming turn submission ─────────────────────────────────────
 
-  function applyTurnResult(
-    text_user: string,
-    text_ai: string,
-    turn_id: string,
-    session_title: string | null,
-  ) {
+  async function submitTurn(formData: FormData, isVoice: boolean) {
+    setError(null);
+    setRecordMode("uploading");
+
+    const tempId = `tmp-${Date.now()}`;
+    const inputText = !isVoice ? ((formData.get("text") as string) ?? "") : "";
+
+    // Optimistic: add user message (pending for voice) + streaming AI placeholder.
     setMessages((prev) => [
       ...prev,
-      { role: "user", text: text_user, turnId: turn_id },
-      { role: "assistant", text: text_ai, turnId: turn_id },
+      {
+        role: "user",
+        text: inputText,
+        turnId: tempId,
+        pending: isVoice,
+        inputMode: isVoice ? "voice" : "text",
+      },
+      { role: "assistant", text: "", turnId: tempId, streaming: true },
     ]);
-    setSessions((prev) => [
-      { ...activeSession, title: session_title ?? activeSession.title },
-      ...prev.filter((s) => s.id !== activeSession.id),
-    ]);
-    if (session_title && !activeSession.title) {
-      setActiveSession((s) => ({ ...s, title: session_title }));
+
+    const t0 = performance.now();
+    let response: Response;
+    try {
+      response = await fetch(`/api/chat/${activeSession.id}/stream`, {
+        method: "POST",
+        body: formData,
+      });
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.turnId !== tempId));
+      setError("CHAT_TURN_FAILED");
+      setRecordMode("idle");
+      return;
+    }
+
+    if (!response.ok) {
+      setMessages((prev) => prev.filter((m) => m.turnId !== tempId));
+      if (response.status === 401) {
+        router.push(`/${locale}/login?expired=1`);
+        return;
+      }
+      setError("CHAT_TURN_FAILED");
+      setRecordMode("idle");
+      return;
+    }
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let realTurnId = tempId;
+    let aiText = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          let event: Record<string, string>;
+          try {
+            event = JSON.parse(line.slice(6)) as Record<string, string>;
+          } catch {
+            continue;
+          }
+
+          switch (event.event) {
+            case "text_user":
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.turnId === tempId && m.role === "user"
+                    ? { ...m, text: event.text, pending: false }
+                    : m,
+                ),
+              );
+              break;
+
+            case "text_ai_delta":
+              aiText += event.delta;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.turnId === tempId && m.role === "assistant" ? { ...m, text: aiText } : m,
+                ),
+              );
+              break;
+
+            case "text_ai_done":
+              realTurnId = event.turn_id;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.turnId === tempId ? { ...m, turnId: realTurnId, streaming: false } : m,
+                ),
+              );
+              break;
+
+            case "audio_ready":
+              if (isVoice) {
+                const url = audioDataUrl(event.audio_b64, event.audio_format);
+                audioCacheRef.current.set(`${realTurnId}:out`, url);
+                playAudioUrl(url, realTurnId, "out");
+              }
+              console.log(`[perf] audio_ready: ${(performance.now() - t0).toFixed(0)}ms`);
+              break;
+
+            case "done":
+              if (event.session_title) {
+                const title = event.session_title;
+                setSessions((prev) =>
+                  prev.map((s) => (s.id === activeSession.id ? { ...s, title } : s)),
+                );
+                setActiveSession((s) => ({ ...s, title }));
+              }
+              console.log(`[perf] stream done: ${(performance.now() - t0).toFixed(0)}ms`);
+              break;
+
+            case "error":
+              setMessages((prev) => prev.filter((m) => m.turnId !== tempId));
+              setError(
+                event.code === "EMPTY_TRANSCRIPTION"
+                  ? "CHAT_EMPTY_TRANSCRIPTION"
+                  : "CHAT_TURN_FAILED",
+              );
+              break;
+          }
+        }
+      }
+    } finally {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.turnId === tempId ? { ...m, streaming: false, pending: false } : m,
+        ),
+      );
+      setRecordMode("idle");
     }
   }
 
-  // ── Voice input ────────────────────────────────────────────────────────────
+  // ── Voice input ───────────────────────────────────────────────────────────
 
   async function startRecording() {
     setError(null);
@@ -183,7 +352,15 @@ export function ChatClient({
         });
         streamRef.current?.getTracks().forEach((tr) => tr.stop());
         streamRef.current = null;
-        void submitVoiceTurn(blob);
+        if (blob.size === 0) {
+          setError("CHAT_AUDIO_EMPTY");
+          setRecordMode("idle");
+          return;
+        }
+        const fd = new FormData();
+        const ext = (mimeRef.current || "audio/webm").includes("mp4") ? "mp4" : "webm";
+        fd.append("audio", blob, `recording.${ext}`);
+        void submitTurn(fd, true);
       };
 
       recorder.start();
@@ -208,61 +385,18 @@ export function ChatClient({
     else if (recordMode === "idle") startRecording();
   }
 
-  async function submitVoiceTurn(blob: Blob) {
-    if (blob.size === 0) {
-      setError("CHAT_AUDIO_EMPTY");
-      setRecordMode("idle");
-      return;
-    }
-
-    const fd = new FormData();
-    const ext = (mimeRef.current || "audio/webm").includes("mp4") ? "mp4" : "webm";
-    fd.append("audio", blob, `recording.${ext}`);
-
-    const result = await sendTurn(activeSession.id, fd);
-    if (!result.ok) {
-      setError(result.error);
-      setRecordMode("idle");
-      return;
-    }
-
-    applyTurnResult(result.text_user, result.text_ai, result.turn_id, result.session_title);
-
-    // Auto-play AI response (voice mode always returns audio).
-    if (result.audio_b64 && result.audio_format && audioRef.current) {
-      audioRef.current.src = audioDataUrl(result.audio_b64, result.audio_format);
-      audioRef.current.play().catch(() => {});
-    }
-
-    setRecordMode("idle");
-  }
-
-  // ── Text input ─────────────────────────────────────────────────────────────
+  // ── Text input ────────────────────────────────────────────────────────────
 
   async function submitTextTurn() {
     const text = textDraft.trim();
     if (!text || recordMode === "uploading") return;
-    setError(null);
     setTextDraft("");
-    setRecordMode("uploading");
-
     const fd = new FormData();
     fd.append("text", text);
-
-    const result = await sendTurn(activeSession.id, fd);
-    if (!result.ok) {
-      setError(result.error);
-      setRecordMode("idle");
-      return;
-    }
-
-    applyTurnResult(result.text_user, result.text_ai, result.turn_id, result.session_title);
-    // Text mode: no auto-play. User clicks the play button to generate audio on demand.
-
-    setRecordMode("idle");
+    await submitTurn(fd, false);
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -328,10 +462,19 @@ export function ChatClient({
           )}
         </div>
 
-        <MessageListClient messages={messages} sessionId={activeSession.id} />
+        {/* Singleton audio element — owned here, shared via handlePlay */}
+        <audio
+          ref={audioRef}
+          hidden
+          onEnded={() => setAudioState({ playingTurnId: null, playingDir: null, loadingKey: null })}
+        />
 
-        {/* Singleton audio element for auto-play in voice mode */}
-        <audio ref={audioRef} hidden />
+        <MessageListClient
+          messages={messages}
+          sessionId={activeSession.id}
+          audioState={audioState}
+          onPlay={handlePlay}
+        />
 
         <div className="shrink-0 border-t border-border bg-background">
           {/* Mode toggle */}

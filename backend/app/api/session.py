@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -13,7 +15,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +26,7 @@ from app.adapters.factory import tts as _tts
 from app.adapters.llm.protocol import LLMMessage
 from app.adapters.tts.protocol import TTSRequest
 from app.api.auth import get_current_account
+from app.app_config import app_config
 from app.audio_codec import webm_opus_to_ogg
 from app.config import settings
 from app.core.dialog import EmptyTranscriptionError
@@ -296,6 +299,7 @@ async def create_turn(
     Text mode:  text -> LLM.        Returns audio_b64=null; audio generated
                                     on demand via GET …/audio.
     """
+    t_req = time.monotonic()
     session = await _require_session(session_id, account, db)
     learner_id = session.learner_id
 
@@ -309,6 +313,7 @@ async def create_turn(
             raise HTTPException(status_code=400, detail="audio file is empty")
         content_type = (audio.content_type or "").lower()
         if "webm" in content_type or (audio.filename or "").endswith(".webm"):
+            t_transcode = time.monotonic()
             try:
                 audio_bytes = await webm_opus_to_ogg(
                     audio_bytes, sample_rate=settings.volc_stt_sample_rate
@@ -316,6 +321,13 @@ async def create_turn(
             except RuntimeError as e:
                 log.exception("ffmpeg transcode failed for learner=%s", learner_id)
                 raise HTTPException(status_code=500, detail=f"audio transcode failed: {e}") from e
+            if app_config.debug.perf_logging:
+                log.info(
+                    "[perf] transcode webm->ogg: %.3fs (in=%d out=%d bytes)",
+                    time.monotonic() - t_transcode,
+                    len(audio_bytes),
+                    len(audio_bytes),
+                )
     elif not text_stripped:
         raise HTTPException(status_code=400, detail="Provide either an audio file or text")
 
@@ -351,6 +363,8 @@ async def create_turn(
         db=db,
     )
 
+    if app_config.debug.perf_logging:
+        log.info("[perf] create_turn TOTAL: %.3fs", time.monotonic() - t_req)
     return TurnResponse(
         turn_id=result.turn_id,
         text_user=result.text_user,
@@ -362,6 +376,94 @@ async def create_turn(
         ),
         audio_format=result.audio_out_format,
         session_title=session_title,
+    )
+
+
+@router.post("/{session_id}/turns/stream")
+async def stream_turn(
+    session_id: uuid.UUID,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audio: Annotated[UploadFile | None, File()] = None,
+    text: Annotated[str | None, Form()] = None,
+) -> StreamingResponse:
+    """Streaming turn: returns SSE events as the pipeline progresses.
+
+    Events (all JSON in `data:` field):
+      text_user       — transcription ready (voice) or input echo (text)
+      text_ai_delta   — one LLM token
+      text_ai_done    — LLM complete; turn committed to DB; includes turn_id
+      audio_ready     — TTS done (voice mode only); includes audio_b64
+      done            — pipeline complete; includes session_title
+      error           — with `code` field (e.g. EMPTY_TRANSCRIPTION)
+    """
+    t_req = time.monotonic()
+    session = await _require_session(session_id, account, db)
+    learner_id = session.learner_id
+    text_stripped = (text or "").strip()
+
+    audio_bytes: bytes | None = None
+    if audio is not None:
+        audio_bytes = await audio.read()
+        if not audio_bytes:
+            raise HTTPException(status_code=400, detail="audio file is empty")
+        content_type = (audio.content_type or "").lower()
+        if "webm" in content_type or (audio.filename or "").endswith(".webm"):
+            t_transcode = time.monotonic()
+            try:
+                audio_bytes = await webm_opus_to_ogg(
+                    audio_bytes, sample_rate=settings.volc_stt_sample_rate
+                )
+            except RuntimeError as e:
+                log.exception("ffmpeg transcode failed for learner=%s", learner_id)
+                raise HTTPException(status_code=500, detail=f"audio transcode failed: {e}") from e
+            if app_config.debug.perf_logging:
+                log.info("[perf] transcode webm->ogg: %.3fs", time.monotonic() - t_transcode)
+    elif not text_stripped:
+        raise HTTPException(status_code=400, detail="Provide either an audio file or text")
+
+    async def generate() -> AsyncIterator[str]:
+        text_user_cap: str | None = None
+        text_ai_cap: str | None = None
+
+        async with _scoped_lock(_session_turn_locks, str(session_id)):
+            async for event in await _orchestrator.stream_turn(
+                db=db,
+                learner_id=learner_id,
+                session_id=session_id,
+                audio_in=audio_bytes,
+                audio_in_format="ogg" if audio_bytes is not None else "ogg",
+                audio_in_sample_rate=settings.volc_stt_sample_rate,
+                text_user=text_stripped or None,
+                generate_audio=audio_bytes is not None,
+            ):
+                if event.get("event") == "text_ai_done":
+                    text_user_cap = event.get("text_user")
+                    text_ai_cap = event.get("text_ai")
+                elif event.get("event") == "error":
+                    yield f"data: {json.dumps(event)}\n\n"
+                    return
+                yield f"data: {json.dumps(event)}\n\n"
+
+        # _after_turn runs outside the per-session lock.
+        session_title: str | None = None
+        if text_user_cap and text_ai_cap:
+            session_title = await _after_turn(
+                session_id=session_id,
+                text_user=text_user_cap,
+                text_ai=text_ai_cap,
+                db=db,
+            )
+
+        if app_config.debug.perf_logging:
+            log.info("[perf] stream_turn endpoint TOTAL: %.3fs", time.monotonic() - t_req)
+
+        yield f"data: {json.dumps({'event': 'done', 'session_title': session_title})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

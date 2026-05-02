@@ -21,6 +21,9 @@ class Settings(BaseSettings):
 
     session_secret: str = "change-me-in-production"
 
+    # --- DeepSeek (LLM) ---
+    deepseek_api_key: str = ""
+
     # --- Volcengine Ark (LLM) ---
     volc_ark_api_key: str = ""
     volc_ark_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"

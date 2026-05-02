@@ -3,14 +3,27 @@
 
 [adapter]
 # Which adapter implementation to use for each role.
-# Changing a value here + filling the corresponding .env vars is all that's
-# needed to swap providers.
-llm_provider = "volc_ark"   # supported: "volc_ark"
+# Each provider's tunable params live in [adapter.<role>.<provider>] below.
+# Secrets (API keys, endpoints) still belong in .env.
+llm_provider = "deepseek"   # supported: "deepseek" | "volc_ark"
 stt_provider = "volc"       # supported: "volc"
 tts_provider = "volc"       # supported: "volc"
+
+[adapter.llm.deepseek]
+model = "deepseek-v4-flash"
+thinking = "disabled"       # "disabled" | "enabled"
+reasoning_effort = "low"    # only relevant when thinking = "enabled"
+
+[adapter.llm.volc_ark]
+model = "doubao-seed-2-0-mini-260215"
 
 [auth]
 # Session cookie lifetime in days
 session_max_age_days = 365
 # Maximum failed login attempts before lockout (future use)
 max_login_attempts = 5
+
+[debug]
+# Emit [perf] timing logs for each pipeline stage (STT / LLM / TTS / DB).
+# Safe to enable in production — logs go to stdout at INFO level, no PII.
+perf_logging = true

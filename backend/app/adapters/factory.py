@@ -20,10 +20,14 @@ from app.core.dialog import DialogOrchestrator
 
 def _make_llm() -> LLMAdapter:
     match app_config.adapter.llm_provider:
+        case "deepseek":
+            from app.adapters.llm.deepseek import DeepSeekLLMAdapter
+
+            return DeepSeekLLMAdapter()
         case "volc_ark":
             from app.adapters.llm.volc import VolcLLMAdapter
 
-            return VolcLLMAdapter()
+            return VolcLLMAdapter(model=app_config.adapter.llm.model or None)
         case other:
             raise ValueError(f"Unknown LLM provider: {other!r}")
 

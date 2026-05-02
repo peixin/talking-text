@@ -97,7 +97,8 @@
       "CHAT_EMPTY_TRANSCRIPTION": "沒聽清楚，請再說一次",
       "CHAT_MIC_DENIED": "無法存取麥克風，請檢查瀏覽器權限",
       "CHAT_TURN_FAILED": "對話失敗，請稍後再試"
-    }
+    },
+    "transcribing": "識別中…"
   },
   "Home": {
     "brand_title": "字有天地",

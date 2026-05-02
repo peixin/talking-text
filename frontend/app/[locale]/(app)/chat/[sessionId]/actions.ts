@@ -43,6 +43,9 @@ export type Message = {
   role: "user" | "assistant";
   text: string;
   turnId?: string;
+  streaming?: boolean;   // assistant: LLM is still generating
+  pending?: boolean;     // user (voice): awaiting STT transcription
+  inputMode?: "voice" | "text";  // controls whether input play button shows
 };
 
 export type SendTurnResult =

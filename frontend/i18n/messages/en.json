@@ -97,7 +97,8 @@
       "CHAT_EMPTY_TRANSCRIPTION": "Couldn't catch that — please say it again.",
       "CHAT_MIC_DENIED": "Microphone access denied. Check your browser permissions.",
       "CHAT_TURN_FAILED": "Chat failed. Please try again later."
-    }
+    },
+    "transcribing": "Transcribing…"
   },
   "Home": {
     "brand_title": "Talking Text",
