@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Check, Keyboard, Mic, Pencil, Send, X } from "lucide-react";
+import { Check, Keyboard, Menu, Mic, Pencil, Send, X } from "lucide-react";
 
 import { LearnerOut, SessionOut, TurnOut } from "@/lib/backend";
 import { useRouter } from "@/i18n/routing";
@@ -56,6 +56,7 @@ export function ChatClient({
   const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
   const [textDraft, setTextDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Title editing
   const [editingTitle, setEditingTitle] = useState(false);
@@ -264,19 +265,28 @@ export function ChatClient({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex min-h-0 flex-1">
       <SessionSidebarClient
         sessions={sessions}
         activeSessionId={activeSession.id}
         activeLearner={activeLearner}
         learners={learners}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
         onNewSession={handleNewSession}
         onDeleteSession={handleDeleteSession}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         {/* Title bar */}
-        <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
+          <button
+            className="shrink-0 text-muted-foreground hover:text-foreground md:hidden"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open sidebar"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
           {editingTitle ? (
             <>
               <input
@@ -323,7 +333,7 @@ export function ChatClient({
         {/* Singleton audio element for auto-play in voice mode */}
         <audio ref={audioRef} hidden />
 
-        <div className="border-t border-border">
+        <div className="shrink-0 border-t border-border bg-background">
           {/* Mode toggle */}
           <div className="flex justify-end px-4 pt-2">
             <button

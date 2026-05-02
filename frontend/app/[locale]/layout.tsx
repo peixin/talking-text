@@ -1,10 +1,18 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "@/app/globals.css";
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getTranslations } from 'next-intl/server';
 import { routing } from '@/i18n/routing';
 import { notFound } from 'next/navigation';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+};
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,7 +34,13 @@ export async function generateMetadata({
 
   return {
     title: t('title'),
-    description: t('description')
+    description: t('description'),
+    formatDetection: {
+      telephone: false,
+      date: false,
+      address: false,
+      email: false,
+    }
   };
 }
 

@@ -7,29 +7,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const t = await getTranslations("Navigation");
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="border-border flex items-center justify-between border-b px-6 py-4">
-        <Link href="/" className="font-semibold tracking-wide">
+    <div className="flex flex-col w-full h-[100dvh] bg-background">
+      <header className="flex-none border-border flex items-center justify-between border-b px-3 py-3 sm:px-6 sm:py-4">
+        <Link href="/" className="whitespace-nowrap text-sm font-semibold tracking-wide sm:text-base">
           {t("app_name")}
         </Link>
-        <div className="flex items-center gap-5">
-          <nav className="flex gap-5 text-sm">
-            <Link href="/chat" className="hover:text-primary">
+        <div className="flex items-center gap-2 sm:gap-5">
+          <nav className="flex gap-2 text-xs sm:gap-5 sm:text-sm">
+            <Link href="/chat" className="hover:text-primary whitespace-nowrap">
               {t("chat")}
             </Link>
-            <Link href="/parent" className="hover:text-primary">
+            <Link href="/parent" className="hover:text-primary whitespace-nowrap">
               {t("parent")}
             </Link>
           </nav>
           <form action={logout}>
-            <button type="submit" className="text-muted-foreground hover:text-primary mr-4 text-sm transition">
+            <button type="submit" className="text-muted-foreground hover:text-primary whitespace-nowrap text-xs transition sm:mr-4 sm:text-sm">
               {t("logout")}
             </button>
           </form>
           <LocaleSwitcher />
         </div>
       </header>
-      <main className="flex-1 px-6 py-8">{children}</main>
+      <main className="flex-1 w-full min-h-0 flex flex-col">{children}</main>
     </div>
   );
 }

@@ -43,11 +43,11 @@ function PlayButton({
       title={title}
     >
       {isLoading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Loader2 className="h-4 w-4 animate-spin pointer-events-none" />
       ) : isPlaying ? (
-        <Square className="h-4 w-4 fill-current" />
+        <Square className="h-4 w-4 fill-current pointer-events-none" />
       ) : (
-        <Play className="h-4 w-4" />
+        <Play className="h-4 w-4 pointer-events-none" />
       )}
     </button>
   );

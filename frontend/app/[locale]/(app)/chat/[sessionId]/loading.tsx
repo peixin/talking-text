@@ -1,8 +1,8 @@
 export default function Loading() {
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
-      {/* Sidebar skeleton */}
-      <aside className="flex w-56 shrink-0 flex-col border-r border-border">
+    <div className="flex min-h-0 flex-1 overflow-hidden">
+      {/* Sidebar skeleton — hidden on mobile to match SessionSidebarClient */}
+      <aside className="hidden w-56 shrink-0 flex-col border-r border-border md:flex">
         <div className="px-3 py-2">
           <div className="h-8 animate-pulse rounded-md bg-muted" />
         </div>
@@ -17,9 +17,9 @@ export default function Loading() {
       </aside>
 
       {/* Main area skeleton */}
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Title bar */}
-        <div className="flex items-center border-b border-border px-4 py-2.5">
+        <div className="flex shrink-0 items-center border-b border-border px-4 py-2.5">
           <div className="h-4 w-32 animate-pulse rounded bg-muted" />
         </div>
 
@@ -32,7 +32,7 @@ export default function Loading() {
         </div>
 
         {/* Record button */}
-        <div className="flex flex-col items-center gap-2 border-t border-border px-4 py-4">
+        <div className="flex shrink-0 flex-col items-center gap-2 border-t border-border px-4 py-4">
           <div className="h-16 w-16 animate-pulse rounded-full bg-muted" />
           <div className="h-3 w-24 animate-pulse rounded bg-muted/60" />
         </div>
