@@ -63,7 +63,25 @@ class VolcLLMAdapter:
         temperature: float = 0.7,
         max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
-        raise NotImplementedError("V2: streaming will be implemented for the realtime pipeline.")
+        return self._stream_impl(messages, temperature=temperature, max_tokens=max_tokens)
+
+    async def _stream_impl(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float,
+        max_tokens: int | None,
+    ) -> AsyncIterator[str]:
+        response = await self._client.chat.completions.create(
+            model=self._model,
+            messages=[{"role": m.role, "content": m.content} for m in messages],
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+        async for chunk in response:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
 
 
 async def _smoke_test() -> None:

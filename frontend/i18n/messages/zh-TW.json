@@ -88,6 +88,9 @@
     "switch_to_voice": "切換語音輸入",
     "text_placeholder": "輸入訊息，Enter 發送，Shift+Enter 換行",
     "send": "發送",
+    "session_soft_limit_text": "今天練了不少了，換個話題繼續練習？",
+    "session_soft_limit_dismiss": "繼續聊",
+    "session_hard_limit_text": "這次對話已達到最大長度，請開始新對話繼續練習。",
     "errors": {
       "CHAT_AUDIO_EMPTY": "沒有錄到聲音，請再試一次",
       "CHAT_INPUT_EMPTY": "內容不能為空",
@@ -96,7 +99,8 @@
       "CHAT_LEARNER_NOT_FOUND": "找不到這個孩子，請重新整理後再試",
       "CHAT_EMPTY_TRANSCRIPTION": "沒聽清楚，請再說一次",
       "CHAT_MIC_DENIED": "無法存取麥克風，請檢查瀏覽器權限",
-      "CHAT_TURN_FAILED": "對話失敗，請稍後再試"
+      "CHAT_TURN_FAILED": "對話失敗，請稍後再試",
+      "CHAT_SESSION_HARD_LIMIT": "對話已達到最大長度，請開始新對話"
     },
     "transcribing": "識別中…"
   },

@@ -57,6 +57,7 @@ export type SendTurnResult =
       audio_b64: string | null;    // null in text mode
       audio_format: string | null; // null in text mode
       session_title: string | null;
+      session_status: string;      // "active" | "soft_limit"
     }
   | { ok: false; error: string };
 
@@ -89,6 +90,7 @@ export async function sendTurn(
       audio_b64: result.audio_b64,
       audio_format: result.audio_format,
       session_title: result.session_title,
+      session_status: result.session_status,
     };
   } catch (e) {
     if (e instanceof BackendError) {
@@ -98,6 +100,9 @@ export async function sendTurn(
       }
       if (e.status === 422 && e.detail === "EMPTY_TRANSCRIPTION") {
         return { ok: false, error: "CHAT_EMPTY_TRANSCRIPTION" };
+      }
+      if (e.status === 422 && e.detail === "SESSION_HARD_LIMIT") {
+        return { ok: false, error: "CHAT_SESSION_HARD_LIMIT" };
       }
       if (e.status === 404) {
         return { ok: false, error: "CHAT_SESSION_REQUIRED" };

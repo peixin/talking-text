@@ -59,6 +59,8 @@ export function ChatClient({
   const [textDraft, setTextDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState<"active" | "soft_limit" | "hard_limit">("active");
+  const [softLimitDismissed, setSoftLimitDismissed] = useState(false);
 
   // Title editing
   const [editingTitle, setEditingTitle] = useState(false);
@@ -85,6 +87,11 @@ export function ChatClient({
       streamRef.current?.getTracks().forEach((tr) => tr.stop());
     };
   }, []);
+
+  useEffect(() => {
+    setSessionStatus("active");
+    setSoftLimitDismissed(false);
+  }, [activeSession.id]);
 
   useEffect(() => {
     if (editingTitle && titleInputRef.current) {
@@ -229,6 +236,14 @@ export function ChatClient({
         router.push(`/${locale}/login?expired=1`);
         return;
       }
+      if (response.status === 422) {
+        const body = await response.json().catch(() => ({}) as Record<string, unknown>);
+        if ((body as Record<string, unknown>)?.detail === "SESSION_HARD_LIMIT") {
+          setSessionStatus("hard_limit");
+          setRecordMode("idle");
+          return;
+        }
+      }
       setError("CHAT_TURN_FAILED");
       setRecordMode("idle");
       return;
@@ -303,6 +318,10 @@ export function ChatClient({
                   prev.map((s) => (s.id === activeSession.id ? { ...s, title } : s)),
                 );
                 setActiveSession((s) => ({ ...s, title }));
+              }
+              if (event.session_status === "soft_limit") {
+                setSessionStatus("soft_limit");
+                setSoftLimitDismissed(false);
               }
               console.log(`[perf] stream done: ${(performance.now() - t0).toFixed(0)}ms`);
               break;
@@ -476,68 +495,107 @@ export function ChatClient({
           onPlay={handlePlay}
         />
 
-        <div className="shrink-0 border-t border-border bg-background">
-          {/* Mode toggle */}
-          <div className="flex justify-end px-4 pt-2">
+        {/* Soft-limit banner */}
+        {sessionStatus === "soft_limit" && !softLimitDismissed && (
+          <div className="flex shrink-0 items-center gap-3 border-t border-amber-200 bg-amber-50 px-4 py-2.5 dark:border-amber-900 dark:bg-amber-950">
+            <span className="flex-1 text-sm text-amber-800 dark:text-amber-200">
+              {t("session_soft_limit_text")}
+            </span>
             <button
               type="button"
-              onClick={() => {
-                setError(null);
-                setInputMode((m) => (m === "voice" ? "text" : "voice"));
-              }}
-              className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
+              onClick={() => void handleNewSession()}
+              className="shrink-0 rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white transition hover:bg-amber-700"
             >
-              {inputMode === "voice" ? (
-                <><Keyboard className="h-3.5 w-3.5" />{t("switch_to_text")}</>
-              ) : (
-                <><Mic className="h-3.5 w-3.5" />{t("switch_to_voice")}</>
-              )}
+              {t("new_session")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSoftLimitDismissed(true)}
+              className="shrink-0 text-amber-600 transition hover:text-amber-800 dark:text-amber-400"
+              aria-label={t("session_soft_limit_dismiss")}
+            >
+              <X className="h-4 w-4" />
             </button>
           </div>
+        )}
 
-          {inputMode === "voice" ? (
-            <RecordButtonClient
-              mode={recordMode}
-              error={error}
-              onRecordToggle={handleRecordToggle}
-            />
+        <div className="shrink-0 border-t border-border bg-background">
+          {sessionStatus === "hard_limit" ? (
+            <div className="flex flex-col items-center gap-3 px-4 py-6 text-center">
+              <p className="text-sm text-muted-foreground">{t("session_hard_limit_text")}</p>
+              <button
+                type="button"
+                onClick={() => void handleNewSession()}
+                className="rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+              >
+                {t("new_session")}
+              </button>
+            </div>
           ) : (
-            <div className="flex flex-col gap-2 px-4 pb-4 pt-2">
-              {error && (
-                <p className="text-destructive text-center text-sm">
-                  {tErr(error as Parameters<typeof tErr>[0])}
-                </p>
-              )}
-              <div className="flex items-end gap-2">
-                <textarea
-                  value={textDraft}
-                  onChange={(e) => setTextDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void submitTextTurn();
-                    }
-                  }}
-                  disabled={recordMode === "uploading"}
-                  placeholder={t("text_placeholder")}
-                  rows={2}
-                  className="flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                />
+            <>
+              {/* Mode toggle */}
+              <div className="flex justify-end px-4 pt-2">
                 <button
                   type="button"
-                  onClick={() => void submitTextTurn()}
-                  disabled={!textDraft.trim() || recordMode === "uploading"}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label={t("send")}
+                  onClick={() => {
+                    setError(null);
+                    setInputMode((m) => (m === "voice" ? "text" : "voice"));
+                  }}
+                  className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
                 >
-                  {recordMode === "uploading" ? (
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  {inputMode === "voice" ? (
+                    <><Keyboard className="h-3.5 w-3.5" />{t("switch_to_text")}</>
                   ) : (
-                    <Send className="h-4 w-4" />
+                    <><Mic className="h-3.5 w-3.5" />{t("switch_to_voice")}</>
                   )}
                 </button>
               </div>
-            </div>
+
+              {inputMode === "voice" ? (
+                <RecordButtonClient
+                  mode={recordMode}
+                  error={error}
+                  onRecordToggle={handleRecordToggle}
+                />
+              ) : (
+                <div className="flex flex-col gap-2 px-4 pb-4 pt-2">
+                  {error && (
+                    <p className="text-destructive text-center text-sm">
+                      {tErr(error as Parameters<typeof tErr>[0])}
+                    </p>
+                  )}
+                  <div className="flex items-end gap-2">
+                    <textarea
+                      value={textDraft}
+                      onChange={(e) => setTextDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void submitTextTurn();
+                        }
+                      }}
+                      disabled={recordMode === "uploading"}
+                      placeholder={t("text_placeholder")}
+                      rows={2}
+                      className="flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void submitTextTurn()}
+                      disabled={!textDraft.trim() || recordMode === "uploading"}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={t("send")}
+                    >
+                      {recordMode === "uploading" ? (
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

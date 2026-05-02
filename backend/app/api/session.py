@@ -117,6 +117,7 @@ class TurnResponse(BaseModel):
     audio_b64: str | None  # present only in voice mode
     audio_format: str | None  # present only in voice mode
     session_title: str | None
+    session_status: str  # "active" | "soft_limit"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -146,6 +147,32 @@ async def _require_session(session_id: uuid.UUID, account: Account, db: AsyncSes
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
+
+
+async def _check_session_limits(session_id: uuid.UUID, db: AsyncSession) -> int:
+    """Return current turn count; raise HTTP 422 SESSION_HARD_LIMIT if context is exhausted.
+
+    Uses the maximum llm_input_tokens seen in the session as a proxy for current context
+    size — the most-recent turn's input includes the full accumulated history, so it
+    grows monotonically and is the best signal we have without a separate token counter.
+    """
+    row = await db.execute(
+        select(
+            func.count(Turn.id),
+            func.coalesce(func.max(Turn.llm_input_tokens), 0),
+        ).where(Turn.session_id == session_id)
+    )
+    turn_count, max_input_tokens = row.one()
+    context_ceiling = int(
+        app_config.session.context_hard_limit * app_config.adapter.llm.context_window
+    )
+    if max_input_tokens > context_ceiling:
+        raise HTTPException(status_code=422, detail="SESSION_HARD_LIMIT")
+    return int(turn_count)
+
+
+def _session_status(turn_count_after: int) -> str:
+    return "soft_limit" if turn_count_after >= app_config.session.max_turns else "active"
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -333,7 +360,9 @@ async def create_turn(
 
     # Serialise turn creation per session: guarantees sequential history and
     # prevents duplicate turns from network retries that arrive concurrently.
+    turn_count_before: int = 0
     async with _scoped_lock(_session_turn_locks, str(session_id)):
+        turn_count_before = await _check_session_limits(session_id, db)
         try:
             if audio_bytes is not None:
                 result = await _orchestrator.single_turn(
@@ -376,6 +405,7 @@ async def create_turn(
         ),
         audio_format=result.audio_out_format,
         session_title=session_title,
+        session_status=_session_status(turn_count_before + 1),
     )
 
 
@@ -422,6 +452,9 @@ async def stream_turn(
     elif not text_stripped:
         raise HTTPException(status_code=400, detail="Provide either an audio file or text")
 
+    # Check session limits before committing to the stream (can still raise HTTPException here).
+    turn_count_pre = await _check_session_limits(session_id, db)
+
     async def generate() -> AsyncIterator[str]:
         text_user_cap: str | None = None
         text_ai_cap: str | None = None
@@ -458,7 +491,11 @@ async def stream_turn(
         if app_config.debug.perf_logging:
             log.info("[perf] stream_turn endpoint TOTAL: %.3fs", time.monotonic() - t_req)
 
-        yield f"data: {json.dumps({'event': 'done', 'session_title': session_title})}\n\n"
+        yield f"data: {json.dumps({
+            'event': 'done',
+            'session_title': session_title,
+            'session_status': _session_status(turn_count_pre + 1)
+        })}\n\n"
 
     return StreamingResponse(
         generate(),

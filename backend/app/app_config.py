@@ -14,6 +14,7 @@ _CONFIG_PATH = Path(__file__).parent.parent / "config.toml"
 @dataclass(frozen=True)
 class LLMProviderConfig:
     model: str
+    context_window: int = 32768  # token limit for the active model
     thinking: str = "disabled"  # "disabled" | "enabled"
     reasoning_effort: str = "low"  # only used when thinking = "enabled"
 
@@ -24,6 +25,12 @@ class AdapterConfig:
     stt_provider: str
     tts_provider: str
     llm: LLMProviderConfig  # active provider's resolved config
+
+
+@dataclass(frozen=True)
+class SessionConfig:
+    max_turns: int  # UX soft limit — frontend prompts to start a new session
+    context_hard_limit: float  # refuse new turn when last llm_input_tokens > context_window * this
 
 
 @dataclass(frozen=True)
@@ -44,6 +51,7 @@ class DebugConfig:
 @dataclass(frozen=True)
 class AppConfig:
     adapter: AdapterConfig
+    session: SessionConfig
     auth: AuthConfig
     debug: DebugConfig
 
@@ -52,6 +60,7 @@ def _load() -> AppConfig:
     with open(_CONFIG_PATH, "rb") as f:
         raw = tomllib.load(f)
     adapter = raw["adapter"]
+    session = raw.get("session", {})
     auth = raw["auth"]
     debug = raw.get("debug", {})
     llm_provider = adapter["llm_provider"]
@@ -63,9 +72,14 @@ def _load() -> AppConfig:
             tts_provider=adapter["tts_provider"],
             llm=LLMProviderConfig(
                 model=llm_cfg_raw.get("model", ""),
+                context_window=llm_cfg_raw.get("context_window", 32768),
                 thinking=llm_cfg_raw.get("thinking", "disabled"),
                 reasoning_effort=llm_cfg_raw.get("reasoning_effort", "low"),
             ),
+        ),
+        session=SessionConfig(
+            max_turns=session.get("max_turns", 1000),
+            context_hard_limit=session.get("context_hard_limit", 0.85),
         ),
         auth=AuthConfig(
             session_max_age_days=auth["session_max_age_days"],

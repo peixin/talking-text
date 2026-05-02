@@ -37,8 +37,13 @@ export async function POST(
   }
 
   if (!upstream.ok) {
-    const text = await upstream.text();
-    return NextResponse.json({ error: text }, { status: upstream.status });
+    try {
+      const json = await upstream.json() as Record<string, unknown>;
+      return NextResponse.json(json, { status: upstream.status });
+    } catch {
+      const text = await upstream.text();
+      return NextResponse.json({ detail: text }, { status: upstream.status });
+    }
   }
 
   return new Response(upstream.body, {

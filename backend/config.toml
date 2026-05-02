@@ -5,17 +5,28 @@
 # Which adapter implementation to use for each role.
 # Each provider's tunable params live in [adapter.<role>.<provider>] below.
 # Secrets (API keys, endpoints) still belong in .env.
-llm_provider = "deepseek"   # supported: "deepseek" | "volc_ark"
-stt_provider = "volc"       # supported: "volc"
-tts_provider = "volc"       # supported: "volc"
+llm_provider = "volc_ark" # supported: "deepseek" | "volc_ark"
+stt_provider = "volc"     # supported: "volc"
+tts_provider = "volc"     # supported: "volc"
 
 [adapter.llm.deepseek]
 model = "deepseek-v4-flash"
+context_window = 1048576    # 1M tokens
 thinking = "disabled"       # "disabled" | "enabled"
 reasoning_effort = "low"    # only relevant when thinking = "enabled"
 
 [adapter.llm.volc_ark]
 model = "doubao-seed-2-0-mini-260215"
+context_window = 262144               # 256K tokens
+
+[session]
+# UX soft limit: show "start a new topic?" prompt when turn count reaches this value.
+max_turns = 10
+# Internal hard limit: refuse a new turn when the most-recent turn's llm_input_tokens
+# exceeds this fraction of the active model's context_window.
+# Protects against runaway context consumption as system prompt grows (curriculum data,
+# personal vocab ledger). Users almost never hit this; it is a safety net, not a UX gate.
+context_hard_limit = 0.85
 
 [auth]
 # Session cookie lifetime in days

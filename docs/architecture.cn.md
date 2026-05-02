@@ -391,9 +391,54 @@ STRETCH_VOCAB: [...]
 
 100 个每日活跃孩子，每人每天聊 10 轮 → 每月 ~¥150-1500。可承受。
 
+**关于 Prompt Caching：** System prompt（Tina 人设 + vocab scope）在每轮对话中重复发送。两家供应商（豆包、DeepSeek）均支持 prompt caching，命中后价格为未命中的 1/5 左右。**在 V1 就要保证 system prompt 在同一 session 内结构稳定**，避免每轮重新构建破坏缓存命中率。
+
 ---
 
-## 八、教材录入管道
+## 八、会话生命周期限制
+
+### 为什么需要限制
+
+随着产品演进，system prompt 会持续膨胀：Tina 人设 + 词表 scope + 课本单元资料 + 个人词库（已掌握词汇随学习时间单调增长）。即使豆包 / DeepSeek 的 context window 达到 256K-1M，长期运行的 session 仍有上限风险，且长 session 不符合单次练习的使用场景。
+
+### 两层限制
+
+| 层级 | 触发条件 | 行为 | 配置项 |
+|---|---|---|---|
+| **软限（UX）** | 当前 session 轮数 ≥ `max_turns` | API 在响应中返回 `session_status: "soft_limit"`，前端展示"聊了很多了，换个话题？" | `[session] max_turns = 25` |
+| **硬限（安全网）** | 上一轮的 `llm_input_tokens` > `context_window × context_hard_limit` | API 返回 HTTP 422 `SESSION_HARD_LIMIT`，前端强制提示开新 session | `[session] context_hard_limit = 0.85` |
+
+软限是正常路径（绝大多数 session 会在这里自然结束），硬限是异常兜底（课本资料极大时才会触发）。
+
+### 为什么用 `MAX(llm_input_tokens)` 做硬限代理
+
+每一轮 turn 已将 `llm_input_tokens` 写入 DB（计费用途）。该字段反映当轮发送给 LLM 的完整 context 大小（包含 system prompt + 全部历史 + 本轮 user 消息）。随 session 延伸单调递增，是当前 context 使用量的最准确估算，无需额外 tokenizer API。
+
+### 配置（`backend/config.toml`）
+
+```toml
+[adapter.llm.volc_ark]
+context_window = 262144     # 256K tokens — 模型属性，换模型时一起改
+
+[adapter.llm.deepseek]
+context_window = 1048576    # 1M tokens
+
+[session]
+max_turns = 25              # UX 软限：前端提示换话题
+context_hard_limit = 0.85   # 硬限比例：llm_input_tokens 超过 context_window × 这个值则拒绝
+```
+
+### Scope Computer 与 context 预算的关联
+
+Scope Computer 在 V2/V3 组装 system prompt 时，**必须读取 `context_window` 配置**，根据剩余空间动态决定词库截断策略：
+
+- V1：全量词库塞入（简单，数量尚小）
+- V2：只带当前单元 ± 相邻单元的词，mastery score 过滤低频词
+- V3：动态按 context 剩余空间决定词库规模，优先保留近期活跃词
+
+---
+
+## 九、教材录入管道
 
 ```
 ┌───────────────────┐   ┌──────────────────────────┐    ┌──────────────┐
@@ -439,7 +484,7 @@ Schema:
 
 ---
 
-## 九、供应商切换路径（Adapter Pattern）
+## 十、供应商切换路径（Adapter Pattern）
 
 所有外部服务通过 adapter 隔离。**无论 HTTP / SSE / WebSocket，对外接口一致。**
 
@@ -484,7 +529,7 @@ tts:
 
 ---
 
-## 十、鉴权（V1 简版）
+## 十一、鉴权（V1 简版）
 
 - 登录：邮箱 + 密码，bcrypt 哈希入库
 - 会话：httpOnly cookie（session token）+ Redis 存 session 数据
@@ -495,7 +540,7 @@ tts:
 
 ---
 
-## 十一、部署 — V1 延后 Docker
+## 十二、部署 — V1 延后 Docker
 
 **决策：当前（V1 开发阶段）不写 docker-compose，不做容器化。发布前一次性做。**
 
@@ -528,7 +573,7 @@ tts:
 
 ---
 
-## 十二、延后与未决事项
+## 十三、延后与未决事项
 
 | 事项 | 状态 | 触发条件 |
 |---|---|---|
@@ -544,7 +589,7 @@ tts:
 
 ---
 
-## 十三、设计原则（工程纪律）
+## 十四、设计原则（工程纪律）
 
 1. **先写接口，再写实现。** Scope Computer、各 adapter，接口在 V1 就定死。
 2. **Adapter 隔离副作用。** `core/` 里零 SDK 依赖，所有外部调用走 `adapters/`。

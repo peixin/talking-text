@@ -88,6 +88,9 @@
     "switch_to_voice": "Switch to voice",
     "text_placeholder": "Type a message, Enter to send, Shift+Enter for newline",
     "send": "Send",
+    "session_soft_limit_text": "Great practice today! Want to start a new topic?",
+    "session_soft_limit_dismiss": "Keep going",
+    "session_hard_limit_text": "This conversation has reached its maximum length. Please start a new one to continue.",
     "errors": {
       "CHAT_AUDIO_EMPTY": "No audio captured. Please try again.",
       "CHAT_INPUT_EMPTY": "Input cannot be empty.",
@@ -96,7 +99,8 @@
       "CHAT_LEARNER_NOT_FOUND": "Child not found. Please refresh and try again.",
       "CHAT_EMPTY_TRANSCRIPTION": "Couldn't catch that — please say it again.",
       "CHAT_MIC_DENIED": "Microphone access denied. Check your browser permissions.",
-      "CHAT_TURN_FAILED": "Chat failed. Please try again later."
+      "CHAT_TURN_FAILED": "Chat failed. Please try again later.",
+      "CHAT_SESSION_HARD_LIMIT": "Conversation reached its limit. Please start a new one."
     },
     "transcribing": "Transcribing…"
   },

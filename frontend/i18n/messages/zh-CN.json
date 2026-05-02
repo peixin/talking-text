@@ -88,6 +88,9 @@
     "switch_to_voice": "切换语音输入",
     "text_placeholder": "输入消息，Enter 发送，Shift+Enter 换行",
     "send": "发送",
+    "session_soft_limit_text": "今天练了不少了，换个话题继续练习？",
+    "session_soft_limit_dismiss": "继续聊",
+    "session_hard_limit_text": "这次对话已达到最大长度，请开始新对话继续练习。",
     "errors": {
       "CHAT_AUDIO_EMPTY": "没有录到声音，请再试一次",
       "CHAT_INPUT_EMPTY": "内容不能为空",
@@ -96,7 +99,8 @@
       "CHAT_LEARNER_NOT_FOUND": "找不到这个孩子，请刷新后再试",
       "CHAT_EMPTY_TRANSCRIPTION": "没听清，请再说一次",
       "CHAT_MIC_DENIED": "无法访问麦克风，请检查浏览器权限",
-      "CHAT_TURN_FAILED": "对话失败，请稍后再试"
+      "CHAT_TURN_FAILED": "对话失败，请稍后再试",
+      "CHAT_SESSION_HARD_LIMIT": "对话已达到最大长度，请开始新对话"
     },
     "transcribing": "识别中…"
   },
