@@ -1,0 +1,7 @@
+{
+    "target_db": "talking_text_test",
+    "db_user": "talking_text",
+    "db_password": "[PASSWORD]",
+    "db_host": "localhost",
+    "db_port": "5432"
+}

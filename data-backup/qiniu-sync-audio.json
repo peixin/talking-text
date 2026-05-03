@@ -1,0 +1,14 @@
+{
+    "src_dir": "/opt/apps/talking-text/data/audio",
+    "bucket": "talking-text-data",
+    "key_prefix": "data/audio/",
+    "overwrite": true,
+    "check_exists": true,
+    "check_hash": true,
+    "check_size": true,
+    "rescan_local": true,
+    "skip_fixed_strings": ".DS_Store",
+    "log_file": "sync-data.log",
+    "log_level": "info",
+    "log_stdout": true
+}

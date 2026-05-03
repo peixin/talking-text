@@ -161,3 +161,34 @@ Production deployment requires the `stillume-net` external network:
 docker network create stillume-net
 ```
 This network allows the shared `stillume-nginx` container to reach the `frontend` and `backend` services.
+
+---
+
+## SSH Tunneling to Database
+
+By default, the PostgreSQL container does **not** expose its port 5432 to the host for security reasons. It only listens within the internal Docker network.
+
+### Why Internal IP is needed?
+The standard `ssh -L 5433:localhost:5432` command expects the host's 5432 port to be open. Since our DB is isolated inside Docker, we must point the tunnel directly to the container's internal virtual IP.
+
+### How to Connect
+
+1. **Get the container internal IP**:
+   Run this from your local machine:
+   ```bash
+   ssh stillume "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' talking-text-postgres"
+   # Example output: 172.18.0.2
+   ```
+
+2. **Establish the SSH Tunnel**:
+   Replace `172.18.0.2` with the IP you got above:
+   ```bash
+   ssh -L 5433:172.18.0.2:5432 stillume -N
+   ```
+
+3. **Connect with your GUI tool**:
+   - **Host**: `localhost`
+   - **Port**: `5433`
+   - **User**: `talking_text`
+   - **Database**: `talking_text`
+   - **Password**: The `POSTGRES_PASSWORD` defined in your `.env` file on the server.

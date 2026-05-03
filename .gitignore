@@ -680,3 +680,6 @@ nginx/default.conf
 
 # Runtime data mounted by docker-compose (local)
 data/
+
+data-backup/qshell
+data-backup/restore/db-restore-config.json
