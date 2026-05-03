@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     # --- Audio storage (V1 local fs, V2 TOS) ---
     audio_storage_enabled: bool = True
-    audio_storage_dir: str = "./tmp/audio"
+    audio_storage_dir: str = "./storage/audio"
 
 
 settings = Settings()

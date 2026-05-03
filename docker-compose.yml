@@ -1,0 +1,73 @@
+# Local Docker Compose — full-stack integration test.
+# Daily development: use 'just dev' instead (no Docker needed).
+#
+# First-time setup:
+#   just docker-base-local   # build local base images (only needed when deps change)
+#   cp backend/.env.example backend/.env && vim backend/.env
+#   docker compose up --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: talking_text
+      POSTGRES_USER: talking_text
+      POSTGRES_PASSWORD: talking_text
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U talking_text -d talking_text"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: docker/Dockerfile
+      args:
+        BASE_IMAGE: talking-text-backend-base:local
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://talking_text:talking_text@postgres:5432/talking_text
+      REDIS_URL: redis://redis:6379/0
+      AUDIO_STORAGE_DIR: /app/storage/audio
+    volumes:
+      - ./data/audio:/app/storage/audio
+      - ./backend/config.toml:/app/config.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: docker/Dockerfile
+      args:
+        BASE_IMAGE: talking-text-frontend-base:local
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/local.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+

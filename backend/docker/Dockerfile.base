@@ -1,0 +1,24 @@
+FROM python:3.12-alpine
+
+# Switch apk to aliyun mirror
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
+# Build deps for C extensions (asyncpg, bcrypt, hiredis)
+# python:3.12-alpine already ships Python.h — no python3-dev needed
+RUN apk add --no-cache gcc musl-dev libpq-dev libffi-dev
+
+WORKDIR /app
+
+# pip.conf points pip to aliyun PyPI mirror
+COPY docker/pip.conf /etc/pip.conf
+
+RUN pip install --no-cache-dir poetry==2.1.2 poetry-plugin-export
+
+COPY pyproject.toml poetry.lock ./
+
+# poetry only exports requirements.txt (reads lock, no network);
+# pip installs using aliyun mirror from pip.conf
+RUN python -m venv /app/.venv && \
+    poetry export -f requirements.txt --output /tmp/requirements.txt --without-hashes && \
+    /app/.venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt && \
+    rm /tmp/requirements.txt

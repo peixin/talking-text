@@ -87,3 +87,25 @@ db-current:
 # 查看历史
 db-history:
     cd backend && poetry run alembic history
+
+# ───── Docker ─────
+
+# 构建本地 base 镜像（deps 层，仅在 pyproject.toml / pnpm-lock.yaml 变动后运行）
+docker-base-local:
+    bash scripts/build-base.sh --local
+
+# 构建并推送 base 镜像到 Aliyun（需要 .env.deploy）
+docker-base:
+    bash scripts/build-base.sh
+
+# 构建并推送 app 镜像到 Aliyun（需要 .env.deploy）
+docker-build:
+    bash scripts/build.sh
+
+# 一键部署到远端服务器
+docker-deploy:
+    bash scripts/deploy.sh
+
+# 仅重新部署（跳过 build，用当前 :latest 镜像）
+docker-deploy-only:
+    bash scripts/deploy.sh --skip-build

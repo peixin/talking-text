@@ -1,0 +1,72 @@
+# talking-text — remote docker-compose
+#
+# nginx is NO LONGER managed here.
+# The shared stillume-nginx stack (at /opt/apps/stillume-nginx) owns port 80/443
+# and proxies to this stack via the external Docker network "stillume-net".
+#
+# Ensure the network exists before first deploy:
+#   docker network create stillume-net
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: talking-text-postgres
+    environment:
+      POSTGRES_DB: talking_text
+      POSTGRES_USER: talking_text
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U talking_text -d talking_text"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - default
+
+  redis:
+    image: redis:7-alpine
+    container_name: talking-text-redis
+    restart: unless-stopped
+    networks:
+      - default
+
+  backend:
+    image: ${ALIYUN_REGISTRY}/${ALIYUN_NAMESPACE}/talking-text-backend:${BACKEND_TAG:-latest}
+    container_name: talking-text-backend
+    env_file:
+      - .env.app
+    environment:
+      DATABASE_URL: postgresql+asyncpg://talking_text:${POSTGRES_PASSWORD}@postgres:5432/talking_text
+      REDIS_URL: redis://redis:6379/0
+      AUDIO_STORAGE_DIR: /app/storage/audio
+    volumes:
+      - ./data/audio:/app/storage/audio
+      - ./config.toml:/app/config.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - stillume-net
+      - default
+
+  frontend:
+    image: ${ALIYUN_REGISTRY}/${ALIYUN_NAMESPACE}/talking-text-frontend:${FRONTEND_TAG:-latest}
+    container_name: talking-text-frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - stillume-net
+      - default
+
+networks:
+  stillume-net:
+    external: true

@@ -667,7 +667,16 @@ $RECYCLE.BIN/
 # Custom rules (everything added below won't be overriden by 'Generate .gitignore File' if you use 'Update' option)
 
 # Local audio storage (V1 dev). V2 will use TOS instead.
-tmp/
+backend/storage/audio/
 backend/tmp/
 
+references/
 
+# Docker deploy config (contains registry credentials and server info)
+.env.deploy
+
+# Generated nginx config (produced by deploy.sh from the template)
+nginx/default.conf
+
+# Runtime data mounted by docker-compose (local)
+data/

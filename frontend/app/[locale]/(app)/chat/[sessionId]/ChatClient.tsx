@@ -219,7 +219,7 @@ export function ChatClient({
     const t0 = performance.now();
     let response: Response;
     try {
-      response = await fetch(`/api/chat/${activeSession.id}/stream`, {
+      response = await fetch(`/nex-api/chat/${activeSession.id}/stream`, {
         method: "POST",
         body: formData,
       });

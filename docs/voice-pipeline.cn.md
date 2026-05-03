@@ -35,7 +35,7 @@ User                  浏览器                  FastAPI              Volcengine
  │                     │                        │◄──── mp3 stream ─────│
  │                     │                        │                      │
  │                     │               INSERT turn → PostgreSQL        │
- │                     │               写音频文件 → ./tmp/audio/        │
+ │                     │               写音频文件 → ./storage/audio/     │
  │                     │                        │                      │
  │                     │◄─── JSON {text_user, text_ai, audio_b64} ─────│
  │                     │                        │                      │
@@ -484,8 +484,8 @@ single_turn(audio_in, audio_in_format, recent_history, ...)
    │
    ├─ 4. _maybe_persist_audio()
    │      if AUDIO_STORAGE_ENABLED:
-   │          写 {turn_id}_in.ogg  → ./tmp/audio/{learner_id}/
-   │          写 {turn_id}_out.mp3 → ./tmp/audio/{learner_id}/
+   │          写 {turn_id}_in.ogg  → ./storage/audio/{learner_id}/
+   │          写 {turn_id}_out.mp3 → ./storage/audio/{learner_id}/
    │
    ├─ 5. INSERT INTO turn (...)
    │      db.add(Turn(...))
@@ -507,8 +507,8 @@ INSERT INTO turn (
   learner_id,            -- FK → learner.id（CASCADE DELETE）
   text_user,             -- STT 识别文本
   text_ai,               -- LLM 回复文本
-  audio_in_path,         -- ./tmp/audio/{learner_id}/{turn_id}_in.ogg
-  audio_out_path,        -- ./tmp/audio/{learner_id}/{turn_id}_out.mp3
+  audio_in_path,         -- ./storage/audio/{learner_id}/{turn_id}_in.ogg
+  audio_out_path,        -- ./storage/audio/{learner_id}/{turn_id}_out.mp3
   stt_audio_seconds,     -- 音频时长（秒），来自 audio_info.duration / 1000
   llm_input_tokens,      -- LLM prompt token 数（来自 usage.prompt_tokens）
   llm_output_tokens,     -- LLM completion token 数（来自 usage.completion_tokens）
@@ -563,7 +563,7 @@ INSERT INTO turn (
 | `VOLC_TTS_AUDIO_FORMAT` | `mp3` | TTS 输出格式 |
 | `VOLC_TTS_SAMPLE_RATE` | `24000` | TTS 输出采样率（Hz） |
 | `AUDIO_STORAGE_ENABLED` | `true` | 是否保存音频到本地 |
-| `AUDIO_STORAGE_DIR` | `./tmp/audio` | 音频本地存储根目录 |
+| `AUDIO_STORAGE_DIR` | `./storage/audio` | 音频本地存储根目录 |
 
 ---
 
