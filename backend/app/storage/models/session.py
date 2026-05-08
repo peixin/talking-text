@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 
+import sqlalchemy as sa
 from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,3 +31,7 @@ class Session(Base, TimestampMixin):
     )
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    lesson_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.ForeignKey("curriculum_lesson.id", ondelete="SET NULL"), nullable=True
+    )
+    collection_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid(), nullable=True)

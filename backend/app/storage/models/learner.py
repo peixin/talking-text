@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
+import sqlalchemy as sa
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +21,14 @@ class Learner(Base, TimestampMixin):
         ForeignKey("account.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    ai_name: Mapped[str] = mapped_column(
+        String(100), nullable=False, server_default=sa.text("'Tina'")
+    )
+    ai_gender: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default=sa.text("'female'")
+    )
+    ai_persona_prompt: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
 
     account: Mapped[Account] = relationship(
         "Account", back_populates="learners", foreign_keys=[account_id]
