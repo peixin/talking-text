@@ -17,9 +17,17 @@ async function authHeaders(): Promise<HeadersInit> {
 
 // ── Session actions ───────────────────────────────────────────────────────────
 
-export async function createSession(learnerId: string): Promise<SessionOut> {
+export async function createSession(learnerId: string, lessonId?: string | null): Promise<SessionOut> {
   const api = await createApi();
-  return api.sessions.create(learnerId);
+  return api.sessions.create(learnerId, lessonId);
+}
+
+export async function setSessionLesson(
+  sessionId: string,
+  lessonId: string,
+): Promise<void> {
+  const api = await createApi();
+  await api.sessions.setLesson(sessionId, lessonId);
 }
 
 export async function renameSession(sessionId: string, title: string): Promise<SessionOut> {

@@ -1,0 +1,75 @@
+import "server-only";
+
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { getLocale } from "next-intl/server";
+
+import { BackendError, backend } from "@/lib/backend";
+import type { UpdatePersonaBody, SyncPersonaBody } from "@/lib/backend";
+
+async function buildHeaders(): Promise<HeadersInit> {
+  const jar = await cookies();
+  const token = jar.get("session")?.value;
+  return token ? { Cookie: `session=${token}` } : {};
+}
+
+async function redirectOnExpiry(): Promise<never> {
+  const locale = await getLocale();
+  redirect(`/${locale}/login?expired=1`);
+}
+
+function wrap<T>(headers: HeadersInit, fn: (h: HeadersInit) => Promise<T>): Promise<T> {
+  return fn(headers).catch(async (err) => {
+    if (err instanceof BackendError && err.status === 401) {
+      await redirectOnExpiry();
+    }
+    throw err;
+  });
+}
+
+export async function createApi() {
+  const h = await buildHeaders();
+  const c = <T>(fn: (h: HeadersInit) => Promise<T>) => wrap(h, fn);
+
+  return {
+    auth: {
+      me: () => c((h) => backend.auth.me(h)),
+      logout: () => c((h) => backend.auth.logout(h)),
+    },
+    learners: {
+      list: () => c((h) => backend.learners.list(h)),
+      create: (name: string) => c((h) => backend.learners.create(name, h)),
+      update: (id: string, name: string) => c((h) => backend.learners.update(id, name, h)),
+      delete: (id: string) => c((h) => backend.learners.delete(id, h)),
+      setActive: (id: string) => c((h) => backend.learners.setActive(id, h)),
+      updatePersona: (id: string, body: UpdatePersonaBody) =>
+        c((h) => backend.learners.updatePersona(id, body, h)),
+      syncPersona: (id: string, body: SyncPersonaBody) =>
+        c((h) => backend.learners.syncPersona(id, body, h)),
+    },
+    sessions: {
+      list: (learnerId: string) => c((h) => backend.sessions.list(learnerId, h)),
+      create: (learnerId: string, lessonId?: string | null) =>
+        c((h) => backend.sessions.create(learnerId, lessonId, h)),
+      rename: (id: string, title: string) => c((h) => backend.sessions.rename(id, title, h)),
+      setLesson: (sessionId: string, lessonId: string) =>
+        c((h) => backend.sessions.setLesson(sessionId, lessonId, h)),
+      delete: (id: string) => c((h) => backend.sessions.delete(id, h)),
+      turns: (id: string) => c((h) => backend.sessions.turns(id, h)),
+      getTurnAudio: (sessionId: string, turnId: string, dir: "in" | "out") =>
+        c((h) => backend.sessions.getTurnAudio(sessionId, turnId, dir, h)),
+    },
+    curricula: {
+      list: () => c((h) => backend.curricula.list(h)),
+      getLessons: (curriculumId: string) =>
+        c((h) => backend.curricula.getLessons(curriculumId, h)),
+    },
+    learnerLessons: {
+      list: (learnerId: string) => c((h) => backend.learnerLessons.list(learnerId, h)),
+      add: (learnerId: string, lessonId: string) =>
+        c((h) => backend.learnerLessons.add(learnerId, lessonId, h)),
+      remove: (learnerId: string, lessonId: string) =>
+        c((h) => backend.learnerLessons.remove(learnerId, lessonId, h)),
+    },
+  };
+}

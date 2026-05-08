@@ -5,12 +5,13 @@ import { useTranslations } from "next-intl";
 import { Check, Keyboard, Menu, Mic, Pencil, Send, X } from "lucide-react";
 import { useLocale } from "next-intl";
 
-import { LearnerOut, SessionOut, TurnOut } from "@/lib/backend";
+import { LearnerOut, LessonInfoOut, SessionOut, TurnOut } from "@/lib/backend";
 import { useRouter } from "@/i18n/routing";
-import { Message, createSession, deleteSession, getAudio, renameSession, setActiveLearner } from "./actions";
+import { Message, createSession, deleteSession, getAudio, renameSession, setActiveLearner, setSessionLesson } from "./actions";
 import { SessionSidebarClient } from "./SessionSidebarClient";
 import { MessageListClient, AudioState } from "./MessageListClient";
 import { RecordButtonClient, Mode } from "./RecordButtonClient";
+import { LessonBannerClient } from "@/components/LessonBannerClient";
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
@@ -39,12 +40,16 @@ export function ChatClient({
   initialTurns,
   activeLearner,
   learners,
+  enrolledLessons,
+  currentLesson: initialCurrentLesson,
 }: {
   sessions: SessionOut[];
   activeSession: SessionOut;
   initialTurns: TurnOut[];
   activeLearner: LearnerOut;
   learners: LearnerOut[];
+  enrolledLessons: LessonInfoOut[];
+  currentLesson: LessonInfoOut | null;
 }) {
   const t = useTranslations("Chat");
   const tErr = useTranslations("Chat.errors");
@@ -61,6 +66,9 @@ export function ChatClient({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<"active" | "soft_limit" | "hard_limit">("active");
   const [softLimitDismissed, setSoftLimitDismissed] = useState(false);
+
+  // Lesson
+  const [activeLesson, setActiveLesson] = useState<LessonInfoOut | null>(initialCurrentLesson);
 
   // Title editing
   const [editingTitle, setEditingTitle] = useState(false);
@@ -415,6 +423,14 @@ export function ChatClient({
     await submitTurn(fd, false);
   }
 
+  // ── Lesson management ─────────────────────────────────────────────────────
+
+  async function handleLessonChange(lessonId: string) {
+    await setSessionLesson(activeSession.id, lessonId);
+    const found = enrolledLessons.find((l) => l.lesson_id === lessonId) ?? null;
+    setActiveLesson(found);
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -480,6 +496,14 @@ export function ChatClient({
             </>
           )}
         </div>
+
+        {/* Lesson banner */}
+        <LessonBannerClient
+          sessionId={activeSession.id}
+          currentLesson={activeLesson}
+          enrolledLessons={enrolledLessons}
+          onLessonChange={handleLessonChange}
+        />
 
         {/* Singleton audio element — owned here, shared via handlePlay */}
         <audio
