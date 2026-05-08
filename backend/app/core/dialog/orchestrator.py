@@ -6,9 +6,8 @@ End-to-end flow for one turn (V1, batch):
     text input            -> text_user -> LLM -> text_ai
                                                           (TTS skipped; generated on demand)
 
-Scope Computer is intentionally not wired in V1 — see CLAUDE.md architecture
-rule #2. The system prompt below carries the role definition manually until
-``core/scope/`` and ``core/prompt/`` ship in V2.
+The system prompt is built dynamically per turn via the Scope Computer and
+Prompt Assembler — see ``core/scope/`` and ``core/prompt/``.
 """
 
 from __future__ import annotations
@@ -31,20 +30,13 @@ from app.adapters.tts.protocol import AudioFormat as TTSAudioFormat
 from app.adapters.tts.protocol import TTSAdapter, TTSRequest
 from app.app_config import app_config
 from app.config import settings
+from app.core.prompt import _TINA_PERSONA, build_system_prompt
+from app.core.scope import ScopeComputer
+from app.storage.models.learner import Learner
+from app.storage.models.session import Session
 from app.storage.models.turn import Turn
 
 log = logging.getLogger(__name__)
-
-
-_SYSTEM_PROMPT = (
-    "You are Tina, a warm and patient English teacher chatting with an "
-    "elementary-school child in mainland China. Always respond in English. "
-    "Use simple, age-appropriate vocabulary and short sentences (≤ 15 words). "
-    "If the child speaks Chinese, gently re-phrase their idea in English and "
-    "invite them to repeat it. Stay encouraging; never correct mistakes "
-    "harshly. Each turn, ask exactly one short follow-up question to keep "
-    "the conversation going."
-)
 
 
 @dataclass(frozen=True)
@@ -63,10 +55,32 @@ class DialogOrchestrator:
         stt: STTAdapter,
         llm: LLMAdapter,
         tts: TTSAdapter,
+        scope: ScopeComputer,
     ) -> None:
         self._stt = stt
         self._llm = llm
         self._tts = tts
+        self._scope = scope
+
+    async def _resolve_system_prompt(
+        self,
+        db: AsyncSession,
+        learner_id: uuid.UUID,
+        session_id: uuid.UUID,
+    ) -> str:
+        """Fetch session lesson binding and learner persona, then build the system prompt."""
+        session_row = await db.execute(select(Session).where(Session.id == session_id))
+        session = session_row.scalar_one_or_none()
+        lesson_id = session.lesson_id if session else None
+        collection_id = session.collection_id if session else None
+
+        learner_row = await db.execute(select(Learner).where(Learner.id == learner_id))
+        learner = learner_row.scalar_one_or_none()
+        learner_name = learner.name if learner else None
+        persona_prompt = (learner.ai_persona_prompt if learner else None) or _TINA_PERSONA
+
+        scope = await self._scope.get_scope(db, learner_id, lesson_id, collection_id)
+        return build_system_prompt(scope, persona_prompt=persona_prompt, learner_name=learner_name)
 
     async def single_turn(
         self,
@@ -120,11 +134,18 @@ class DialogOrchestrator:
             .where(Turn.session_id == session_id)
             .order_by(Turn.sequence.asc())
         )
-        messages: list[LLMMessage] = [LLMMessage(role="system", content=_SYSTEM_PROMPT)]
+        system_prompt = await self._resolve_system_prompt(db, learner_id, session_id)
+        messages: list[LLMMessage] = [LLMMessage(role="system", content=system_prompt)]
         for row in history_rows:
             messages.append(LLMMessage(role="user", content=row.text_user))
             messages.append(LLMMessage(role="assistant", content=row.text_ai))
         messages.append(LLMMessage(role="user", content=resolved_text_user))
+        if app_config.debug.perf_logging:
+            log.info(
+                "[chat] messages sent to LLM (%d):\n%s",
+                len(messages),
+                "\n---\n".join(f"[{m.role}] {m.content}" for m in messages),
+            )
         llm_response = await self._llm.invoke(messages, max_tokens=200)
         text_ai = llm_response.text.strip()
         if app_config.debug.perf_logging:
@@ -279,11 +300,18 @@ class DialogOrchestrator:
             .where(Turn.session_id == session_id)
             .order_by(Turn.sequence.asc())
         )
-        messages: list[LLMMessage] = [LLMMessage(role="system", content=_SYSTEM_PROMPT)]
+        system_prompt = await self._resolve_system_prompt(db, learner_id, session_id)
+        messages: list[LLMMessage] = [LLMMessage(role="system", content=system_prompt)]
         for row in history_rows:
             messages.append(LLMMessage(role="user", content=row.text_user))
             messages.append(LLMMessage(role="assistant", content=row.text_ai))
         messages.append(LLMMessage(role="user", content=resolved_text_user))
+        if app_config.debug.perf_logging:
+            log.info(
+                "[chat] messages sent to LLM (%d):\n%s",
+                len(messages),
+                "\n---\n".join(f"[{m.role}] {m.content}" for m in messages),
+            )
 
         text_ai = ""
         async for delta in self._llm.stream(messages, max_tokens=200):

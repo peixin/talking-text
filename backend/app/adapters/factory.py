@@ -16,6 +16,7 @@ from app.adapters.stt.protocol import STTAdapter
 from app.adapters.tts.protocol import TTSAdapter
 from app.app_config import app_config
 from app.core.dialog import DialogOrchestrator
+from app.core.scope import V1ScopeComputer
 
 
 def _make_llm() -> LLMAdapter:
@@ -57,4 +58,6 @@ def _make_tts() -> TTSAdapter:
 llm: LLMAdapter = _make_llm()
 stt: STTAdapter = _make_stt()
 tts: TTSAdapter = _make_tts()
-orchestrator: DialogOrchestrator = DialogOrchestrator(stt=stt, llm=llm, tts=tts)
+orchestrator: DialogOrchestrator = DialogOrchestrator(
+    stt=stt, llm=llm, tts=tts, scope=V1ScopeComputer()
+)
