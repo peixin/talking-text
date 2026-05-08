@@ -5,7 +5,7 @@
 # Which adapter implementation to use for each role.
 # Each provider's tunable params live in [adapter.<role>.<provider>] below.
 # Secrets (API keys, endpoints) still belong in .env.
-llm_provider = "volc_ark" # supported: "deepseek" | "volc_ark"
+llm_provider = "deepseek" # supported: "deepseek" | "volc_ark"
 stt_provider = "volc"     # supported: "volc"
 tts_provider = "volc"     # supported: "volc"
 

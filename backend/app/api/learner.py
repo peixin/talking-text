@@ -1,3 +1,4 @@
+import json
 import uuid
 from typing import Annotated
 
@@ -6,6 +7,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.factory import llm
+from app.adapters.llm.protocol import LLMMessage
 from app.api.auth import get_current_account
 from app.storage.db import get_db
 from app.storage.models.account import Account
@@ -25,6 +28,53 @@ class LearnerUpdate(BaseModel):
 class LearnerOut(BaseModel):
     id: uuid.UUID
     name: str
+    ai_name: str
+    ai_gender: str
+    ai_persona_prompt: str | None
+
+
+class UpdatePersonaBody(BaseModel):
+    ai_name: str | None = None
+    ai_gender: str | None = None
+    ai_persona_prompt: str | None = None
+
+
+class SyncPersonaBody(BaseModel):
+    ai_name: str
+    ai_gender: str
+    ai_persona_prompt: str
+
+
+_SYNC_PROMPT = """\
+You help parents customize an AI tutor persona for a children's English learning app.
+
+Given:
+- AI name: {name}
+- AI gender: {gender}  (options: female / male / neutral)
+- Persona prompt: {prompt}
+
+Task: Return a JSON object with exactly three keys: "ai_name", "ai_gender", "ai_persona_prompt".
+
+Rules:
+1. The name used inside the prompt must match the given AI name. Update if they differ.
+2. Gender pronouns in the prompt must match the given gender. Update if they differ.
+3. If the prompt does not mention gender pronouns at all, append the appropriate sentence:
+   - female → "She uses she/her pronouns."
+   - male   → "He uses he/him pronouns."
+   - neutral → "They use they/them pronouns."
+4. Preserve all other content in the prompt exactly.
+5. Return only valid JSON — no explanation, no code fences.\
+"""
+
+
+def _learner_out(l: Learner) -> LearnerOut:
+    return LearnerOut(
+        id=l.id,
+        name=l.name,
+        ai_name=l.ai_name,
+        ai_gender=l.ai_gender,
+        ai_persona_prompt=l.ai_persona_prompt,
+    )
 
 
 @router.get("")
@@ -36,7 +86,7 @@ async def list_learners(
         select(Learner).where(Learner.account_id == account.id).order_by(Learner.created_at.desc())
     )
     learners = result.scalars().all()
-    return [LearnerOut(id=l.id, name=l.name) for l in learners]
+    return [_learner_out(l) for l in learners]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -49,7 +99,7 @@ async def create_learner(
     db.add(learner)
     await db.commit()
     await db.refresh(learner)
-    return LearnerOut(id=learner.id, name=learner.name)
+    return _learner_out(learner)
 
 
 @router.put("/{learner_id}")
@@ -69,7 +119,7 @@ async def update_learner(
     learner.name = body.name
     await db.commit()
     await db.refresh(learner)
-    return LearnerOut(id=learner.id, name=learner.name)
+    return _learner_out(learner)
 
 
 @router.delete("/{learner_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
@@ -104,4 +154,70 @@ async def set_active_learner(
 
     account.last_active_learner_id = learner.id
     await db.commit()
-    return LearnerOut(id=learner.id, name=learner.name)
+    return _learner_out(learner)
+
+
+@router.patch("/{learner_id}/persona")
+async def update_persona(
+    learner_id: uuid.UUID,
+    body: UpdatePersonaBody,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> LearnerOut:
+    result = await db.execute(
+        select(Learner).where(Learner.id == learner_id, Learner.account_id == account.id)
+    )
+    learner = result.scalar_one_or_none()
+    if not learner:
+        raise HTTPException(status_code=404, detail="Learner not found")
+
+    if body.ai_name is not None:
+        learner.ai_name = body.ai_name
+    if body.ai_gender is not None:
+        learner.ai_gender = body.ai_gender
+    if body.ai_persona_prompt is not None:
+        learner.ai_persona_prompt = body.ai_persona_prompt
+
+    await db.commit()
+    await db.refresh(learner)
+    return _learner_out(learner)
+
+
+@router.post("/{learner_id}/persona/sync")
+async def sync_persona(
+    learner_id: uuid.UUID,
+    body: SyncPersonaBody,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> LearnerOut:
+    result = await db.execute(
+        select(Learner).where(Learner.id == learner_id, Learner.account_id == account.id)
+    )
+    learner = result.scalar_one_or_none()
+    if not learner:
+        raise HTTPException(status_code=404, detail="Learner not found")
+
+    user_msg = _SYNC_PROMPT.format(
+        name=body.ai_name,
+        gender=body.ai_gender,
+        prompt=body.ai_persona_prompt,
+    )
+    response = await llm.invoke(
+        [LLMMessage(role="user", content=user_msg)],
+        temperature=0.2,
+        max_tokens=600,
+    )
+    try:
+        synced = json.loads(response.text)
+        learner.ai_name = str(synced["ai_name"])
+        learner.ai_gender = str(synced["ai_gender"])
+        learner.ai_persona_prompt = str(synced["ai_persona_prompt"])
+    except (json.JSONDecodeError, KeyError):
+        # LLM returned unparseable JSON — save the submitted values as-is
+        learner.ai_name = body.ai_name
+        learner.ai_gender = body.ai_gender
+        learner.ai_persona_prompt = body.ai_persona_prompt
+
+    await db.commit()
+    await db.refresh(learner)
+    return _learner_out(learner)

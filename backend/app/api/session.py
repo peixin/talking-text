@@ -86,6 +86,7 @@ _TITLE_PROMPT = (
 class SessionOut(BaseModel):
     id: uuid.UUID
     learner_id: uuid.UUID
+    lesson_id: uuid.UUID | None
     title: str | None
     created_at: datetime
     updated_at: datetime
@@ -95,10 +96,12 @@ class SessionOut(BaseModel):
 
 class CreateSessionBody(BaseModel):
     learner_id: uuid.UUID
+    lesson_id: uuid.UUID | None = None
 
 
 class UpdateSessionBody(BaseModel):
-    title: str
+    title: str | None = None
+    lesson_id: uuid.UUID | None = None
 
 
 class TurnOut(BaseModel):
@@ -200,7 +203,7 @@ async def create_session(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Session:
     await _require_learner(body.learner_id, account, db)
-    session = Session(learner_id=body.learner_id)
+    session = Session(learner_id=body.learner_id, lesson_id=body.lesson_id)
     db.add(session)
     await db.commit()
     await db.refresh(session)
@@ -215,7 +218,10 @@ async def update_session(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Session:
     session = await _require_session(session_id, account, db)
-    session.title = body.title.strip() or None
+    if body.title is not None:
+        session.title = body.title.strip() or None
+    if body.lesson_id is not None:
+        session.lesson_id = body.lesson_id
     await db.commit()
     await db.refresh(session)
     return session
