@@ -226,6 +226,59 @@ class DialogOrchestrator:
             audio_out_format=audio_out_format,
         )
 
+    async def initiate_session(
+        self,
+        *,
+        db: AsyncSession,
+        learner_id: uuid.UUID,
+        session_id: uuid.UUID,
+    ) -> None:
+        """Automatically generate an AI greeting for a new session."""
+        system_prompt = await self._resolve_system_prompt(db, learner_id, session_id)
+        
+        session_row = await db.execute(select(Session).where(Session.id == session_id))
+        session = session_row.scalar_one()
+        
+        # Guide the AI based on whether a lesson is selected or not
+        if session.lesson_id:
+            greeting_instruction = (
+                "Please say a brief, friendly hello to the child. "
+                "Mention that we are going to practice the words and sentences for today's lesson, "
+                "and ask a simple, engaging question to start the conversation."
+            )
+        else:
+            greeting_instruction = (
+                "Please say a brief, friendly hello to the child. "
+                "Since no specific lesson is selected today, ask them what they would like to talk about, "
+                "or suggest a fun topic to start the conversation."
+            )
+
+        messages = [
+            LLMMessage(role="system", content=system_prompt),
+            LLMMessage(role="user", content=f"(System instruction: {greeting_instruction})"),
+        ]
+
+        llm_response = await self._llm.invoke(messages, max_tokens=100)
+        text_ai = llm_response.text.strip()
+
+        turn_id = uuid.uuid4()
+        turn = Turn(
+            id=turn_id,
+            learner_id=learner_id,
+            session_id=session_id,
+            sequence=1,
+            text_user="",  # Empty text_user means it's an AI-initiated turn
+            text_ai=text_ai,
+            audio_in_path=None,
+            audio_out_path=None,
+            stt_audio_seconds=0.0,
+            llm_input_tokens=llm_response.input_tokens,
+            llm_output_tokens=llm_response.output_tokens,
+            tts_chars=0,
+        )
+        db.add(turn)
+        await db.commit()
+
     async def stream_turn(
         self,
         *,

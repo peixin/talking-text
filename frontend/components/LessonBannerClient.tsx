@@ -45,6 +45,7 @@ export function LessonBannerClient({
           open={switchOpen}
           onOpenChange={setSwitchOpen}
           enrolledLessons={enrolledLessons}
+          currentLessonId={null}
           onSelect={handleSelect}
         />
       </>
@@ -77,6 +78,7 @@ export function LessonBannerClient({
         open={switchOpen}
         onOpenChange={setSwitchOpen}
         enrolledLessons={enrolledLessons}
+        currentLessonId={currentLesson.lesson_id}
         onSelect={handleSelect}
       />
     </>

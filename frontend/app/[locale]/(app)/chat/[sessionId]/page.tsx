@@ -42,6 +42,7 @@ export default async function SessionPage({
 
   return (
     <ChatClient
+      key={activeSession.id}
       sessions={sessions}
       activeSession={activeSession}
       initialTurns={initialTurns}

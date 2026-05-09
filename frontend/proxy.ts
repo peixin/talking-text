@@ -40,8 +40,8 @@ export default function proxy(request: NextRequest) {
         response.cookies.delete(COOKIE_NAME);
         return response;
       }
-      const learnerUrl = new URL(`/${locale}/learner`, request.url);
-      return NextResponse.redirect(learnerUrl);
+      const chatUrl = new URL(`/${locale}/chat`, request.url);
+      return NextResponse.redirect(chatUrl);
     }
     return intlMiddleware(request);
   }

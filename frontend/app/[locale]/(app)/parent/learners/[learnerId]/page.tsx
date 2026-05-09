@@ -1,11 +1,12 @@
+import { notFound } from "next/navigation";
 import { createApi } from "@/lib/api";
-import { LearnerHomeClient } from "./LearnerHomeClient";
+import { LearnerSettingsClient } from "./LearnerSettingsClient";
 
 interface Props {
   params: Promise<{ learnerId: string; locale: string }>;
 }
 
-export default async function LearnerHomePage({ params }: Props) {
+export default async function LearnerSettingsPage({ params }: Props) {
   const { learnerId } = await params;
   const api = await createApi();
 
@@ -16,10 +17,10 @@ export default async function LearnerHomePage({ params }: Props) {
   ]);
 
   const learner = learners.find((l) => l.id === learnerId);
-  if (!learner) return <div>Learner not found.</div>;
+  if (!learner) notFound();
 
   return (
-    <LearnerHomeClient
+    <LearnerSettingsClient
       learnerId={learnerId}
       learnerName={learner.name}
       aiName={learner.ai_name}

@@ -7,7 +7,7 @@ import { useLocale } from "next-intl";
 
 import { LearnerOut, LessonInfoOut, SessionOut, TurnOut } from "@/lib/backend";
 import { useRouter } from "@/i18n/routing";
-import { Message, createSession, deleteSession, getAudio, renameSession, setActiveLearner, setSessionLesson } from "./actions";
+import { Message, createSession, deleteSession, getAudio, renameSession, setActiveLearner } from "./actions";
 import { SessionSidebarClient } from "./SessionSidebarClient";
 import { MessageListClient, AudioState } from "./MessageListClient";
 import { RecordButtonClient, Mode } from "./RecordButtonClient";
@@ -28,10 +28,14 @@ function audioDataUrl(b64: string, fmt: string): string {
 }
 
 function turnsToMessages(turns: TurnOut[]): Message[] {
-  return turns.flatMap((t) => [
-    { role: "user" as const, text: t.text_user, turnId: t.id },
-    { role: "assistant" as const, text: t.text_ai, turnId: t.id },
-  ]);
+  return turns.flatMap((t) => {
+    const msgs: Message[] = [];
+    if (t.text_user) {
+      msgs.push({ role: "user" as const, text: t.text_user, turnId: t.id });
+    }
+    msgs.push({ role: "assistant" as const, text: t.text_ai, turnId: t.id });
+    return msgs;
+  });
 }
 
 export function ChatClient({
@@ -108,6 +112,23 @@ export function ChatClient({
     }
   }, [editingTitle]);
 
+  // Auto-play the AI greeting — only for freshly created sessions (< 10s old)
+  useEffect(() => {
+    // Restore preferred input mode
+    const savedMode = localStorage.getItem("talking-text-input-mode") || "voice";
+    setInputMode(savedMode as "voice" | "text");
+
+    const ageMs = Date.now() - new Date(activeSession.created_at).getTime();
+    const isNew = ageMs < 10_000;
+    if (isNew && messages.length === 1 && messages[0].role === "assistant" && savedMode === "voice") {
+      const turnId = messages[0].turnId;
+      if (turnId) {
+        void handlePlay(turnId, "out");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Audio management ──────────────────────────────────────────────────────
 
   function playAudioUrl(url: string, turnId: string, dir: "in" | "out") {
@@ -151,7 +172,8 @@ export function ChatClient({
 
   async function handleNewSession() {
     try {
-      const session = await createSession(activeLearner.id);
+      const defaultLessonId = enrolledLessons.length > 0 ? enrolledLessons[0].lesson_id : undefined;
+      const session = await createSession(activeLearner.id, defaultLessonId);
       router.push(`/chat/${session.id}`);
     } catch {
       setError("CHAT_TURN_FAILED");
@@ -167,7 +189,8 @@ export function ChatClient({
         if (remaining.length > 0) {
           router.push(`/chat/${remaining[0].id}`);
         } else {
-          const fresh = await createSession(activeLearner.id);
+          const defaultLessonId = enrolledLessons.length > 0 ? enrolledLessons[0].lesson_id : undefined;
+          const fresh = await createSession(activeLearner.id, defaultLessonId);
           router.push(`/chat/${fresh.id}`);
         }
       } else {
@@ -426,7 +449,12 @@ export function ChatClient({
   // ── Lesson management ─────────────────────────────────────────────────────
 
   async function handleLessonChange(lessonId: string) {
-    await setSessionLesson(activeSession.id, lessonId);
+    // Call API directly to avoid Server Action triggering a full RSC re-render
+    await fetch(`/nex-api/sessions/${activeSession.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lesson_id: lessonId }),
+    });
     const found = enrolledLessons.find((l) => l.lesson_id === lessonId) ?? null;
     setActiveLesson(found);
   }
@@ -563,7 +591,11 @@ export function ChatClient({
                   type="button"
                   onClick={() => {
                     setError(null);
-                    setInputMode((m) => (m === "voice" ? "text" : "voice"));
+                    setInputMode((m) => {
+                      const next = m === "voice" ? "text" : "voice";
+                      localStorage.setItem("talking-text-input-mode", next);
+                      return next;
+                    });
                   }}
                   className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
                 >

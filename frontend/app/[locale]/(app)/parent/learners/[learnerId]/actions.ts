@@ -7,13 +7,13 @@ import type { CurriculumLessonsOut, SyncPersonaBody, LearnerOut } from "@/lib/ba
 export async function addLesson(learnerId: string, lessonId: string): Promise<void> {
   const api = await createApi();
   await api.learnerLessons.add(learnerId, lessonId);
-  revalidatePath(`/learner/${learnerId}`);
+  revalidatePath(`/parent/learners/${learnerId}`);
 }
 
 export async function removeLesson(learnerId: string, lessonId: string): Promise<void> {
   const api = await createApi();
   await api.learnerLessons.remove(learnerId, lessonId);
-  revalidatePath(`/learner/${learnerId}`);
+  revalidatePath(`/parent/learners/${learnerId}`);
 }
 
 export async function fetchCurriculumLessons(
@@ -29,6 +29,6 @@ export async function syncPersona(
 ): Promise<LearnerOut> {
   const api = await createApi();
   const updated = await api.learners.syncPersona(learnerId, body);
-  revalidatePath(`/learner/${learnerId}`);
+  revalidatePath(`/parent/learners/${learnerId}`);
   return updated;
 }

@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { LessonEnrollDialog } from "@/components/LessonPickerClient";
 import { AIPersonaSettingsClient } from "@/components/AIPersonaSettingsClient";
+import { Link } from "@/i18n/routing";
 import type { CurriculumSummary, LessonInfoOut, SyncPersonaBody } from "@/lib/backend";
 import { addLesson, removeLesson, fetchCurriculumLessons, syncPersona } from "./actions";
 
@@ -20,7 +21,7 @@ interface Props {
   curricula: CurriculumSummary[];
 }
 
-export function LearnerHomeClient({
+export function LearnerSettingsClient({
   learnerId,
   learnerName,
   aiName,
@@ -58,7 +59,13 @@ export function LearnerHomeClient({
   );
 
   return (
-    <div className="mx-auto max-w-lg space-y-6 py-8">
+    <div className="mx-auto w-full max-w-lg space-y-6 px-4 py-8">
+      <div className="mb-2 flex items-center gap-4">
+        <Link href="/parent" className="text-muted-foreground hover:text-primary transition text-sm">
+          ← 家长中心
+        </Link>
+      </div>
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{learnerName}</h1>
         <Button onClick={handleStartPractice}>Start Practice →</Button>

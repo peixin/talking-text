@@ -30,7 +30,9 @@ export default async function ChatPage() {
 
   let sessions = await api.sessions.list(activeLearner.id);
   if (sessions.length === 0) {
-    const created = await api.sessions.create(activeLearner.id);
+    const enrolledLessons = await api.learnerLessons.list(activeLearner.id);
+    const defaultLessonId = enrolledLessons.length > 0 ? enrolledLessons[0].lesson_id : undefined;
+    const created = await api.sessions.create(activeLearner.id, defaultLessonId);
     sessions = [created];
   }
 

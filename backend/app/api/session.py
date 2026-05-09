@@ -207,6 +207,17 @@ async def create_session(
     db.add(session)
     await db.commit()
     await db.refresh(session)
+    
+    # Initiate the session with an AI greeting turn
+    try:
+        await _orchestrator.initiate_session(
+            db=db,
+            learner_id=body.learner_id,
+            session_id=session.id,
+        )
+    except Exception:
+        log.exception("Failed to initiate session greeting for session=%s", session.id)
+
     return session
 
 
@@ -530,7 +541,7 @@ async def _after_turn(
 
     if session.title is None:
         count = await db.scalar(select(func.count()).where(Turn.session_id == session_id))
-        if count == 1:
+        if count == 2:
             try:
                 resp = await _llm.invoke(
                     [

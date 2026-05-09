@@ -150,6 +150,7 @@ interface SwitchModeProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   enrolledLessons: LessonInfoOut[];
+  currentLessonId?: string | null;
   onSelect: (lessonId: string) => void;
 }
 
@@ -157,6 +158,7 @@ export function LessonSwitchDialog({
   open,
   onOpenChange,
   enrolledLessons,
+  currentLessonId,
   onSelect,
 }: SwitchModeProps) {
   return (
@@ -171,23 +173,38 @@ export function LessonSwitchDialog({
               No lessons added yet. Go to the learner home page to add lessons.
             </p>
           )}
-          {enrolledLessons.map((l) => (
-            <button
-              key={l.lesson_id}
-              onClick={() => {
-                onSelect(l.lesson_id);
-                onOpenChange(false);
-              }}
-              className="hover:bg-accent w-full rounded-md border p-3 text-left transition"
-            >
-              <div className="text-sm font-medium">
-                {l.curriculum_name} · {l.unit_number}
-              </div>
-              <div className="text-muted-foreground text-xs">
-                {l.lesson_title ?? `Lesson ${l.lesson_sequence}`}
-              </div>
-            </button>
-          ))}
+          {enrolledLessons.map((l) => {
+            const isCurrent = l.lesson_id === currentLessonId;
+            return (
+              <button
+                key={l.lesson_id}
+                disabled={isCurrent}
+                onClick={() => {
+                  onSelect(l.lesson_id);
+                  onOpenChange(false);
+                }}
+                className={
+                  isCurrent
+                    ? "w-full rounded-md border p-3 text-left opacity-60 cursor-not-allowed bg-muted"
+                    : "hover:bg-accent w-full rounded-md border p-3 text-left transition"
+                }
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">
+                    {l.curriculum_name} · {l.unit_number}
+                  </div>
+                  {isCurrent && (
+                    <span className="text-xs font-medium text-primary bg-primary/10 rounded px-2 py-0.5">
+                      Current
+                    </span>
+                  )}
+                </div>
+                <div className="text-muted-foreground text-xs">
+                  {l.lesson_title ?? `Lesson ${l.lesson_sequence}`}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </DialogContent>
     </Dialog>
