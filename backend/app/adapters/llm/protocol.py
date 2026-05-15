@@ -14,7 +14,7 @@ from typing import Literal, Protocol
 @dataclass(frozen=True)
 class LLMMessage:
     role: Literal["system", "user", "assistant"]
-    content: str
+    content: str | list[dict]
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,7 @@ class LLMAdapter(Protocol):
         *,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        response_format: dict | None = None,
     ) -> LLMResponse: ...
 
     def stream(
@@ -42,3 +43,12 @@ class LLMAdapter(Protocol):
         temperature: float = 0.7,
         max_tokens: int | None = None,
     ) -> AsyncIterator[str]: ...
+
+    async def invoke_vision(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        response_format: dict | None = None,
+    ) -> LLMResponse: ...

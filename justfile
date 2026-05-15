@@ -14,13 +14,13 @@ dev:
     #!/usr/bin/env bash
     set -e
     trap 'kill 0' SIGINT SIGTERM EXIT
-    (cd backend && poetry run uvicorn app.main:app --reload --port 8000) &
+    (cd backend && poetry run uvicorn app.main:app --reload --port 8010) &
     (cd frontend && pnpm dev) &
     wait
 
 # 只起后端
 api:
-    cd backend && poetry run uvicorn app.main:app --reload --port 8000
+    cd backend && poetry run uvicorn app.main:app --reload --port 8010
 
 # 只起前端
 web:

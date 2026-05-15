@@ -87,6 +87,7 @@ class SessionOut(BaseModel):
     id: uuid.UUID
     learner_id: uuid.UUID
     lesson_id: uuid.UUID | None
+    collection_id: uuid.UUID | None
     title: str | None
     created_at: datetime
     updated_at: datetime
@@ -97,11 +98,13 @@ class SessionOut(BaseModel):
 class CreateSessionBody(BaseModel):
     learner_id: uuid.UUID
     lesson_id: uuid.UUID | None = None
+    collection_id: uuid.UUID | None = None
 
 
 class UpdateSessionBody(BaseModel):
     title: str | None = None
     lesson_id: uuid.UUID | None = None
+    collection_id: uuid.UUID | None = None
 
 
 class TurnOut(BaseModel):
@@ -203,7 +206,11 @@ async def create_session(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Session:
     await _require_learner(body.learner_id, account, db)
-    session = Session(learner_id=body.learner_id, lesson_id=body.lesson_id)
+    session = Session(
+        learner_id=body.learner_id,
+        lesson_id=body.lesson_id,
+        collection_id=body.collection_id,
+    )
     db.add(session)
     await db.commit()
     await db.refresh(session)
@@ -233,6 +240,8 @@ async def update_session(
         session.title = body.title.strip() or None
     if body.lesson_id is not None:
         session.lesson_id = body.lesson_id
+    if body.collection_id is not None:
+        session.collection_id = body.collection_id
     await db.commit()
     await db.refresh(session)
     return session

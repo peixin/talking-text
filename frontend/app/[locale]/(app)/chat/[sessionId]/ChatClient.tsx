@@ -11,7 +11,8 @@ import { Message, createSession, deleteSession, getAudio, renameSession, setActi
 import { SessionSidebarClient } from "./SessionSidebarClient";
 import { MessageListClient, AudioState } from "./MessageListClient";
 import { RecordButtonClient, Mode } from "./RecordButtonClient";
-import { LessonBannerClient } from "@/components/LessonBannerClient";
+import { ScopeBannerClient } from "@/components/LessonBannerClient";
+import type { CollectionOut } from "@/lib/backend";
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
@@ -46,6 +47,8 @@ export function ChatClient({
   learners,
   enrolledLessons,
   currentLesson: initialCurrentLesson,
+  collections,
+  currentCollection: initialCurrentCollection,
 }: {
   sessions: SessionOut[];
   activeSession: SessionOut;
@@ -54,6 +57,8 @@ export function ChatClient({
   learners: LearnerOut[];
   enrolledLessons: LessonInfoOut[];
   currentLesson: LessonInfoOut | null;
+  collections: CollectionOut[];
+  currentCollection: CollectionOut | null;
 }) {
   const t = useTranslations("Chat");
   const tErr = useTranslations("Chat.errors");
@@ -71,8 +76,9 @@ export function ChatClient({
   const [sessionStatus, setSessionStatus] = useState<"active" | "soft_limit" | "hard_limit">("active");
   const [softLimitDismissed, setSoftLimitDismissed] = useState(false);
 
-  // Lesson
+  // Scope
   const [activeLesson, setActiveLesson] = useState<LessonInfoOut | null>(initialCurrentLesson);
+  const [activeCollection, setActiveCollection] = useState<CollectionOut | null>(initialCurrentCollection);
 
   // Title editing
   const [editingTitle, setEditingTitle] = useState(false);
@@ -172,8 +178,12 @@ export function ChatClient({
 
   async function handleNewSession() {
     try {
-      const defaultLessonId = enrolledLessons.length > 0 ? enrolledLessons[0].lesson_id : undefined;
-      const session = await createSession(activeLearner.id, defaultLessonId);
+      const defaultLessonId = !activeCollection && enrolledLessons.length > 0 ? enrolledLessons[0].lesson_id : undefined;
+      const session = await createSession(
+        activeLearner.id,
+        activeLesson?.lesson_id ?? defaultLessonId,
+        activeCollection?.id
+      );
       router.push(`/chat/${session.id}`);
     } catch {
       setError("CHAT_TURN_FAILED");
@@ -449,14 +459,25 @@ export function ChatClient({
   // ── Lesson management ─────────────────────────────────────────────────────
 
   async function handleLessonChange(lessonId: string) {
-    // Call API directly to avoid Server Action triggering a full RSC re-render
     await fetch(`/nex-api/sessions/${activeSession.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lesson_id: lessonId }),
+      body: JSON.stringify({ lesson_id: lessonId, collection_id: null }),
     });
     const found = enrolledLessons.find((l) => l.lesson_id === lessonId) ?? null;
     setActiveLesson(found);
+    setActiveCollection(null);
+  }
+
+  async function handleCollectionChange(collectionId: string) {
+    await fetch(`/nex-api/sessions/${activeSession.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lesson_id: null, collection_id: collectionId }),
+    });
+    const found = collections.find((c) => c.id === collectionId) ?? null;
+    setActiveCollection(found);
+    setActiveLesson(null);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -525,12 +546,15 @@ export function ChatClient({
           )}
         </div>
 
-        {/* Lesson banner */}
-        <LessonBannerClient
+        {/* Scope banner */}
+        <ScopeBannerClient
           sessionId={activeSession.id}
           currentLesson={activeLesson}
+          currentCollection={activeCollection}
           enrolledLessons={enrolledLessons}
+          collections={collections}
           onLessonChange={handleLessonChange}
+          onCollectionChange={handleCollectionChange}
         />
 
         {/* Singleton audio element — owned here, shared via handlePlay */}

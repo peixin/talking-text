@@ -34,8 +34,8 @@ Chinese versions: [README.cn.md](README.cn.md) · [docs/*.cn.md](docs/)
 ```bash
 just install        # install backend + frontend deps
 just dev            # start both backend and frontend
-just api            # backend only (http://localhost:8000)
-just web            # frontend only (http://localhost:3000)
+just api            # backend only (http://localhost:8010)
+just web            # frontend only (http://localhost:3010)
 just                # list all available commands
 ```
 

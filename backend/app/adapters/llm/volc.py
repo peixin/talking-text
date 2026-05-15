@@ -26,8 +26,10 @@ class VolcLLMAdapter:
         api_key: str | None = None,
         base_url: str | None = None,
         model: str | None = None,
+        vision_model: str | None = None,
     ) -> None:
         self._model = model or settings.volc_ark_model
+        self._vision_model = vision_model
         self._client = AsyncOpenAI(
             api_key=api_key or settings.volc_ark_api_key,
             base_url=base_url or settings.volc_ark_base_url,
@@ -39,12 +41,42 @@ class VolcLLMAdapter:
         *,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        response_format: dict | None = None,
     ) -> LLMResponse:
         completion = await self._client.chat.completions.create(
             model=self._model,
             messages=[{"role": m.role, "content": m.content} for m in messages],
             temperature=temperature,
             max_tokens=max_tokens,
+            response_format=response_format,
+        )
+        choice = completion.choices[0]
+        usage = completion.usage
+        return LLMResponse(
+            text=choice.message.content or "",
+            input_tokens=usage.prompt_tokens if usage else 0,
+            output_tokens=usage.completion_tokens if usage else 0,
+            model=completion.model,
+            raw=completion.model_dump(),
+        )
+
+    async def invoke_vision(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        response_format: dict | None = None,
+    ) -> LLMResponse:
+        if not self._vision_model:
+            raise ValueError("Vision model is not configured for VolcLLMAdapter.")
+        
+        completion = await self._client.chat.completions.create(
+            model=self._vision_model,
+            messages=[{"role": m.role, "content": m.content} for m in messages],
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
         )
         choice = completion.choices[0]
         usage = completion.usage

@@ -39,6 +39,7 @@ class DeepSeekLLMAdapter:
         *,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        response_format: dict | None = None,
     ) -> LLMResponse:
         extra: dict = {"thinking": {"type": self._thinking}}
         kwargs: dict = dict(
@@ -46,6 +47,7 @@ class DeepSeekLLMAdapter:
             messages=[{"role": m.role, "content": m.content} for m in messages],
             temperature=temperature,
             max_tokens=max_tokens,
+            response_format=response_format,
             extra_body=extra,
         )
         if self._thinking == "enabled":
@@ -61,6 +63,16 @@ class DeepSeekLLMAdapter:
             model=completion.model,
             raw=completion.model_dump(),
         )
+
+    async def invoke_vision(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        response_format: dict | None = None,
+    ) -> LLMResponse:
+        raise NotImplementedError("DeepSeek API currently does not support vision/image inputs.")
 
     def stream(
         self,

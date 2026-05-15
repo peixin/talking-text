@@ -1,6 +1,6 @@
 import "server-only";
 
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8010";
 
 type FetchOptions = Omit<RequestInit, "body"> & {
   body?: Record<string, unknown> | BodyInit;
@@ -103,6 +103,7 @@ export type SessionOut = {
   id: string;
   learner_id: string;
   lesson_id: string | null;
+  collection_id: string | null;
   title: string | null;
   created_at: string;
   updated_at: string;
@@ -121,6 +122,27 @@ export type LessonInfoOut = {
   unit_title: string;
   curriculum_name: string;
   added_at: string;
+};
+export type CollectionOut = {
+  id: string;
+  name: string;
+  description: string | null;
+  is_public: boolean;
+};
+export type CollectionItemOut = {
+  id: string;
+  text: string;
+  type: string;
+  anchor: string | null;
+};
+export type LanguageItemIn = {
+  text: string;
+  type: string;
+  anchor?: string | null;
+};
+export type IngestionResult = {
+  items: LanguageItemIn[];
+  notes: string | null;
 };
 export type CurriculumSummary = {
   id: string;
@@ -185,10 +207,10 @@ export const backend = {
   sessions: {
     list: (learnerId: string, headers?: HeadersInit) =>
       request<SessionOut[]>(`/sessions?learner_id=${learnerId}`, { headers }),
-    create: (learnerId: string, lessonId?: string | null, headers?: HeadersInit) =>
+    create: (learnerId: string, lessonId?: string | null, collectionId?: string | null, headers?: HeadersInit) =>
       request<SessionOut>("/sessions", {
         method: "POST",
-        body: { learner_id: learnerId, lesson_id: lessonId ?? null },
+        body: { learner_id: learnerId, lesson_id: lessonId ?? null, collection_id: collectionId ?? null },
         headers,
       }),
     rename: (id: string, title: string, headers?: HeadersInit) =>
@@ -201,6 +223,12 @@ export const backend = {
       request<SessionOut>(`/sessions/${sessionId}`, {
         method: "PATCH",
         body: { lesson_id: lessonId },
+        headers,
+      }),
+    setCollection: (sessionId: string, collectionId: string, headers?: HeadersInit) =>
+      request<SessionOut>(`/sessions/${sessionId}`, {
+        method: "PATCH",
+        body: { collection_id: collectionId },
         headers,
       }),
     delete: (id: string, headers?: HeadersInit) =>
@@ -236,5 +264,58 @@ export const backend = {
         method: "DELETE",
         headers,
       }),
+  },
+  ingestion: {
+    extract: (formData: FormData, headers?: HeadersInit) =>
+      request<IngestionResult>("/ingest/extract", {
+        method: "POST",
+        body: formData,
+        headers,
+      }),
+    saveToLesson: (
+      body: {
+        items: LanguageItemIn[];
+        curriculum_name: string;
+        unit_number?: string;
+        unit_title?: string;
+        lesson_title?: string;
+      },
+      headers?: HeadersInit,
+    ) =>
+      request<{ lesson_id: string }>("/ingest/save-to-lesson", {
+        method: "POST",
+        body,
+        headers,
+      }),
+    saveToCollection: (
+      body: {
+        items: LanguageItemIn[];
+        learner_id: string;
+        collection_id?: string;
+        new_collection_name?: string;
+      },
+      headers?: HeadersInit,
+    ) =>
+      request<{ collection_id: string }>("/ingest/save-to-collection", {
+        method: "POST",
+        body,
+        headers,
+      }),
+  },
+  collections: {
+    list: (learnerId: string, headers?: HeadersInit) =>
+      request<CollectionOut[]>(`/learners/${learnerId}/collections`, { headers }),
+    create: (
+      learnerId: string,
+      body: { name: string; description?: string; is_public?: boolean },
+      headers?: HeadersInit,
+    ) =>
+      request<CollectionOut>(`/learners/${learnerId}/collections`, {
+        method: "POST",
+        body,
+        headers,
+      }),
+    getItems: (collectionId: string, headers?: HeadersInit) =>
+      request<CollectionItemOut[]>(`/collections/${collectionId}/items`, { headers }),
   },
 };

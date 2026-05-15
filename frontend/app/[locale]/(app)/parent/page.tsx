@@ -67,10 +67,21 @@ export default async function ParentDashboard() {
             <span className="text-muted-foreground mt-1 text-sm">{t("child_management_desc")}</span>
           </Link>
 
-          <div className="border-border flex flex-col items-start rounded-lg border p-5 opacity-50">
+          <Link
+            href="/parent/ingest"
+            className="border-border hover:border-primary flex flex-col items-start rounded-lg border p-5 transition"
+          >
             <span className="font-medium">{t("material_management")}</span>
             <span className="text-muted-foreground mt-1 text-sm">{t("material_management_desc")}</span>
-          </div>
+          </Link>
+
+          <Link
+            href="/parent/collections"
+            className="border-border hover:border-primary flex flex-col items-start rounded-lg border p-5 transition"
+          >
+            <span className="font-medium">{t("collection_management")}</span>
+            <span className="text-muted-foreground mt-1 text-sm">{t("collection_management_desc")}</span>
+          </Link>
 
           <div className="border-border flex flex-col items-start rounded-lg border p-5 opacity-50">
             <span className="font-medium">{t("learning_progress")}</span>

@@ -14,6 +14,7 @@ _CONFIG_PATH = Path(__file__).parent.parent / "config.toml"
 @dataclass(frozen=True)
 class LLMProviderConfig:
     model: str
+    vision_model: str | None = None
     context_window: int = 32768  # token limit for the active model
     thinking: str = "disabled"  # "disabled" | "enabled"
     reasoning_effort: str = "low"  # only used when thinking = "enabled"
@@ -24,6 +25,7 @@ class AdapterConfig:
     llm_provider: str
     stt_provider: str
     tts_provider: str
+    ocr_provider: str
     llm: LLMProviderConfig  # active provider's resolved config
 
 
@@ -70,8 +72,10 @@ def _load() -> AppConfig:
             llm_provider=llm_provider,
             stt_provider=adapter["stt_provider"],
             tts_provider=adapter["tts_provider"],
+            ocr_provider=adapter.get("ocr_provider", "volc_ark"),
             llm=LLMProviderConfig(
                 model=llm_cfg_raw.get("model", ""),
+                vision_model=llm_cfg_raw.get("vision_model"),
                 context_window=llm_cfg_raw.get("context_window", 32768),
                 thinking=llm_cfg_raw.get("thinking", "disabled"),
                 reasoning_effort=llm_cfg_raw.get("reasoning_effort", "low"),

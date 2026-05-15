@@ -28,9 +28,28 @@ def _make_llm() -> LLMAdapter:
         case "volc_ark":
             from app.adapters.llm.volc import VolcLLMAdapter
 
-            return VolcLLMAdapter(model=app_config.adapter.llm.model or None)
+            return VolcLLMAdapter(
+                model=app_config.adapter.llm.model or None,
+                vision_model=app_config.adapter.llm.vision_model or None,
+            )
         case other:
             raise ValueError(f"Unknown LLM provider: {other!r}")
+
+
+def _make_ocr() -> LLMAdapter:
+    match app_config.adapter.ocr_provider:
+        case "volc_ark":
+            from app.adapters.llm.volc import VolcLLMAdapter
+            # Temporarily read raw config for volc_ark vision model if not active LLM
+            import tomllib
+            from pathlib import Path
+            config_path = Path(__file__).parent.parent.parent / "config.toml"
+            with open(config_path, "rb") as f:
+                raw = tomllib.load(f)
+            vision_model = raw.get("adapter", {}).get("llm", {}).get("volc_ark", {}).get("vision_model")
+            return VolcLLMAdapter(vision_model=vision_model)
+        case other:
+            raise ValueError(f"Unknown OCR provider: {other!r}")
 
 
 def _make_stt() -> STTAdapter:
@@ -56,6 +75,7 @@ def _make_tts() -> TTSAdapter:
 # ── Shared singletons ────────────────────────────────────────────────────────
 
 llm: LLMAdapter = _make_llm()
+ocr: LLMAdapter = _make_ocr()
 stt: STTAdapter = _make_stt()
 tts: TTSAdapter = _make_tts()
 orchestrator: DialogOrchestrator = DialogOrchestrator(

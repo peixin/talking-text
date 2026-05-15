@@ -16,7 +16,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import type { CurriculumLessonsOut, LessonInfoOut } from "@/lib/backend";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { CurriculumLessonsOut, LessonInfoOut, CollectionOut } from "@/lib/backend";
 
 // ── Enroll mode ──────────────────────────────────────────────────────────────
 
@@ -150,62 +151,118 @@ interface SwitchModeProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   enrolledLessons: LessonInfoOut[];
+  collections: CollectionOut[];
   currentLessonId?: string | null;
-  onSelect: (lessonId: string) => void;
+  currentCollectionId?: string | null;
+  onSelectLesson: (lessonId: string) => void;
+  onSelectCollection: (collectionId: string) => void;
 }
 
-export function LessonSwitchDialog({
+export function ScopeSwitchDialog({
   open,
   onOpenChange,
   enrolledLessons,
+  collections,
   currentLessonId,
-  onSelect,
+  currentCollectionId,
+  onSelectLesson,
+  onSelectCollection,
 }: SwitchModeProps) {
+  const [tab, setTab] = useState<"lessons" | "collections">(currentCollectionId ? "collections" : "lessons");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Choose a Lesson</DialogTitle>
+          <DialogTitle>Choose Chat Topic</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2">
-          {enrolledLessons.length === 0 && (
-            <p className="text-muted-foreground text-sm">
-              No lessons added yet. Go to the learner home page to add lessons.
-            </p>
-          )}
-          {enrolledLessons.map((l) => {
-            const isCurrent = l.lesson_id === currentLessonId;
-            return (
-              <button
-                key={l.lesson_id}
-                disabled={isCurrent}
-                onClick={() => {
-                  onSelect(l.lesson_id);
-                  onOpenChange(false);
-                }}
-                className={
-                  isCurrent
-                    ? "w-full rounded-md border p-3 text-left opacity-60 cursor-not-allowed bg-muted"
-                    : "hover:bg-accent w-full rounded-md border p-3 text-left transition"
-                }
-              >
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">
-                    {l.curriculum_name} · {l.unit_number}
+        
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "lessons" | "collections")} className="flex flex-col flex-1 min-h-0">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="lessons">Textbooks</TabsTrigger>
+            <TabsTrigger value="collections">Collections</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="lessons" className="flex-1 overflow-y-auto space-y-2 mt-4 pr-2">
+            {enrolledLessons.length === 0 && (
+              <p className="text-muted-foreground text-sm">
+                No lessons added yet. Go to the learner home page to add lessons.
+              </p>
+            )}
+            {enrolledLessons.map((l) => {
+              const isCurrent = l.lesson_id === currentLessonId;
+              return (
+                <button
+                  key={l.lesson_id}
+                  disabled={isCurrent}
+                  onClick={() => {
+                    onSelectLesson(l.lesson_id);
+                    onOpenChange(false);
+                  }}
+                  className={
+                    isCurrent
+                      ? "w-full rounded-md border p-3 text-left opacity-60 cursor-not-allowed bg-muted"
+                      : "hover:bg-accent w-full rounded-md border p-3 text-left transition"
+                  }
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium">
+                      {l.curriculum_name} · {l.unit_number}
+                    </div>
+                    {isCurrent && (
+                      <span className="text-xs font-medium text-primary bg-primary/10 rounded px-2 py-0.5">
+                        Current
+                      </span>
+                    )}
                   </div>
-                  {isCurrent && (
-                    <span className="text-xs font-medium text-primary bg-primary/10 rounded px-2 py-0.5">
-                      Current
-                    </span>
+                  <div className="text-muted-foreground text-xs mt-1">
+                    {l.lesson_title ?? `Lesson ${l.lesson_sequence}`}
+                  </div>
+                </button>
+              );
+            })}
+          </TabsContent>
+
+          <TabsContent value="collections" className="flex-1 overflow-y-auto space-y-2 mt-4 pr-2">
+            {collections.length === 0 && (
+              <p className="text-muted-foreground text-sm">
+                No collections yet. Use the ingestion tool to create one.
+              </p>
+            )}
+            {collections.map((c) => {
+              const isCurrent = c.id === currentCollectionId;
+              return (
+                <button
+                  key={c.id}
+                  disabled={isCurrent}
+                  onClick={() => {
+                    onSelectCollection(c.id);
+                    onOpenChange(false);
+                  }}
+                  className={
+                    isCurrent
+                      ? "w-full rounded-md border p-3 text-left opacity-60 cursor-not-allowed bg-muted"
+                      : "hover:bg-accent w-full rounded-md border p-3 text-left transition"
+                  }
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium">{c.name}</div>
+                    {isCurrent && (
+                      <span className="text-xs font-medium text-primary bg-primary/10 rounded px-2 py-0.5">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                  {c.description && (
+                    <div className="text-muted-foreground text-xs mt-1">
+                      {c.description}
+                    </div>
                   )}
-                </div>
-                <div className="text-muted-foreground text-xs">
-                  {l.lesson_title ?? `Lesson ${l.lesson_sequence}`}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+                </button>
+              );
+            })}
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

@@ -49,11 +49,13 @@ export async function createApi() {
     },
     sessions: {
       list: (learnerId: string) => c((h) => backend.sessions.list(learnerId, h)),
-      create: (learnerId: string, lessonId?: string | null) =>
-        c((h) => backend.sessions.create(learnerId, lessonId, h)),
+      create: (learnerId: string, lessonId?: string | null, collectionId?: string | null) =>
+        c((h) => backend.sessions.create(learnerId, lessonId, collectionId, h)),
       rename: (id: string, title: string) => c((h) => backend.sessions.rename(id, title, h)),
       setLesson: (sessionId: string, lessonId: string) =>
         c((h) => backend.sessions.setLesson(sessionId, lessonId, h)),
+      setCollection: (sessionId: string, collectionId: string) =>
+        c((h) => backend.sessions.setCollection(sessionId, collectionId, h)),
       delete: (id: string) => c((h) => backend.sessions.delete(id, h)),
       turns: (id: string) => c((h) => backend.sessions.turns(id, h)),
       getTurnAudio: (sessionId: string, turnId: string, dir: "in" | "out") =>
@@ -70,6 +72,19 @@ export async function createApi() {
         c((h) => backend.learnerLessons.add(learnerId, lessonId, h)),
       remove: (learnerId: string, lessonId: string) =>
         c((h) => backend.learnerLessons.remove(learnerId, lessonId, h)),
+    },
+    ingestion: {
+      extract: (formData: FormData) => c((h) => backend.ingestion.extract(formData, h)),
+      saveToLesson: (body: Parameters<typeof backend.ingestion.saveToLesson>[0]) =>
+        c((h) => backend.ingestion.saveToLesson(body, h)),
+      saveToCollection: (body: Parameters<typeof backend.ingestion.saveToCollection>[0]) =>
+        c((h) => backend.ingestion.saveToCollection(body, h)),
+    },
+    collections: {
+      list: (learnerId: string) => c((h) => backend.collections.list(learnerId, h)),
+      create: (learnerId: string, body: Parameters<typeof backend.collections.create>[1]) =>
+        c((h) => backend.collections.create(learnerId, body, h)),
+      getItems: (collectionId: string) => c((h) => backend.collections.getItems(collectionId, h)),
     },
   };
 }

@@ -24,9 +24,10 @@ export default async function SessionPage({
   const activeLearnerId = account.last_active_learner_id;
   const activeLearner = learners.find((l) => l.id === activeLearnerId) ?? learners[0];
 
-  const [sessions, enrolledLessons] = await Promise.all([
+  const [sessions, enrolledLessons, collections] = await Promise.all([
     api.sessions.list(activeLearner.id),
     api.learnerLessons.list(activeLearner.id),
+    api.collections.list(activeLearner.id),
   ]);
   const activeSession = sessions.find((s) => s.id === sessionId);
 
@@ -40,6 +41,10 @@ export default async function SessionPage({
     ? (enrolledLessons.find((l) => l.lesson_id === activeSession.lesson_id) ?? null)
     : null;
 
+  const currentCollection = activeSession.collection_id
+    ? (collections.find((c) => c.id === activeSession.collection_id) ?? null)
+    : null;
+
   return (
     <ChatClient
       key={activeSession.id}
@@ -50,6 +55,8 @@ export default async function SessionPage({
       learners={learners}
       enrolledLessons={enrolledLessons}
       currentLesson={currentLesson}
+      collections={collections}
+      currentCollection={currentCollection}
     />
   );
 }

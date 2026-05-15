@@ -6,6 +6,7 @@
 # Each provider's tunable params live in [adapter.<role>.<provider>] below.
 # Secrets (API keys, endpoints) still belong in .env.
 llm_provider = "deepseek" # supported: "deepseek" | "volc_ark"
+ocr_provider = "volc_ark" # supported: "volc_ark"
 stt_provider = "volc"     # supported: "volc"
 tts_provider = "volc"     # supported: "volc"
 
@@ -17,6 +18,7 @@ reasoning_effort = "low"    # only relevant when thinking = "enabled"
 
 [adapter.llm.volc_ark]
 model = "doubao-seed-2-0-mini-260215"
+vision_model = "ep-20260430135551-7h2lq" # doubao-1-5-vision-lite
 context_window = 262144               # 256K tokens
 
 [session]
