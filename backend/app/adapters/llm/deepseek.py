@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncGenerator, AsyncIterator
+from typing import Any
 
 from openai import AsyncOpenAI
 
@@ -60,6 +61,20 @@ class DeepSeekLLMAdapter:
             output_tokens=usage.completion_tokens if usage else 0,
             model=completion.model,
             raw=completion.model_dump(),
+        )
+
+    async def invoke_vision(
+        self,
+        prompt: str,
+        images: list[bytes],
+        *,
+        image_mime: str = "image/jpeg",
+        temperature: float = 0.2,
+        max_tokens: int | None = None,
+        response_format: dict[str, Any] | None = None,
+    ) -> LLMResponse:
+        raise NotImplementedError(
+            "DeepSeek does not support vision; use volc_ark for vision_provider"
         )
 
     def stream(

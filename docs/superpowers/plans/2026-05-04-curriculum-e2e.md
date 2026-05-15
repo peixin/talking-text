@@ -1001,7 +1001,7 @@ Expected: no errors.
 ```bash
 cd /Users/peixinliu/Develop/github/_peixin/talking-text && just api &
 sleep 3
-curl -s http://localhost:8000/health | python3 -m json.tool
+curl -s http://localhost:8010/health | python3 -m json.tool
 ```
 
 Expected: `{"status": "ok"}`
@@ -1304,15 +1304,15 @@ Start the API: `just api &` then wait 3 seconds.
 
 ```bash
 # Login first to get a session cookie
-curl -s -c /tmp/cookies.txt -X POST http://localhost:8000/auth/login \
+curl -s -c /tmp/cookies.txt -X POST http://localhost:8010/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"your@email.com","password":"yourpassword"}' | python3 -m json.tool
 
 # List public curricula
-curl -s -b /tmp/cookies.txt http://localhost:8000/curricula | python3 -m json.tool
+curl -s -b /tmp/cookies.txt http://localhost:8010/curricula | python3 -m json.tool
 
 # Get lessons for the curriculum (replace UUID with actual id from above)
-curl -s -b /tmp/cookies.txt http://localhost:8000/curricula/<CURRICULUM_UUID>/lessons | python3 -m json.tool
+curl -s -b /tmp/cookies.txt http://localhost:8010/curricula/<CURRICULUM_UUID>/lessons | python3 -m json.tool
 ```
 
 Expected: curricula returns Kids Corner Book 1; lessons returns unit with 2 lessons.
@@ -2310,7 +2310,7 @@ cd /Users/peixinliu/Develop/github/_peixin/talking-text && just dev
 
 - [ ] **Step 2: Verify the full flow**
 
-1. Open `http://localhost:3000`
+1. Open `http://localhost:3010`
 2. Log in
 3. Navigate to `/learner/<your-learner-id>` (find the id from the parent page)
 4. Click "+ Add" → select "Kids Corner Book 1" → expand "Starter Unit 4" → check "Lesson 2" → click "Add 1 lesson"

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getLocale } from "next-intl/server";
 
 import { BackendError, backend } from "@/lib/backend";
-import type { UpdatePersonaBody, SyncPersonaBody } from "@/lib/backend";
+import type { GroupCreateBody, UpdatePersonaBody, SyncPersonaBody } from "@/lib/backend";
 
 async function buildHeaders(): Promise<HeadersInit> {
   const jar = await cookies();
@@ -46,6 +46,13 @@ export async function createApi() {
         c((h) => backend.learners.updatePersona(id, body, h)),
       syncPersona: (id: string, body: SyncPersonaBody) =>
         c((h) => backend.learners.syncPersona(id, body, h)),
+    },
+    groups: {
+      list: () => c((h) => backend.groups.list(h)),
+      create: (body: GroupCreateBody) => c((h) => backend.groups.create(body, h)),
+    },
+    ingest: {
+      extract: (formData: FormData) => c((h) => backend.ingest.extract(formData, h)),
     },
     sessions: {
       list: (learnerId: string) => c((h) => backend.sessions.list(learnerId, h)),

@@ -4,7 +4,15 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getLocale } from "next-intl/server";
 
-import { BackendError, SessionOut, TurnResponse, backend } from "@/lib/backend";
+import {
+  BackendError,
+  GroupCreateBody,
+  GroupOut,
+  IngestionResult,
+  SessionOut,
+  TurnResponse,
+  backend,
+} from "@/lib/backend";
 import { createApi } from "@/lib/api";
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
@@ -38,6 +46,54 @@ export async function deleteSession(sessionId: string): Promise<void> {
 export async function setActiveLearner(learnerId: string): Promise<void> {
   const api = await createApi();
   await api.learners.setActive(learnerId);
+}
+
+export async function setSessionGroup(
+  sessionId: string,
+  groupId: string | null,
+): Promise<SessionOut> {
+  const api = await createApi();
+  return api.sessions.setGroup(sessionId, groupId);
+}
+
+// ── Ingestion actions ────────────────────────────────────────────────────────
+
+export type ExtractIngestionResult =
+  | { ok: true; result: IngestionResult }
+  | { ok: false; error: string };
+
+export async function extractIngestion(formData: FormData): Promise<ExtractIngestionResult> {
+  const h = await authHeaders();
+  try {
+    const result = await backend.ingest.extract(formData, h);
+    return { ok: true, result };
+  } catch (e) {
+    if (e instanceof BackendError) {
+      if (e.status === 401) {
+        const locale = await getLocale();
+        redirect(`/${locale}/login?expired=1`);
+      }
+      return { ok: false, error: e.detail || "INGEST_FAILED" };
+    }
+    return { ok: false, error: "INGEST_FAILED" };
+  }
+}
+
+export type CreateGroupResult =
+  | { ok: true; group: GroupOut }
+  | { ok: false; error: string };
+
+export async function createGroup(body: GroupCreateBody): Promise<CreateGroupResult> {
+  const api = await createApi();
+  try {
+    const group = await api.groups.create(body);
+    return { ok: true, group };
+  } catch (e) {
+    if (e instanceof BackendError) {
+      return { ok: false, error: e.detail || "GROUP_CREATE_FAILED" };
+    }
+    return { ok: false, error: "GROUP_CREATE_FAILED" };
+  }
 }
 
 // ── Turn types ────────────────────────────────────────────────────────────────

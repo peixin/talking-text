@@ -18,11 +18,11 @@
 
 ```
 Browser → Shared nginx (80 / 443)
-  /api/*      → backend:8000/          (strip /api prefix)
+  /api/*      → backend:8010/          (strip /api prefix)
   /nex-api/*  → frontend:3000          (path preserved, Next.js API routes)
   /*          → frontend:3000          (Next.js pages)
 
-Next.js server → http://backend:8000   (Docker internal network, no nginx)
+Next.js server → http://backend:8010   (Docker internal network, no nginx)
 ```
 
 Key: `/api/` is FastAPI. `/nex-api/` is Next.js API routes (e.g. the SSE streaming proxy). All server-side backend calls bypass nginx entirely via the Docker network.

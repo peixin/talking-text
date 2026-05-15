@@ -207,7 +207,7 @@ talking-text/
 ```
 just dev              → 前后端同起
 curl /health          → {"status": "ok"}
-http://localhost:3000 → 落地页 SSR 出"字有天地""言出成界"随机词，backend: ok
+http://localhost:3010 → 落地页 SSR 出"字有天地""言出成界"随机词，backend: ok
 ```
 
 ### 4.2 工具链能用：

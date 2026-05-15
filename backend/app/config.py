@@ -10,10 +10,10 @@ class Settings(BaseSettings):
     )
 
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = 8010
     debug: bool = False
 
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str] = ["http://localhost:3010"]
 
     database_url: str = "postgresql+asyncpg://talking_text:talking_text@localhost:5432/talking_text"
 

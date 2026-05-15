@@ -20,11 +20,18 @@ class LLMProviderConfig:
 
 
 @dataclass(frozen=True)
+class VisionProviderConfig:
+    model: str
+
+
+@dataclass(frozen=True)
 class AdapterConfig:
     llm_provider: str
+    vision_provider: str
     stt_provider: str
     tts_provider: str
-    llm: LLMProviderConfig  # active provider's resolved config
+    llm: LLMProviderConfig  # active LLM provider's resolved config
+    vision: VisionProviderConfig  # active vision provider's resolved config
 
 
 @dataclass(frozen=True)
@@ -63,11 +70,17 @@ def _load() -> AppConfig:
     session = raw.get("session", {})
     auth = raw["auth"]
     debug = raw.get("debug", {})
+
     llm_provider = adapter["llm_provider"]
     llm_cfg_raw = adapter.get("llm", {}).get(llm_provider, {})
+
+    vision_provider = adapter.get("vision_provider", "volc_ark")
+    vision_cfg_raw = adapter.get("vision", {}).get(vision_provider, {})
+
     return AppConfig(
         adapter=AdapterConfig(
             llm_provider=llm_provider,
+            vision_provider=vision_provider,
             stt_provider=adapter["stt_provider"],
             tts_provider=adapter["tts_provider"],
             llm=LLMProviderConfig(
@@ -75,6 +88,9 @@ def _load() -> AppConfig:
                 context_window=llm_cfg_raw.get("context_window", 32768),
                 thinking=llm_cfg_raw.get("thinking", "disabled"),
                 reasoning_effort=llm_cfg_raw.get("reasoning_effort", "low"),
+            ),
+            vision=VisionProviderConfig(
+                model=vision_cfg_raw.get("model", ""),
             ),
         ),
         session=SessionConfig(

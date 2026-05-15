@@ -59,7 +59,7 @@ services:
     image: ${ALIYUN_REGISTRY}/${ALIYUN_NAMESPACE}/talking-text-frontend:${FRONTEND_TAG:-latest}
     container_name: talking-text-frontend
     environment:
-      BACKEND_URL: http://backend:8000
+      BACKEND_URL: http://backend:8010
     depends_on:
       - backend
     restart: unless-stopped

@@ -33,6 +33,16 @@ def _make_llm() -> LLMAdapter:
             raise ValueError(f"Unknown LLM provider: {other!r}")
 
 
+def _make_vision() -> LLMAdapter:
+    match app_config.adapter.vision_provider:
+        case "volc_ark":
+            from app.adapters.llm.volc import VolcLLMAdapter
+
+            return VolcLLMAdapter(vision_model=app_config.adapter.vision.model or None)
+        case other:
+            raise ValueError(f"Unknown vision provider: {other!r}")
+
+
 def _make_stt() -> STTAdapter:
     match app_config.adapter.stt_provider:
         case "volc":
@@ -56,6 +66,7 @@ def _make_tts() -> TTSAdapter:
 # ── Shared singletons ────────────────────────────────────────────────────────
 
 llm: LLMAdapter = _make_llm()
+vision: LLMAdapter = _make_vision()
 stt: STTAdapter = _make_stt()
 tts: TTSAdapter = _make_tts()
 orchestrator: DialogOrchestrator = DialogOrchestrator(

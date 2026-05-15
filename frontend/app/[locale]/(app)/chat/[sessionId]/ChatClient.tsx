@@ -5,12 +5,17 @@ import { useTranslations } from "next-intl";
 import { Check, Keyboard, Menu, Mic, Pencil, Send, X } from "lucide-react";
 import { useLocale } from "next-intl";
 
-import { LearnerOut, SessionOut, TurnOut } from "@/lib/backend";
+import { GroupOut, LearnerOut, SessionOut, TurnOut } from "@/lib/backend";
 import { useRouter } from "@/i18n/routing";
 import { Message, createSession, deleteSession, getAudio, renameSession } from "./actions";
 import { SessionSidebarClient } from "./SessionSidebarClient";
 import { MessageListClient, AudioState } from "./MessageListClient";
 import { RecordButtonClient, Mode } from "./RecordButtonClient";
+import {
+  IngestDrawerClient,
+  IngestToolbarClient,
+  IngestTrigger,
+} from "./IngestDrawerClient";
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
@@ -43,12 +48,14 @@ export function ChatClient({
   initialTurns,
   activeLearner,
   learners,
+  currentGroup: initialCurrentGroup,
 }: {
   sessions: SessionOut[];
   activeSession: SessionOut;
   initialTurns: TurnOut[];
   activeLearner: LearnerOut;
   learners: LearnerOut[];
+  currentGroup: GroupOut | null;
 }) {
   const t = useTranslations("Chat");
   const tErr = useTranslations("Chat.errors");
@@ -67,6 +74,22 @@ export function ChatClient({
     "active",
   );
   const [softLimitDismissed, setSoftLimitDismissed] = useState(false);
+
+  // Ingest drawer
+  const [currentGroup, setCurrentGroup] = useState<GroupOut | null>(initialCurrentGroup);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTrigger, setDrawerTrigger] = useState<IngestTrigger>("camera");
+
+  function openDrawer(trigger: IngestTrigger) {
+    setDrawerTrigger(trigger);
+    setDrawerOpen(true);
+  }
+
+  function handleGroupApplied(group: GroupOut) {
+    setCurrentGroup(group);
+    setActiveSession((s) => ({ ...s, group_id: group.id }));
+    router.refresh();
+  }
 
   // Title editing
   const [editingTitle, setEditingTitle] = useState(false);
@@ -520,9 +543,17 @@ export function ChatClient({
           )}
         </div>
 
-        {/* Scope banner — placeholder until ingestion + group picker land */}
-        <div className="border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-          ✨ {t("scope_free_practice")}
+        {/* Scope banner */}
+        <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+          {currentGroup ? (
+            <>
+              <span>📕</span>
+              <span className="font-medium text-foreground">{currentGroup.name}</span>
+              <span>· {currentGroup.item_count} items</span>
+            </>
+          ) : (
+            <span>✨ {t("scope_free_practice")}</span>
+          )}
         </div>
 
         {/* Singleton audio element — owned here, shared via handlePlay */}
@@ -579,8 +610,9 @@ export function ChatClient({
             </div>
           ) : (
             <>
-              {/* Mode toggle */}
-              <div className="flex justify-end px-4 pt-2">
+              {/* Ingest toolbar + mode toggle */}
+              <div className="flex items-center justify-between px-2 pt-2">
+                <IngestToolbarClient onOpen={openDrawer} />
                 <button
                   type="button"
                   onClick={() => {
@@ -591,7 +623,7 @@ export function ChatClient({
                       return next;
                     });
                   }}
-                  className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
+                  className="mr-2 flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
                 >
                   {inputMode === "voice" ? (
                     <>
@@ -655,6 +687,14 @@ export function ChatClient({
           )}
         </div>
       </div>
+
+      <IngestDrawerClient
+        sessionId={activeSession.id}
+        open={drawerOpen}
+        initialTrigger={drawerTrigger}
+        onOpenChange={setDrawerOpen}
+        onGroupApplied={handleGroupApplied}
+      />
     </div>
   );
 }

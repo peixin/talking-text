@@ -161,7 +161,7 @@ Commit-msg hook: commitlint
 ```
 just dev              → backend + frontend start together
 curl /health          → {"status": "ok"}
-http://localhost:3000 → landing SSR shows 字有天地 / 言出成界 + random phrase; backend: ok
+http://localhost:3010 → landing SSR shows 字有天地 / 言出成界 + random phrase; backend: ok
 ```
 
 ### Toolchain verified

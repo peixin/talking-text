@@ -5,9 +5,10 @@
 # Which adapter implementation to use for each role.
 # Each provider's tunable params live in [adapter.<role>.<provider>] below.
 # Secrets (API keys, endpoints) still belong in .env.
-llm_provider = "deepseek" # supported: "deepseek" | "volc_ark"
-stt_provider = "volc"     # supported: "volc"
-tts_provider = "volc"     # supported: "volc"
+llm_provider = "deepseek"    # supported: "deepseek" | "volc_ark"
+vision_provider = "volc_ark" # supported: "volc_ark" (DeepSeek has no vision)
+stt_provider = "volc"        # supported: "volc"
+tts_provider = "volc"        # supported: "volc"
 
 [adapter.llm.deepseek]
 model = "deepseek-v4-flash"
@@ -18,6 +19,11 @@ reasoning_effort = "low"    # only relevant when thinking = "enabled"
 [adapter.llm.volc_ark]
 model = "doubao-seed-2-0-mini-260215"
 context_window = 262144               # 256K tokens
+
+[adapter.vision.volc_ark]
+# Doubao 1.5 Vision Lite endpoint — used by /ingest/extract for OCR +
+# structured language-item extraction from textbook photos.
+model = "ep-20260430135551-7h2lq"
 
 [session]
 # UX soft limit: show "start a new topic?" prompt when turn count reaches this value.

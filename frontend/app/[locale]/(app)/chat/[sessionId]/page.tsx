@@ -21,7 +21,10 @@ export default async function SessionPage({
   const activeLearnerId = account.last_active_learner_id;
   const activeLearner = learners.find((l) => l.id === activeLearnerId) ?? learners[0];
 
-  const sessions = await api.sessions.list(activeLearner.id);
+  const [sessions, groups] = await Promise.all([
+    api.sessions.list(activeLearner.id),
+    api.groups.list(),
+  ]);
   const activeSession = sessions.find((s) => s.id === sessionId);
 
   if (!activeSession) {
@@ -29,6 +32,9 @@ export default async function SessionPage({
   }
 
   const initialTurns = await api.sessions.turns(sessionId);
+  const currentGroup = activeSession.group_id
+    ? (groups.find((g) => g.id === activeSession.group_id) ?? null)
+    : null;
 
   return (
     <ChatClient
@@ -38,6 +44,7 @@ export default async function SessionPage({
       initialTurns={initialTurns}
       activeLearner={activeLearner}
       learners={learners}
+      currentGroup={currentGroup}
     />
   );
 }

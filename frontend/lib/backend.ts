@@ -119,6 +119,75 @@ export type TurnOut = {
   created_at: string;
 };
 
+export type GroupKind =
+  | "textbook_book"
+  | "textbook_unit"
+  | "textbook_lesson"
+  | "personal_collection"
+  | "quick_practice"
+  | "review_set";
+
+export type GroupOut = {
+  id: string;
+  name: string;
+  kind: GroupKind;
+  parent_id: string | null;
+  archived: boolean;
+  source_book_hint: string | null;
+  item_count: number;
+};
+
+export type ItemType = "word" | "phrase" | "pattern";
+export type CefrLevel = "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
+export type Confidence = "high" | "medium" | "low";
+export type SourceType =
+  | "textbook_page"
+  | "worksheet"
+  | "handwritten"
+  | "flashcards"
+  | "screenshot"
+  | "other";
+
+export type ExtractedItem = {
+  text: string;
+  type: ItemType;
+  anchor: string | null;
+  cefr: CefrLevel | null;
+  pos: string | null;
+  confidence: Confidence;
+  note: string | null;
+};
+
+export type ExtractedMetadata = {
+  book_name: string | null;
+  unit: string | null;
+  lesson: string | null;
+  page: string | null;
+  confidence: Confidence;
+};
+
+export type IngestionResult = {
+  source_type: SourceType;
+  metadata: ExtractedMetadata;
+  items: ExtractedItem[];
+  warnings: string[];
+};
+
+export type GroupCreateBody = {
+  name: string;
+  kind: GroupKind;
+  parent_id?: string | null;
+  prompt_notes?: string | null;
+  source_book_hint?: string | null;
+  items: Array<{
+    text: string;
+    type: ItemType;
+    anchor?: string | null;
+    cefr_level?: string | null;
+    pos?: string | null;
+  }>;
+};
+
 export const backend = {
   health: () => request<{ status: string }>("/health"),
   auth: {
@@ -158,6 +227,24 @@ export const backend = {
       request<LearnerOut>(`/learners/${id}/persona/sync`, {
         method: "POST",
         body: body as Record<string, unknown>,
+        headers,
+      }),
+  },
+  groups: {
+    list: (headers?: HeadersInit) =>
+      request<GroupOut[]>("/groups", { headers }),
+    create: (body: GroupCreateBody, headers?: HeadersInit) =>
+      request<GroupOut>("/groups", {
+        method: "POST",
+        body: body as unknown as Record<string, unknown>,
+        headers,
+      }),
+  },
+  ingest: {
+    extract: (formData: FormData, headers?: HeadersInit) =>
+      request<IngestionResult>("/ingest/extract", {
+        method: "POST",
+        body: formData,
         headers,
       }),
   },

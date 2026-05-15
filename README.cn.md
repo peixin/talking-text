@@ -32,8 +32,8 @@
 ```bash
 just install        # 一次性安装前后端依赖
 just dev            # 同时起后端和前端
-just api            # 只起后端 (http://localhost:8000)
-just web            # 只起前端 (http://localhost:3000)
+just api            # 只起后端 (http://localhost:8010)
+just web            # 只起前端 (http://localhost:3010)
 just                # 查看所有可用命令
 ```
 

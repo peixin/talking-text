@@ -1,14 +1,16 @@
 """Protocol for an LLM provider.
 
-Both invoke() and stream() are declared from V1. V1 implementations only need
-to implement invoke(); stream() may raise NotImplementedError until V2.
+invoke() / stream() / invoke_vision() are all declared from V1. Implementations
+may raise NotImplementedError for capabilities the provider does not support
+(e.g. DeepSeek does not currently offer vision); the factory picks providers
+per role so business code never calls an unsupported method.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,17 @@ class LLMAdapter(Protocol):
         *,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+    ) -> LLMResponse: ...
+
+    async def invoke_vision(
+        self,
+        prompt: str,
+        images: list[bytes],
+        *,
+        image_mime: str = "image/jpeg",
+        temperature: float = 0.2,
+        max_tokens: int | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> LLMResponse: ...
 
     def stream(
