@@ -213,8 +213,8 @@ just install          # install backend + frontend deps + lefthook install
 
 # Daily dev
 just dev              # start backend + frontend together
-just api              # backend only (http://localhost:8000)
-just web              # frontend only (http://localhost:3000)
+just api              # backend only (http://localhost:8010)
+just web              # frontend only (http://localhost:3010)
 
 # Pass-through
 just be run <cmd>     # run poetry command in backend/

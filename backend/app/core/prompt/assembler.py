@@ -19,6 +19,21 @@ _TINA_PERSONA = (
     "the conversation going."
 )
 
+_CALIBRATION_INSTRUCTIONS = (
+    "This is your FIRST conversation with this child — you do not yet know "
+    "their English level. Goal: chat naturally while quietly observing their "
+    "level. The child must not feel tested.\n"
+    '- Open with the simplest A1 greeting (e.g. "Hi! What\'s your name?").\n'
+    "- Keep sentences SHORT (5-8 words max).\n"
+    "- Adapt to their response:\n"
+    "  * single-word reply → stay A1, slow down\n"
+    "  * short full sentence → try A1+ (introduce at most one new word)\n"
+    "  * rich sentence → try A2-level vocabulary\n"
+    "Never ask about their level, never use words above B1 in the first "
+    "5 turns, never lecture or quiz. Make them feel safe — the first goal "
+    "is that they speak comfortably."
+)
+
 
 def build_system_prompt(
     scope: ScopeResult,
@@ -34,6 +49,20 @@ def build_system_prompt(
             "Use their name naturally in conversation to make it feel warm and personal."
         )
 
+    if scope.mode == "calibration":
+        sections.append(_CALIBRATION_INSTRUCTIONS)
+        return "\n\n".join(sections)
+
+    if scope.mode == "free":
+        if scope.cefr_level:
+            sections.append(
+                f"Pitch your vocabulary at CEFR {scope.cefr_level}. "
+                "Stick close to that level; introducing at most one or two "
+                "new words per session is fine when the context makes meaning clear."
+            )
+        return "\n\n".join(sections)
+
+    # mode == "group"
     if scope.words or scope.phrases:
         vocab_lines: list[str] = []
         if scope.words:
@@ -57,8 +86,5 @@ def build_system_prompt(
         sections.append(
             "Grammar notes (apply gently, never correct harshly):\n" + scope.prompt_notes
         )
-
-    if scope.focus_instructions:
-        sections.append("Today's practice focus:\n" + scope.focus_instructions)
 
     return "\n\n".join(sections)

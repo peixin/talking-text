@@ -1,29 +1,19 @@
 from app.storage.models.account import Account
 from app.storage.models.account_credential import AccountCredential
-from app.storage.models.curriculum import (
-    Curriculum,
-    CurriculumLesson,
-    CurriculumUnit,
-    LanguageItem,
-    LearnerItemStats,
-    LearnerLesson,
-    LessonItem,
-)
+from app.storage.models.content import ItemGroup, ItemGroupMember, LanguageItem
 from app.storage.models.learner import Learner
+from app.storage.models.learning import LearnerItemStats
 from app.storage.models.session import Session
 from app.storage.models.turn import Turn
 
 __all__ = [
     "Account",
     "AccountCredential",
-    "Curriculum",
-    "CurriculumLesson",
-    "CurriculumUnit",
+    "ItemGroup",
+    "ItemGroupMember",
     "LanguageItem",
-    "LearnerItemStats",
-    "LearnerLesson",
-    "LessonItem",
     "Learner",
+    "LearnerItemStats",
     "Session",
     "Turn",
 ]

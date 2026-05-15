@@ -1,7 +1,7 @@
 """add learner persona
 
 Revision ID: a50676ada60e
-Revises: d9ecc84cd217
+Revises: c9e4f72a1d38
 Create Date: 2026-05-06 23:00:03.307937
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'a50676ada60e'
-down_revision: Union[str, None] = 'd9ecc84cd217'
+down_revision: Union[str, None] = 'c9e4f72a1d38'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

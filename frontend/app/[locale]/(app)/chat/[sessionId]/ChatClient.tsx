@@ -5,13 +5,12 @@ import { useTranslations } from "next-intl";
 import { Check, Keyboard, Menu, Mic, Pencil, Send, X } from "lucide-react";
 import { useLocale } from "next-intl";
 
-import { LearnerOut, LessonInfoOut, SessionOut, TurnOut } from "@/lib/backend";
+import { LearnerOut, SessionOut, TurnOut } from "@/lib/backend";
 import { useRouter } from "@/i18n/routing";
-import { Message, createSession, deleteSession, getAudio, renameSession, setActiveLearner, setSessionLesson } from "./actions";
+import { Message, createSession, deleteSession, getAudio, renameSession } from "./actions";
 import { SessionSidebarClient } from "./SessionSidebarClient";
 import { MessageListClient, AudioState } from "./MessageListClient";
 import { RecordButtonClient, Mode } from "./RecordButtonClient";
-import { LessonBannerClient } from "@/components/LessonBannerClient";
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
@@ -28,10 +27,14 @@ function audioDataUrl(b64: string, fmt: string): string {
 }
 
 function turnsToMessages(turns: TurnOut[]): Message[] {
-  return turns.flatMap((t) => [
-    { role: "user" as const, text: t.text_user, turnId: t.id },
-    { role: "assistant" as const, text: t.text_ai, turnId: t.id },
-  ]);
+  return turns.flatMap((t) => {
+    const msgs: Message[] = [];
+    if (t.text_user) {
+      msgs.push({ role: "user" as const, text: t.text_user, turnId: t.id });
+    }
+    msgs.push({ role: "assistant" as const, text: t.text_ai, turnId: t.id });
+    return msgs;
+  });
 }
 
 export function ChatClient({
@@ -40,16 +43,12 @@ export function ChatClient({
   initialTurns,
   activeLearner,
   learners,
-  enrolledLessons,
-  currentLesson: initialCurrentLesson,
 }: {
   sessions: SessionOut[];
   activeSession: SessionOut;
   initialTurns: TurnOut[];
   activeLearner: LearnerOut;
   learners: LearnerOut[];
-  enrolledLessons: LessonInfoOut[];
-  currentLesson: LessonInfoOut | null;
 }) {
   const t = useTranslations("Chat");
   const tErr = useTranslations("Chat.errors");
@@ -64,11 +63,10 @@ export function ChatClient({
   const [textDraft, setTextDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sessionStatus, setSessionStatus] = useState<"active" | "soft_limit" | "hard_limit">("active");
+  const [sessionStatus, setSessionStatus] = useState<"active" | "soft_limit" | "hard_limit">(
+    "active",
+  );
   const [softLimitDismissed, setSoftLimitDismissed] = useState(false);
-
-  // Lesson
-  const [activeLesson, setActiveLesson] = useState<LessonInfoOut | null>(initialCurrentLesson);
 
   // Title editing
   const [editingTitle, setEditingTitle] = useState(false);
@@ -107,6 +105,28 @@ export function ChatClient({
       titleInputRef.current.select();
     }
   }, [editingTitle]);
+
+  // Auto-play the AI greeting — only for freshly created sessions (< 10s old)
+  useEffect(() => {
+    // Restore preferred input mode
+    const savedMode = localStorage.getItem("talking-text-input-mode") || "voice";
+    setInputMode(savedMode as "voice" | "text");
+
+    const ageMs = Date.now() - new Date(activeSession.created_at).getTime();
+    const isNew = ageMs < 10_000;
+    if (
+      isNew &&
+      messages.length === 1 &&
+      messages[0].role === "assistant" &&
+      savedMode === "voice"
+    ) {
+      const turnId = messages[0].turnId;
+      if (turnId) {
+        void handlePlay(turnId, "out");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Audio management ──────────────────────────────────────────────────────
 
@@ -361,7 +381,12 @@ export function ChatClient({
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, sampleRate: 48000, echoCancellation: true, noiseSuppression: true },
+        audio: {
+          channelCount: 1,
+          sampleRate: 48000,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
       });
       streamRef.current = stream;
       const mime = pickMimeType();
@@ -423,14 +448,6 @@ export function ChatClient({
     await submitTurn(fd, false);
   }
 
-  // ── Lesson management ─────────────────────────────────────────────────────
-
-  async function handleLessonChange(lessonId: string) {
-    await setSessionLesson(activeSession.id, lessonId);
-    const found = enrolledLessons.find((l) => l.lesson_id === lessonId) ?? null;
-    setActiveLesson(found);
-  }
-
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -470,10 +487,16 @@ export function ChatClient({
                 placeholder={t("session_title_placeholder")}
                 maxLength={200}
               />
-              <button onClick={commitTitle} className="text-muted-foreground hover:text-foreground">
+              <button
+                onClick={commitTitle}
+                className="text-muted-foreground hover:text-foreground"
+              >
                 <Check className="h-4 w-4" />
               </button>
-              <button onClick={cancelEditTitle} className="text-muted-foreground hover:text-foreground">
+              <button
+                onClick={cancelEditTitle}
+                className="text-muted-foreground hover:text-foreground"
+              >
                 <X className="h-4 w-4" />
               </button>
             </>
@@ -497,19 +520,18 @@ export function ChatClient({
           )}
         </div>
 
-        {/* Lesson banner */}
-        <LessonBannerClient
-          sessionId={activeSession.id}
-          currentLesson={activeLesson}
-          enrolledLessons={enrolledLessons}
-          onLessonChange={handleLessonChange}
-        />
+        {/* Scope banner — placeholder until ingestion + group picker land */}
+        <div className="border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+          ✨ {t("scope_free_practice")}
+        </div>
 
         {/* Singleton audio element — owned here, shared via handlePlay */}
         <audio
           ref={audioRef}
           hidden
-          onEnded={() => setAudioState({ playingTurnId: null, playingDir: null, loadingKey: null })}
+          onEnded={() =>
+            setAudioState({ playingTurnId: null, playingDir: null, loadingKey: null })
+          }
         />
 
         <MessageListClient
@@ -563,14 +585,24 @@ export function ChatClient({
                   type="button"
                   onClick={() => {
                     setError(null);
-                    setInputMode((m) => (m === "voice" ? "text" : "voice"));
+                    setInputMode((m) => {
+                      const next = m === "voice" ? "text" : "voice";
+                      localStorage.setItem("talking-text-input-mode", next);
+                      return next;
+                    });
                   }}
                   className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
                 >
                   {inputMode === "voice" ? (
-                    <><Keyboard className="h-3.5 w-3.5" />{t("switch_to_text")}</>
+                    <>
+                      <Keyboard className="h-3.5 w-3.5" />
+                      {t("switch_to_text")}
+                    </>
                   ) : (
-                    <><Mic className="h-3.5 w-3.5" />{t("switch_to_voice")}</>
+                    <>
+                      <Mic className="h-3.5 w-3.5" />
+                      {t("switch_to_voice")}
+                    </>
                   )}
                 </button>
               </div>

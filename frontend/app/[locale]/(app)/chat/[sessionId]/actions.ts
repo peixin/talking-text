@@ -17,17 +17,12 @@ async function authHeaders(): Promise<HeadersInit> {
 
 // ── Session actions ───────────────────────────────────────────────────────────
 
-export async function createSession(learnerId: string, lessonId?: string | null): Promise<SessionOut> {
+export async function createSession(
+  learnerId: string,
+  groupId?: string | null,
+): Promise<SessionOut> {
   const api = await createApi();
-  return api.sessions.create(learnerId, lessonId);
-}
-
-export async function setSessionLesson(
-  sessionId: string,
-  lessonId: string,
-): Promise<void> {
-  const api = await createApi();
-  await api.sessions.setLesson(sessionId, lessonId);
+  return api.sessions.create(learnerId, groupId);
 }
 
 export async function renameSession(sessionId: string, title: string): Promise<SessionOut> {
@@ -51,9 +46,9 @@ export type Message = {
   role: "user" | "assistant";
   text: string;
   turnId?: string;
-  streaming?: boolean;   // assistant: LLM is still generating
-  pending?: boolean;     // user (voice): awaiting STT transcription
-  inputMode?: "voice" | "text";  // controls whether input play button shows
+  streaming?: boolean;
+  pending?: boolean;
+  inputMode?: "voice" | "text";
 };
 
 export type SendTurnResult =
@@ -62,19 +57,16 @@ export type SendTurnResult =
       turn_id: string;
       text_user: string;
       text_ai: string;
-      audio_b64: string | null;    // null in text mode
-      audio_format: string | null; // null in text mode
+      audio_b64: string | null;
+      audio_format: string | null;
       session_title: string | null;
-      session_status: string;      // "active" | "soft_limit"
+      session_status: string;
     }
   | { ok: false; error: string };
 
 // ── Turn action ───────────────────────────────────────────────────────────────
 
-export async function sendTurn(
-  sessionId: string,
-  formData: FormData,
-): Promise<SendTurnResult> {
+export async function sendTurn(sessionId: string, formData: FormData): Promise<SendTurnResult> {
   const audio = formData.get("audio");
   const text = formData.get("text");
 
@@ -126,10 +118,6 @@ export type GetAudioResult =
   | { ok: true; audio_b64: string; audio_format: string }
   | { ok: false; error: string };
 
-/**
- * Fetch audio for one turn direction. The backend generates TTS on demand
- * when no audio file is stored (text-mode turns or storage disabled).
- */
 export async function getAudio(
   sessionId: string,
   turnId: string,

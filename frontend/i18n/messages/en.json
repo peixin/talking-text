@@ -84,6 +84,7 @@
     "session_delete_confirm": "Delete this conversation?",
     "session_rename": "Rename",
     "session_title_placeholder": "Name this conversation…",
+    "scope_free_practice": "Free practice — calibrating Tina to your level",
     "switch_to_text": "Switch to text",
     "switch_to_voice": "Switch to voice",
     "text_placeholder": "Type a message, Enter to send, Shift+Enter for newline",

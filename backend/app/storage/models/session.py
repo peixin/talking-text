@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 
-import sqlalchemy as sa
 from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +18,9 @@ class Session(Base, TimestampMixin):
     ``title`` starts NULL and is filled by a small LLM call after the first
     turn. The user can rename it at any time.
 
+    ``group_id`` is the active scope. NULL means free practice (scope falls
+    back to the learner's cefr_level, or calibration mode if level is unset).
+
     Soft-deleted sessions are hidden from the UI but retained in the DB so
     their turns remain queryable for billing and history.
     """
@@ -31,7 +33,6 @@ class Session(Base, TimestampMixin):
     )
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
-    lesson_id: Mapped[uuid.UUID | None] = mapped_column(
-        sa.ForeignKey("curriculum_lesson.id", ondelete="SET NULL"), nullable=True
+    group_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("item_group.id", ondelete="SET NULL"), nullable=True
     )
-    collection_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid(), nullable=True)

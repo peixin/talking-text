@@ -68,18 +68,17 @@ class DialogOrchestrator:
         learner_id: uuid.UUID,
         session_id: uuid.UUID,
     ) -> str:
-        """Fetch session lesson binding and learner persona, then build the system prompt."""
+        """Fetch session group binding and learner persona, then build the system prompt."""
         session_row = await db.execute(select(Session).where(Session.id == session_id))
         session = session_row.scalar_one_or_none()
-        lesson_id = session.lesson_id if session else None
-        collection_id = session.collection_id if session else None
+        group_id = session.group_id if session else None
 
         learner_row = await db.execute(select(Learner).where(Learner.id == learner_id))
         learner = learner_row.scalar_one_or_none()
         learner_name = learner.name if learner else None
         persona_prompt = (learner.ai_persona_prompt if learner else None) or _TINA_PERSONA
 
-        scope = await self._scope.get_scope(db, learner_id, lesson_id, collection_id)
+        scope = await self._scope.get_scope(db, learner_id, group_id)
         return build_system_prompt(scope, persona_prompt=persona_prompt, learner_name=learner_name)
 
     async def single_turn(
@@ -225,6 +224,59 @@ class DialogOrchestrator:
             audio_out=audio_out,
             audio_out_format=audio_out_format,
         )
+
+    async def initiate_session(
+        self,
+        *,
+        db: AsyncSession,
+        learner_id: uuid.UUID,
+        session_id: uuid.UUID,
+    ) -> None:
+        """Automatically generate an AI greeting for a new session."""
+        system_prompt = await self._resolve_system_prompt(db, learner_id, session_id)
+
+        session_row = await db.execute(select(Session).where(Session.id == session_id))
+        session = session_row.scalar_one()
+
+        if session.group_id:
+            greeting_instruction = (
+                "Please say a brief, friendly hello to the child. "
+                "Mention that we are going to practice the words and sentences for today's lesson, "
+                "and ask a simple, engaging question to start the conversation."
+            )
+        else:
+            greeting_instruction = (
+                "Please say a brief, friendly hello to the child. "
+                "Since no specific lesson is selected today, "
+                "ask them what they would like to talk about, "
+                "or suggest a fun topic to start the conversation."
+            )
+
+        messages = [
+            LLMMessage(role="system", content=system_prompt),
+            LLMMessage(role="user", content=f"(System instruction: {greeting_instruction})"),
+        ]
+
+        llm_response = await self._llm.invoke(messages, max_tokens=100)
+        text_ai = llm_response.text.strip()
+
+        turn_id = uuid.uuid4()
+        turn = Turn(
+            id=turn_id,
+            learner_id=learner_id,
+            session_id=session_id,
+            sequence=1,
+            text_user="",  # Empty text_user means it's an AI-initiated turn
+            text_ai=text_ai,
+            audio_in_path=None,
+            audio_out_path=None,
+            stt_audio_seconds=0.0,
+            llm_input_tokens=llm_response.input_tokens,
+            llm_output_tokens=llm_response.output_tokens,
+            tts_chars=0,
+        )
+        db.add(turn)
+        await db.commit()
 
     async def stream_turn(
         self,

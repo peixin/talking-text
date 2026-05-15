@@ -1,6 +1,6 @@
 import "server-only";
 
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8010";
 
 type FetchOptions = Omit<RequestInit, "body"> & {
   body?: Record<string, unknown> | BodyInit;
@@ -70,7 +70,12 @@ async function request<T>(path: string, options: FetchOptions = {}): Promise<T> 
   return res.json() as Promise<T>;
 }
 
-export type AccountOut = { id: string; name: string; last_active_learner_id?: string; session_token?: string };
+export type AccountOut = {
+  id: string;
+  name: string;
+  last_active_learner_id?: string;
+  session_token?: string;
+};
 export type LearnerOut = {
   id: string;
   name: string;
@@ -94,15 +99,15 @@ export type TurnResponse = {
   turn_id: string;
   text_user: string;
   text_ai: string;
-  audio_b64: string | null;    // null in text mode
+  audio_b64: string | null; // null in text mode
   audio_format: string | null; // null in text mode
   session_title: string | null;
-  session_status: string;      // "active" | "soft_limit"
+  session_status: string; // "active" | "soft_limit"
 };
 export type SessionOut = {
   id: string;
   learner_id: string;
-  lesson_id: string | null;
+  group_id: string | null;
   title: string | null;
   created_at: string;
   updated_at: string;
@@ -112,30 +117,6 @@ export type TurnOut = {
   text_user: string;
   text_ai: string;
   created_at: string;
-};
-export type LessonInfoOut = {
-  lesson_id: string;
-  lesson_title: string | null;
-  lesson_sequence: number;
-  unit_number: string;
-  unit_title: string;
-  curriculum_name: string;
-  added_at: string;
-};
-export type CurriculumSummary = {
-  id: string;
-  name: string;
-  publisher: string | null;
-};
-export type CurriculumLessonsOut = {
-  curriculum: CurriculumSummary;
-  units: {
-    id: string;
-    unit_number: string;
-    title: string;
-    sequence: number;
-    lessons: { id: string; sequence: number; title: string | null }[];
-  }[];
 };
 
 export const backend = {
@@ -155,12 +136,10 @@ export const backend = {
       }),
     logout: (headers?: HeadersInit) =>
       request<void>("/auth/logout", { method: "POST", headers }),
-    me: (headers?: HeadersInit) =>
-      request<AccountOut>("/auth/me", { headers }),
+    me: (headers?: HeadersInit) => request<AccountOut>("/auth/me", { headers }),
   },
   learners: {
-    list: (headers?: HeadersInit) =>
-      request<LearnerOut[]>("/learners", { headers }),
+    list: (headers?: HeadersInit) => request<LearnerOut[]>("/learners", { headers }),
     create: (name: string, headers?: HeadersInit) =>
       request<LearnerOut>("/learners", { method: "POST", body: { name }, headers }),
     update: (id: string, name: string, headers?: HeadersInit) =>
@@ -185,10 +164,10 @@ export const backend = {
   sessions: {
     list: (learnerId: string, headers?: HeadersInit) =>
       request<SessionOut[]>(`/sessions?learner_id=${learnerId}`, { headers }),
-    create: (learnerId: string, lessonId?: string | null, headers?: HeadersInit) =>
+    create: (learnerId: string, groupId?: string | null, headers?: HeadersInit) =>
       request<SessionOut>("/sessions", {
         method: "POST",
-        body: { learner_id: learnerId, lesson_id: lessonId ?? null },
+        body: { learner_id: learnerId, group_id: groupId ?? null },
         headers,
       }),
     rename: (id: string, title: string, headers?: HeadersInit) =>
@@ -197,10 +176,10 @@ export const backend = {
         body: { title },
         headers,
       }),
-    setLesson: (sessionId: string, lessonId: string, headers?: HeadersInit) =>
+    setGroup: (sessionId: string, groupId: string | null, headers?: HeadersInit) =>
       request<SessionOut>(`/sessions/${sessionId}`, {
         method: "PATCH",
-        body: { lesson_id: lessonId },
+        body: { group_id: groupId },
         headers,
       }),
     delete: (id: string, headers?: HeadersInit) =>
@@ -213,27 +192,6 @@ export const backend = {
       request<TurnResponse>(`/sessions/${sessionId}/turns`, {
         method: "POST",
         body: formData,
-        headers,
-      }),
-  },
-  curricula: {
-    list: (headers?: HeadersInit) =>
-      request<CurriculumSummary[]>("/curricula", { headers }),
-    getLessons: (curriculumId: string, headers?: HeadersInit) =>
-      request<CurriculumLessonsOut>(`/curricula/${curriculumId}/lessons`, { headers }),
-  },
-  learnerLessons: {
-    list: (learnerId: string, headers?: HeadersInit) =>
-      request<LessonInfoOut[]>(`/learners/${learnerId}/lessons`, { headers }),
-    add: (learnerId: string, lessonId: string, headers?: HeadersInit) =>
-      request<void>(`/learners/${learnerId}/lessons`, {
-        method: "POST",
-        body: { lesson_id: lessonId },
-        headers,
-      }),
-    remove: (learnerId: string, lessonId: string, headers?: HeadersInit) =>
-      request<void>(`/learners/${learnerId}/lessons/${lessonId}`, {
-        method: "DELETE",
         headers,
       }),
   },

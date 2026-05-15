@@ -84,6 +84,7 @@
     "session_delete_confirm": "确定要删除这个对话吗？",
     "session_rename": "重命名",
     "session_title_placeholder": "给这次对话起个名字…",
+    "scope_free_practice": "自由练习 · 正在感受你的水平",
     "switch_to_text": "切换文字输入",
     "switch_to_voice": "切换语音输入",
     "text_placeholder": "输入消息，Enter 发送，Shift+Enter 换行",

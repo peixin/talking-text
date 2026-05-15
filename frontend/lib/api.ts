@@ -49,27 +49,15 @@ export async function createApi() {
     },
     sessions: {
       list: (learnerId: string) => c((h) => backend.sessions.list(learnerId, h)),
-      create: (learnerId: string, lessonId?: string | null) =>
-        c((h) => backend.sessions.create(learnerId, lessonId, h)),
+      create: (learnerId: string, groupId?: string | null) =>
+        c((h) => backend.sessions.create(learnerId, groupId, h)),
       rename: (id: string, title: string) => c((h) => backend.sessions.rename(id, title, h)),
-      setLesson: (sessionId: string, lessonId: string) =>
-        c((h) => backend.sessions.setLesson(sessionId, lessonId, h)),
+      setGroup: (sessionId: string, groupId: string | null) =>
+        c((h) => backend.sessions.setGroup(sessionId, groupId, h)),
       delete: (id: string) => c((h) => backend.sessions.delete(id, h)),
       turns: (id: string) => c((h) => backend.sessions.turns(id, h)),
       getTurnAudio: (sessionId: string, turnId: string, dir: "in" | "out") =>
         c((h) => backend.sessions.getTurnAudio(sessionId, turnId, dir, h)),
-    },
-    curricula: {
-      list: () => c((h) => backend.curricula.list(h)),
-      getLessons: (curriculumId: string) =>
-        c((h) => backend.curricula.getLessons(curriculumId, h)),
-    },
-    learnerLessons: {
-      list: (learnerId: string) => c((h) => backend.learnerLessons.list(learnerId, h)),
-      add: (learnerId: string, lessonId: string) =>
-        c((h) => backend.learnerLessons.add(learnerId, lessonId, h)),
-      remove: (learnerId: string, lessonId: string) =>
-        c((h) => backend.learnerLessons.remove(learnerId, lessonId, h)),
     },
   };
 }

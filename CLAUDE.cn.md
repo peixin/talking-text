@@ -212,8 +212,8 @@ just install          # 安装前后端依赖 + lefthook install
 
 # 日常开发
 just dev              # 同时起前后端
-just api              # 只起后端（http://localhost:8000）
-just web              # 只起前端（http://localhost:3000）
+just api              # 只起后端（http://localhost:8010）
+just web              # 只起前端（http://localhost:3010）
 
 # 透传
 just be run <cmd>     # backend 下跑 poetry 命令

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Collapsible,
@@ -18,49 +19,35 @@ interface Props {
   onSync: (body: SyncPersonaBody) => Promise<LearnerOut>;
 }
 
-const DEFAULT_PROMPT =
-  "You are Tina, a warm and patient English teacher chatting with an " +
-  "elementary-school child in mainland China. Always respond in English. " +
-  "Use simple, age-appropriate vocabulary and short sentences (≤ 15 words). " +
-  "If the child speaks Chinese, gently re-phrase their idea in English and " +
-  "invite them to repeat it. Stay encouraging; never correct mistakes " +
-  "harshly. Each turn, ask exactly one short follow-up question to keep " +
-  "the conversation going. She uses she/her pronouns.";
+const DEFAULT_PROMPT = `
+You are Tina, a warm and patient English teacher chatting with an
+elementary-school child in mainland China. Always respond in English.
+Use simple, age-appropriate vocabulary and short sentences (≤ 15 words).
+If the child speaks Chinese, gently re-phrase their idea in English and
+invite them to repeat it. Stay encouraging; never correct mistakes·
+harshly. Each turn, ask exactly one short follow-up question to keep
+the conversation going. She uses she/her pronouns.
+`.trim();
 
 export function AIPersonaSettingsClient({ initial, onSync }: Props) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [name, setName] = useState(initial.ai_name);
   const [gender, setGender] = useState(initial.ai_gender);
   const [prompt, setPrompt] = useState(initial.ai_persona_prompt ?? DEFAULT_PROMPT);
   const [isPending, startTransition] = useTransition();
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Skip sync on initial mount — only fire when user actually edits.
-  const mountedRef = useRef(false);
-
-  useEffect(() => {
-    if (!mountedRef.current) {
-      mountedRef.current = true;
-      return;
-    }
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      startTransition(async () => {
-        const updated = await onSync({
-          ai_name: name,
-          ai_gender: gender,
-          ai_persona_prompt: prompt,
-        });
-        // Reflect whatever the LLM reconciled back into the fields
-        setName(updated.ai_name);
-        setGender(updated.ai_gender);
-        setPrompt(updated.ai_persona_prompt ?? DEFAULT_PROMPT);
+  const handleSave = () => {
+    startTransition(async () => {
+      const updated = await onSync({
+        ai_name: name,
+        ai_gender: gender,
+        ai_persona_prompt: prompt,
       });
-    }, 800);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [name, gender, prompt, onSync]);
+      // Reflect whatever the LLM reconciled back into the fields
+      setName(updated.ai_name);
+      setGender(updated.ai_gender);
+      setPrompt(updated.ai_persona_prompt ?? DEFAULT_PROMPT);
+    });
+  };
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -119,6 +106,13 @@ export function AIPersonaSettingsClient({ initial, onSync }: Props) {
           <p className="text-muted-foreground text-xs">
             Changing name or gender above will automatically update this prompt via AI.
           </p>
+        </div>
+
+        <div className="pt-2 flex justify-end">
+          <Button onClick={handleSave} disabled={isPending} size="sm">
+            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isPending ? "Saving…" : "Save Settings"}
+          </Button>
         </div>
       </CollapsibleContent>
     </Collapsible>

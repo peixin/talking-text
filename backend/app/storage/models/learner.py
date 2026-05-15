@@ -30,6 +30,8 @@ class Learner(Base, TimestampMixin):
     )
     ai_persona_prompt: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
 
+    cefr_level: Mapped[str | None] = mapped_column(String(4), nullable=True)
+
     account: Mapped[Account] = relationship(
         "Account", back_populates="learners", foreign_keys=[account_id]
     )
