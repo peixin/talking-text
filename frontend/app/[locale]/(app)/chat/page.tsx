@@ -6,6 +6,11 @@ import { Link } from "@/i18n/routing";
 import { createApi } from "@/lib/api";
 import type { GroupKind, GroupOut, SessionOut } from "@/lib/backend";
 
+// `t` namespace below is "Chat"; the no-learners branch now redirects to
+// /onboarding/learner so the surrounding "no_learners_*" strings stay in
+// /onboarding instead.
+
+
 const KIND_EMOJI: Record<GroupKind, string> = {
   textbook_book: "📕",
   textbook_unit: "📕",
@@ -43,18 +48,7 @@ export default async function ChatHomePage() {
   const learners = await api.learners.list();
 
   if (learners.length === 0) {
-    return (
-      <div className="mx-auto flex max-w-2xl flex-col items-center justify-center py-20 text-center">
-        <h2 className="mb-4 text-xl font-medium">{t("no_learners_title")}</h2>
-        <p className="text-muted-foreground mb-8">{t("no_learners_desc")}</p>
-        <Link
-          href="/parent/learners"
-          className="bg-primary text-primary-foreground rounded-md px-6 py-2 transition hover:opacity-90"
-        >
-          {t("go_add_child")}
-        </Link>
-      </div>
-    );
+    redirect(`/${locale}/onboarding/learner`);
   }
 
   const account = await api.auth.me();

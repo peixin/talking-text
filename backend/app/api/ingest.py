@@ -17,7 +17,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pydantic import BaseModel
 
 from app.adapters import factory
+from app.adapters.stt.protocol import STTRequest
 from app.api.auth import get_current_account
+from app.audio_codec import webm_opus_to_ogg
 from app.storage.models.account import Account
 
 log = logging.getLogger(__name__)
@@ -248,3 +250,50 @@ async def extract_content(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Extraction returned malformed data; please try again.",
         ) from None
+
+
+class TranscribeResult(BaseModel):
+    text: str
+
+
+@router.post("/transcribe", response_model=TranscribeResult)
+async def transcribe_audio(
+    _account: Annotated[Account, Depends(get_current_account)],
+    audio: Annotated[UploadFile, File()],
+) -> TranscribeResult:
+    """Run STT on the uploaded audio and return the transcript only.
+
+    Used by the ingest drawer's voice trigger: the parent records a short clip
+    describing what to learn, the transcript becomes the description fed to
+    /ingest/extract.
+    """
+    data = await audio.read()
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty audio.",
+        )
+
+    # Browser MediaRecorder emits WebM/Opus; remux to OGG so the STT adapter
+    # (which expects ogg/opus) accepts it.
+    try:
+        ogg_bytes = await webm_opus_to_ogg(data, sample_rate=16000)
+    except Exception as e:
+        log.exception("ingest transcribe — audio remux failed")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not read the audio clip.",
+        ) from e
+
+    try:
+        result = await factory.stt.invoke(
+            STTRequest(audio=ogg_bytes, audio_format="ogg", sample_rate=16000)
+        )
+    except Exception as e:
+        log.exception("ingest transcribe — STT call failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Transcription failed; please try again.",
+        ) from e
+
+    return TranscribeResult(text=result.text.strip())

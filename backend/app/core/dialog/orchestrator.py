@@ -32,6 +32,7 @@ from app.adapters.tts.protocol import TTSAdapter, TTSRequest
 from app.app_config import app_config
 from app.config import settings
 from app.core.calibration import estimate_and_maybe_settle
+from app.core.mastery import analyze_session, scan_turn_for_items
 from app.core.prompt import _TINA_PERSONA, build_system_prompt
 from app.core.scope import ScopeComputer
 from app.storage.models.learner import Learner
@@ -228,8 +229,9 @@ class DialogOrchestrator:
         if app_config.debug.perf_logging:
             log.info("[perf] DB persist: %.3fs", time.monotonic() - t_db)
 
-        # Background calibration — no-op once learner.cefr_level is set.
+        # Background tasks — none of these block the chat reply.
         if resolved_text_user:
+            # Calibration: estimate the learner's level until settled.
             _spawn_background(
                 estimate_and_maybe_settle(
                     learner_id=learner_id,
@@ -238,6 +240,18 @@ class DialogOrchestrator:
                     learner_text=resolved_text_user,
                 )
             )
+            # Mastery anchor-scan: tick seen_count for any in-scope items the
+            # learner just produced. No-op if the session has no group.
+            _spawn_background(
+                scan_turn_for_items(
+                    learner_id=learner_id,
+                    session_id=session_id,
+                    text_user=resolved_text_user,
+                )
+            )
+        # Session-end mastery analysis: fire once when we cross the soft limit.
+        if next_sequence == app_config.session.max_turns:
+            _spawn_background(analyze_session(learner_id=learner_id, session_id=session_id))
 
         if app_config.debug.perf_logging:
             log.info("[perf] orchestrator TOTAL: %.3fs", time.monotonic() - t_total)
@@ -436,8 +450,9 @@ class DialogOrchestrator:
         if app_config.debug.perf_logging:
             log.info("[perf] DB persist: %.3fs", time.monotonic() - t_db)
 
-        # Background calibration — no-op once learner.cefr_level is set.
+        # Background tasks — none of these block the chat reply.
         if resolved_text_user:
+            # Calibration: estimate the learner's level until settled.
             _spawn_background(
                 estimate_and_maybe_settle(
                     learner_id=learner_id,
@@ -446,6 +461,18 @@ class DialogOrchestrator:
                     learner_text=resolved_text_user,
                 )
             )
+            # Mastery anchor-scan: tick seen_count for any in-scope items the
+            # learner just produced. No-op if the session has no group.
+            _spawn_background(
+                scan_turn_for_items(
+                    learner_id=learner_id,
+                    session_id=session_id,
+                    text_user=resolved_text_user,
+                )
+            )
+        # Session-end mastery analysis: fire once when we cross the soft limit.
+        if next_sequence == app_config.session.max_turns:
+            _spawn_background(analyze_session(learner_id=learner_id, session_id=session_id))
 
         # turn is now in DB — safe to surface the turn_id to the client.
         yield {

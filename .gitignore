@@ -684,7 +684,9 @@ data/
 data-backup/qshell
 data-backup/restore/db-restore-config.json
 
-materials
+# Root-only — private materials directory. Use a leading slash so nested
+# `materials/` routes (e.g. frontend/app/.../parent/materials/) are not matched.
+/materials/
 
 # The Python template above ignores all `lib/` directories, but
 # frontend/lib/ contains tracked TypeScript source files.

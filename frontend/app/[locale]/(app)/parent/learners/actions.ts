@@ -16,7 +16,7 @@ export async function createLearner(formData: FormData) {
   if (!name.trim()) return { error: "LEARNER_NAME_REQUIRED" };
 
   try {
-    await backend.learners.create(name, await getHeaders());
+    await backend.learners.create(name, null, await getHeaders());
     revalidatePath("/parent/learners");
     revalidatePath("/chat");
     return { success: true };

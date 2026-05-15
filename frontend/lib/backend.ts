@@ -82,6 +82,7 @@ export type LearnerOut = {
   ai_name: string;
   ai_gender: string;
   ai_persona_prompt: string | null;
+  cefr_level: string | null;
 };
 
 export type UpdatePersonaBody = {
@@ -209,8 +210,12 @@ export const backend = {
   },
   learners: {
     list: (headers?: HeadersInit) => request<LearnerOut[]>("/learners", { headers }),
-    create: (name: string, headers?: HeadersInit) =>
-      request<LearnerOut>("/learners", { method: "POST", body: { name }, headers }),
+    create: (name: string, cefrLevel?: string | null, headers?: HeadersInit) =>
+      request<LearnerOut>("/learners", {
+        method: "POST",
+        body: { name, cefr_level: cefrLevel ?? null },
+        headers,
+      }),
     update: (id: string, name: string, headers?: HeadersInit) =>
       request<LearnerOut>(`/learners/${id}`, { method: "PUT", body: { name }, headers }),
     delete: (id: string, headers?: HeadersInit) =>
@@ -231,18 +236,39 @@ export const backend = {
       }),
   },
   groups: {
-    list: (headers?: HeadersInit) =>
-      request<GroupOut[]>("/groups", { headers }),
+    list: (includeArchived?: boolean, headers?: HeadersInit) =>
+      request<GroupOut[]>(
+        `/groups${includeArchived ? "?include_archived=true" : ""}`,
+        { headers },
+      ),
     create: (body: GroupCreateBody, headers?: HeadersInit) =>
       request<GroupOut>("/groups", {
         method: "POST",
         body: body as unknown as Record<string, unknown>,
         headers,
       }),
+    update: (
+      id: string,
+      body: { name?: string; archived?: boolean; prompt_notes?: string | null },
+      headers?: HeadersInit,
+    ) =>
+      request<GroupOut>(`/groups/${id}`, {
+        method: "PATCH",
+        body: body as Record<string, unknown>,
+        headers,
+      }),
+    delete: (id: string, headers?: HeadersInit) =>
+      request<void>(`/groups/${id}`, { method: "DELETE", headers }),
   },
   ingest: {
     extract: (formData: FormData, headers?: HeadersInit) =>
       request<IngestionResult>("/ingest/extract", {
+        method: "POST",
+        body: formData,
+        headers,
+      }),
+    transcribe: (formData: FormData, headers?: HeadersInit) =>
+      request<{ text: string }>("/ingest/transcribe", {
         method: "POST",
         body: formData,
         headers,

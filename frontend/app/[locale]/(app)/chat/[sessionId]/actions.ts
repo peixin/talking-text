@@ -58,6 +58,29 @@ export async function setSessionGroup(
 
 // ── Ingestion actions ────────────────────────────────────────────────────────
 
+export type TranscribeIngestionResult =
+  | { ok: true; text: string }
+  | { ok: false; error: string };
+
+export async function transcribeIngestion(
+  formData: FormData,
+): Promise<TranscribeIngestionResult> {
+  const h = await authHeaders();
+  try {
+    const result = await backend.ingest.transcribe(formData, h);
+    return { ok: true, text: result.text };
+  } catch (e) {
+    if (e instanceof BackendError) {
+      if (e.status === 401) {
+        const locale = await getLocale();
+        redirect(`/${locale}/login?expired=1`);
+      }
+      return { ok: false, error: e.detail || "INGEST_TRANSCRIBE_FAILED" };
+    }
+    return { ok: false, error: "INGEST_TRANSCRIBE_FAILED" };
+  }
+}
+
 export type ExtractIngestionResult =
   | { ok: true; result: IngestionResult }
   | { ok: false; error: string };

@@ -53,6 +53,12 @@ class GroupCreate(BaseModel):
     source_book_hint: str | None = Field(default=None, max_length=200)
 
 
+class GroupUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    archived: bool | None = None
+    prompt_notes: str | None = None
+
+
 class GroupOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -204,3 +210,47 @@ async def create_group(
         source_book_hint=group.source_book_hint,
         item_count=len(set(item_ids)),
     )
+
+
+@router.patch("/groups/{group_id}", response_model=GroupOut)
+async def update_group(
+    group_id: uuid.UUID,
+    body: GroupUpdate,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> GroupOut:
+    group = await _require_owned_group(group_id, account, db)
+    if body.name is not None:
+        group.name = body.name.strip()
+    if body.archived is not None:
+        group.archived = body.archived
+    if body.prompt_notes is not None:
+        group.prompt_notes = body.prompt_notes or None
+    await db.commit()
+    await db.refresh(group)
+
+    count_row = await db.execute(
+        select(ItemGroupMember.item_id).where(ItemGroupMember.group_id == group.id)
+    )
+    item_count = len(list(count_row.scalars().all()))
+
+    return GroupOut(
+        id=group.id,
+        name=group.name,
+        kind=group.kind,  # type: ignore[arg-type]
+        parent_id=group.parent_id,
+        archived=group.archived,
+        source_book_hint=group.source_book_hint,
+        item_count=item_count,
+    )
+
+
+@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def delete_group(
+    group_id: uuid.UUID,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    group = await _require_owned_group(group_id, account, db)
+    await db.delete(group)
+    await db.commit()

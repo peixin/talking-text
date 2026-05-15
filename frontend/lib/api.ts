@@ -38,7 +38,8 @@ export async function createApi() {
     },
     learners: {
       list: () => c((h) => backend.learners.list(h)),
-      create: (name: string) => c((h) => backend.learners.create(name, h)),
+      create: (name: string, cefrLevel?: string | null) =>
+        c((h) => backend.learners.create(name, cefrLevel, h)),
       update: (id: string, name: string) => c((h) => backend.learners.update(id, name, h)),
       delete: (id: string) => c((h) => backend.learners.delete(id, h)),
       setActive: (id: string) => c((h) => backend.learners.setActive(id, h)),
@@ -48,8 +49,14 @@ export async function createApi() {
         c((h) => backend.learners.syncPersona(id, body, h)),
     },
     groups: {
-      list: () => c((h) => backend.groups.list(h)),
+      list: (includeArchived?: boolean) =>
+        c((h) => backend.groups.list(includeArchived, h)),
       create: (body: GroupCreateBody) => c((h) => backend.groups.create(body, h)),
+      update: (
+        id: string,
+        body: { name?: string; archived?: boolean; prompt_notes?: string | null },
+      ) => c((h) => backend.groups.update(id, body, h)),
+      delete: (id: string) => c((h) => backend.groups.delete(id, h)),
     },
     ingest: {
       extract: (formData: FormData) => c((h) => backend.ingest.extract(formData, h)),

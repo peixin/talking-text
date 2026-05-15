@@ -18,7 +18,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CefrLevel, ExtractedItem, GroupOut, IngestionResult, ItemType } from "@/lib/backend";
-import { createGroup, extractIngestion, setSessionGroup } from "./actions";
+import { createGroup, extractIngestion, setSessionGroup, transcribeIngestion } from "./actions";
 
 export type IngestTrigger = "camera" | "voice" | "file";
 
@@ -98,6 +98,14 @@ export function IngestDrawerClient({
   const [items, setItems] = useState<ExtractedItem[]>([]);
   const [groupName, setGroupName] = useState("");
 
+  // Voice ingestion (independent of the chat record button).
+  const [recordMode, setRecordMode] = useState<"idle" | "recording" | "transcribing">("idle");
+  const [recordError, setRecordError] = useState<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recorderChunksRef = useRef<BlobPart[]>([]);
+  const recorderStreamRef = useRef<MediaStream | null>(null);
+  const recorderMimeRef = useRef<string>("");
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -108,14 +116,108 @@ export function IngestDrawerClient({
       setDescription("");
       setItems([]);
       setGroupName("");
+      setRecordMode("idle");
+      setRecordError(null);
+    } else {
+      stopRecorderStream();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     if (initialTrigger === "camera") cameraInputRef.current?.click();
     if (initialTrigger === "file") fileInputRef.current?.click();
+    if (initialTrigger === "voice") void startRecording();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialTrigger]);
+
+  function pickRecorderMime(): string {
+    if (typeof MediaRecorder === "undefined") return "";
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/mp4",
+    ];
+    for (const m of candidates) if (MediaRecorder.isTypeSupported(m)) return m;
+    return "";
+  }
+
+  function stopRecorderStream() {
+    recorderStreamRef.current?.getTracks().forEach((tr) => tr.stop());
+    recorderStreamRef.current = null;
+    recorderRef.current = null;
+  }
+
+  async function startRecording() {
+    setRecordError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 48000,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      recorderStreamRef.current = stream;
+      const mime = pickRecorderMime();
+      recorderMimeRef.current = mime;
+      const recorder = mime
+        ? new MediaRecorder(stream, { mimeType: mime })
+        : new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      recorderChunksRef.current = [];
+      recorder.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size > 0) recorderChunksRef.current.push(ev.data);
+      };
+      recorder.onstop = () => void finishRecording();
+      recorder.start();
+      setRecordMode("recording");
+    } catch {
+      setRecordError(t("error_mic_denied"));
+      setRecordMode("idle");
+    }
+  }
+
+  function stopRecording() {
+    if (recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
+      setRecordMode("transcribing");
+    }
+  }
+
+  async function finishRecording() {
+    const blob = new Blob(recorderChunksRef.current, {
+      type: recorderMimeRef.current || "audio/webm",
+    });
+    stopRecorderStream();
+    if (blob.size === 0) {
+      setRecordError(t("error_audio_empty"));
+      setRecordMode("idle");
+      return;
+    }
+    const fd = new FormData();
+    const ext = (recorderMimeRef.current || "audio/webm").includes("mp4") ? "mp4" : "webm";
+    fd.append("audio", blob, `voice.${ext}`);
+    const result = await transcribeIngestion(fd);
+    if (!result.ok) {
+      setRecordError(result.error || t("error_transcribe_failed"));
+      setRecordMode("idle");
+      return;
+    }
+    setDescription((prev) => {
+      const trimmed = prev.trim();
+      return trimmed ? `${trimmed} ${result.text}` : result.text;
+    });
+    setRecordMode("idle");
+  }
+
+  function handleRecordToggle() {
+    if (recordMode === "recording") stopRecording();
+    else if (recordMode === "idle") void startRecording();
+  }
 
   const previews = useMemo(
     () => files.map((f) => ({ name: f.name, url: URL.createObjectURL(f) })),
@@ -272,7 +374,33 @@ export function IngestDrawerClient({
                     <ImageIcon className="mr-2 h-4 w-4" />
                     {t("upload_images")}
                   </Button>
+                  <Button
+                    variant={recordMode === "recording" ? "destructive" : "outline"}
+                    size="sm"
+                    onClick={handleRecordToggle}
+                    disabled={recordMode === "transcribing"}
+                  >
+                    {recordMode === "recording" ? (
+                      <>
+                        <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-current" />
+                        {t("stop_recording")}
+                      </>
+                    ) : recordMode === "transcribing" ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {t("transcribing")}
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="mr-2 h-4 w-4" />
+                        {t("record_voice")}
+                      </>
+                    )}
+                  </Button>
                 </div>
+                {recordError && (
+                  <p className="text-destructive text-xs">{recordError}</p>
+                )}
                 <input
                   ref={cameraInputRef}
                   type="file"
@@ -600,10 +728,8 @@ export function IngestToolbarClient({
       <button
         type="button"
         onClick={() => onOpen("voice")}
-        className="text-muted-foreground/40 transition flex h-9 w-9 items-center justify-center rounded-full"
+        className="text-muted-foreground hover:text-foreground transition flex h-9 w-9 items-center justify-center rounded-full"
         aria-label={t("trigger_voice")}
-        disabled
-        title={t("trigger_voice_coming_soon")}
       >
         <Mic className="h-4 w-4" />
       </button>

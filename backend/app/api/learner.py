@@ -19,6 +19,7 @@ router = APIRouter(prefix="/learners", tags=["learners"])
 
 class LearnerCreate(BaseModel):
     name: str
+    cefr_level: str | None = None  # one of A1..C2, or None for "not sure / let Tina calibrate"
 
 
 class LearnerUpdate(BaseModel):
@@ -31,6 +32,7 @@ class LearnerOut(BaseModel):
     ai_name: str
     ai_gender: str
     ai_persona_prompt: str | None
+    cefr_level: str | None
 
 
 class UpdatePersonaBody(BaseModel):
@@ -67,6 +69,18 @@ Rules:
 """
 
 
+_VALID_CEFR = {"A1", "A2", "B1", "B2", "C1", "C2"}
+
+
+def _normalize_cefr(value: str | None) -> str | None:
+    if value is None:
+        return None
+    upper = value.strip().upper()
+    if upper not in _VALID_CEFR:
+        return None
+    return upper
+
+
 def _learner_out(l: Learner) -> LearnerOut:
     return LearnerOut(
         id=l.id,
@@ -74,6 +88,7 @@ def _learner_out(l: Learner) -> LearnerOut:
         ai_name=l.ai_name,
         ai_gender=l.ai_gender,
         ai_persona_prompt=l.ai_persona_prompt,
+        cefr_level=l.cefr_level,
     )
 
 
@@ -95,8 +110,17 @@ async def create_learner(
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LearnerOut:
-    learner = Learner(account_id=account.id, name=body.name)
+    learner = Learner(
+        account_id=account.id,
+        name=body.name.strip(),
+        cefr_level=_normalize_cefr(body.cefr_level),
+    )
     db.add(learner)
+    await db.flush()
+    # First learner created in this account → make it the active one so chat
+    # picks it up without an extra setActive call.
+    if account.last_active_learner_id is None:
+        account.last_active_learner_id = learner.id
     await db.commit()
     await db.refresh(learner)
     return _learner_out(learner)
