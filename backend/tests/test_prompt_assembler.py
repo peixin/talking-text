@@ -2,10 +2,11 @@ from app.core.prompt.assembler import _TINA_PERSONA, build_system_prompt
 from app.core.scope.protocol import PatternItem, ScopeResult
 
 
-def test_empty_scope_returns_tina_persona_only():
-    # Default mode is "free" with no cefr_level → just the persona.
+def test_empty_scope_returns_persona_and_nudges():
+    # Default mode is "free" with no cefr_level → persona + nudges.
     result = build_system_prompt(ScopeResult())
-    assert result == _TINA_PERSONA
+    assert result.startswith(_TINA_PERSONA)
+    assert "Subtle nudges" in result
 
 
 def test_calibration_mode_appends_calibration_instructions():
@@ -13,11 +14,13 @@ def test_calibration_mode_appends_calibration_instructions():
     assert result.startswith(_TINA_PERSONA)
     assert "FIRST conversation" in result
     assert "CEFR" not in result  # no level hint in calibration mode
+    assert "Subtle nudges" not in result  # nudges suppressed during calibration
 
 
 def test_free_mode_with_cefr_level_appends_level_hint():
     result = build_system_prompt(ScopeResult(mode="free", cefr_level="A1"))
     assert "CEFR A1" in result
+    assert "Subtle nudges" in result
 
 
 def test_group_mode_words_appear_in_vocab_section():
@@ -67,8 +70,9 @@ def test_persona_always_first():
 def test_custom_persona_prompt_replaces_tina_persona():
     scope = ScopeResult()
     result = build_system_prompt(scope, persona_prompt="You are Bob, a friendly tutor.")
-    assert result == "You are Bob, a friendly tutor."
+    assert result.startswith("You are Bob, a friendly tutor.")
     assert "Tina" not in result
+    assert "Subtle nudges" in result  # free mode still appends nudges
 
 
 def test_learner_name_injected_after_persona():

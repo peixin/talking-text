@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Check, Keyboard, Menu, Mic, Pencil, Send, X } from "lucide-react";
+import { Check, ChevronDown, Keyboard, Menu, Mic, Pencil, Send, X } from "lucide-react";
 import { useLocale } from "next-intl";
 
 import { GroupOut, LearnerOut, SessionOut, TurnOut } from "@/lib/backend";
@@ -16,6 +16,7 @@ import {
   IngestToolbarClient,
   IngestTrigger,
 } from "./IngestDrawerClient";
+import { ScopeSwitcherClient } from "./ScopeSwitcherClient";
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
@@ -49,6 +50,7 @@ export function ChatClient({
   activeLearner,
   learners,
   currentGroup: initialCurrentGroup,
+  groups,
 }: {
   sessions: SessionOut[];
   activeSession: SessionOut;
@@ -56,6 +58,7 @@ export function ChatClient({
   activeLearner: LearnerOut;
   learners: LearnerOut[];
   currentGroup: GroupOut | null;
+  groups: GroupOut[];
 }) {
   const t = useTranslations("Chat");
   const tErr = useTranslations("Chat.errors");
@@ -75,19 +78,20 @@ export function ChatClient({
   );
   const [softLimitDismissed, setSoftLimitDismissed] = useState(false);
 
-  // Ingest drawer
+  // Ingest drawer + scope switcher
   const [currentGroup, setCurrentGroup] = useState<GroupOut | null>(initialCurrentGroup);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTrigger, setDrawerTrigger] = useState<IngestTrigger>("camera");
+  const [scopeSwitchOpen, setScopeSwitchOpen] = useState(false);
 
   function openDrawer(trigger: IngestTrigger) {
     setDrawerTrigger(trigger);
     setDrawerOpen(true);
   }
 
-  function handleGroupApplied(group: GroupOut) {
+  function handleGroupApplied(group: GroupOut | null) {
     setCurrentGroup(group);
-    setActiveSession((s) => ({ ...s, group_id: group.id }));
+    setActiveSession((s) => ({ ...s, group_id: group?.id ?? null }));
     router.refresh();
   }
 
@@ -543,8 +547,12 @@ export function ChatClient({
           )}
         </div>
 
-        {/* Scope banner */}
-        <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+        {/* Scope banner — click to switch */}
+        <button
+          type="button"
+          onClick={() => setScopeSwitchOpen(true)}
+          className="flex w-full items-center gap-2 border-b bg-muted/40 px-4 py-2 text-left text-xs text-muted-foreground transition hover:bg-muted"
+        >
           {currentGroup ? (
             <>
               <span>📕</span>
@@ -554,7 +562,8 @@ export function ChatClient({
           ) : (
             <span>✨ {t("scope_free_practice")}</span>
           )}
-        </div>
+          <ChevronDown className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+        </button>
 
         {/* Singleton audio element — owned here, shared via handlePlay */}
         <audio
@@ -694,6 +703,15 @@ export function ChatClient({
         initialTrigger={drawerTrigger}
         onOpenChange={setDrawerOpen}
         onGroupApplied={handleGroupApplied}
+      />
+
+      <ScopeSwitcherClient
+        sessionId={activeSession.id}
+        currentGroupId={currentGroup?.id ?? null}
+        groups={groups}
+        open={scopeSwitchOpen}
+        onOpenChange={setScopeSwitchOpen}
+        onApplied={handleGroupApplied}
       />
     </div>
   );

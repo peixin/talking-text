@@ -34,6 +34,16 @@ _CALIBRATION_INSTRUCTIONS = (
     "is that they speak comfortably."
 )
 
+_NUDGE_INSTRUCTIONS = (
+    "Subtle nudges — act on these only when they fit naturally, never force:\n"
+    '- If the child mentions learning new things today (e.g. "we learned", '
+    '"今天学了", "the teacher taught us"), warmly invite them to show you: '
+    'say something like "Want to show me? Tap the camera at the bottom!"\n'
+    "- If you have been talking about the same topic for many turns and the "
+    "child is reusing the same words, gently suggest switching topic.\n"
+    "Treat these as invitations the child can ignore, not instructions."
+)
+
 
 def build_system_prompt(
     scope: ScopeResult,
@@ -60,6 +70,7 @@ def build_system_prompt(
                 "Stick close to that level; introducing at most one or two "
                 "new words per session is fine when the context makes meaning clear."
             )
+        sections.append(_NUDGE_INSTRUCTIONS)
         return "\n\n".join(sections)
 
     # mode == "group"
@@ -87,4 +98,5 @@ def build_system_prompt(
             "Grammar notes (apply gently, never correct harshly):\n" + scope.prompt_notes
         )
 
+    sections.append(_NUDGE_INSTRUCTIONS)
     return "\n\n".join(sections)

@@ -12,6 +12,7 @@ Prompt Assembler — see ``core/scope/`` and ``core/prompt/``.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import time
@@ -30,6 +31,7 @@ from app.adapters.tts.protocol import AudioFormat as TTSAudioFormat
 from app.adapters.tts.protocol import TTSAdapter, TTSRequest
 from app.app_config import app_config
 from app.config import settings
+from app.core.calibration import estimate_and_maybe_settle
 from app.core.prompt import _TINA_PERSONA, build_system_prompt
 from app.core.scope import ScopeComputer
 from app.storage.models.learner import Learner
@@ -37,6 +39,17 @@ from app.storage.models.session import Session
 from app.storage.models.turn import Turn
 
 log = logging.getLogger(__name__)
+
+
+# Holds strong references to fire-and-forget background tasks so the GC doesn't
+# drop them mid-execution. asyncio.create_task only keeps a weak reference.
+_background_tasks: set[asyncio.Task[None]] = set()
+
+
+def _spawn_background(coro: object) -> None:
+    task = asyncio.create_task(coro)  # type: ignore[arg-type]
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 @dataclass(frozen=True)
@@ -214,6 +227,17 @@ class DialogOrchestrator:
         await db.commit()
         if app_config.debug.perf_logging:
             log.info("[perf] DB persist: %.3fs", time.monotonic() - t_db)
+
+        # Background calibration — no-op once learner.cefr_level is set.
+        if resolved_text_user:
+            _spawn_background(
+                estimate_and_maybe_settle(
+                    learner_id=learner_id,
+                    session_id=session_id,
+                    turn_sequence=next_sequence,
+                    learner_text=resolved_text_user,
+                )
+            )
 
         if app_config.debug.perf_logging:
             log.info("[perf] orchestrator TOTAL: %.3fs", time.monotonic() - t_total)
@@ -411,6 +435,17 @@ class DialogOrchestrator:
 
         if app_config.debug.perf_logging:
             log.info("[perf] DB persist: %.3fs", time.monotonic() - t_db)
+
+        # Background calibration — no-op once learner.cefr_level is set.
+        if resolved_text_user:
+            _spawn_background(
+                estimate_and_maybe_settle(
+                    learner_id=learner_id,
+                    session_id=session_id,
+                    turn_sequence=next_sequence,
+                    learner_text=resolved_text_user,
+                )
+            )
 
         # turn is now in DB — safe to surface the turn_id to the client.
         yield {

@@ -45,6 +45,7 @@ export default async function SessionPage({
       activeLearner={activeLearner}
       learners={learners}
       currentGroup={currentGroup}
+      groups={groups}
     />
   );
 }

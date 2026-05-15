@@ -1,13 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Camera, FileText, Image as ImageIcon, Loader2, Mic, Paperclip, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Camera,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  Mic,
+  Paperclip,
+  Plus,
+  X,
+} from "lucide-react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ExtractedItem, GroupOut, IngestionResult } from "@/lib/backend";
+import type { CefrLevel, ExtractedItem, GroupOut, IngestionResult, ItemType } from "@/lib/backend";
 import { createGroup, extractIngestion, setSessionGroup } from "./actions";
 
 export type IngestTrigger = "camera" | "voice" | "file";
@@ -15,8 +25,8 @@ export type IngestTrigger = "camera" | "voice" | "file";
 type Step =
   | { kind: "input" }
   | { kind: "extracting" }
-  | { kind: "preview"; result: IngestionResult; name: string }
-  | { kind: "saving"; result: IngestionResult; name: string }
+  | { kind: "preview"; mode: "summary" | "edit"; result: IngestionResult }
+  | { kind: "saving"; result: IngestionResult }
   | { kind: "error"; message: string };
 
 interface Props {
@@ -27,21 +37,49 @@ interface Props {
   onGroupApplied: (group: GroupOut) => void;
 }
 
+const CEFR_OPTIONS: (CefrLevel | "")[] = ["", "A1", "A2", "B1", "B2", "C1", "C2"];
+const ITEM_TYPES: ItemType[] = ["word", "phrase", "pattern"];
+
 function joinBookName(meta: IngestionResult["metadata"]): string {
   const parts = [meta.book_name, meta.unit, meta.lesson]
     .map((s) => s?.trim())
     .filter((s): s is string => !!s);
-  return parts.length > 0 ? parts.join(" / ") : "";
+  return parts.join(" / ");
 }
 
 function buildItemsBody(items: ExtractedItem[]) {
-  return items.map((i) => ({
-    text: i.text,
-    type: i.type,
-    anchor: i.anchor,
-    cefr_level: i.cefr,
-    pos: i.pos,
-  }));
+  return items
+    .filter((i) => i.text.trim().length > 0)
+    .map((i) => ({
+      text: i.text.trim(),
+      type: i.type,
+      anchor: i.anchor,
+      cefr_level: i.cefr,
+      pos: i.pos,
+    }));
+}
+
+function blankItem(type: ItemType): ExtractedItem {
+  return {
+    text: "",
+    type,
+    anchor: null,
+    cefr: null,
+    pos: null,
+    confidence: "high",
+    note: null,
+  };
+}
+
+function sortForEdit(items: ExtractedItem[]): ExtractedItem[] {
+  // Low-confidence (often AI noise) bubble up so the user can prune them first.
+  const order: Record<string, number> = { low: 0, medium: 1, high: 2 };
+  return [...items].sort((a, b) => {
+    const ca = order[a.confidence] ?? 1;
+    const cb = order[b.confidence] ?? 1;
+    if (ca !== cb) return ca - cb;
+    return ITEM_TYPES.indexOf(a.type) - ITEM_TYPES.indexOf(b.type);
+  });
 }
 
 export function IngestDrawerClient({
@@ -55,32 +93,37 @@ export function IngestDrawerClient({
   const [step, setStep] = useState<Step>({ kind: "input" });
   const [files, setFiles] = useState<File[]>([]);
   const [description, setDescription] = useState("");
+
+  // Owned by the drawer; refreshed when extraction completes.
+  const [items, setItems] = useState<ExtractedItem[]>([]);
+  const [groupName, setGroupName] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Reset state when the drawer opens or closes
   useEffect(() => {
     if (open) {
       setStep({ kind: "input" });
       setFiles([]);
       setDescription("");
+      setItems([]);
+      setGroupName("");
     }
   }, [open]);
 
-  // Auto-open the right picker for the trigger that was tapped
   useEffect(() => {
     if (!open) return;
     if (initialTrigger === "camera") cameraInputRef.current?.click();
     if (initialTrigger === "file") fileInputRef.current?.click();
-    // "voice" is a placeholder until V1.1 — drawer just opens to the input step.
   }, [open, initialTrigger]);
 
-  const previews = files.map((f) => ({ name: f.name, url: URL.createObjectURL(f) }));
-  // Revoke object URLs when files change to avoid leaks
+  const previews = useMemo(
+    () => files.map((f) => ({ name: f.name, url: URL.createObjectURL(f) })),
+    [files],
+  );
   useEffect(() => {
     return () => previews.forEach((p) => URL.revokeObjectURL(p.url));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [files]);
+  }, [previews]);
 
   function addFiles(selected: FileList | null) {
     if (!selected || selected.length === 0) return;
@@ -111,18 +154,24 @@ export function IngestDrawerClient({
       setStep({ kind: "error", message: t("error_no_items") });
       return;
     }
-    const suggested = joinBookName(result.result.metadata) || t("default_group_name");
-    setStep({ kind: "preview", result: result.result, name: suggested });
+    setItems(sortForEdit(result.result.items));
+    setGroupName(joinBookName(result.result.metadata) || t("default_group_name"));
+    setStep({ kind: "preview", mode: "summary", result: result.result });
   }
 
   async function handleSave() {
     if (step.kind !== "preview") return;
-    setStep({ kind: "saving", result: step.result, name: step.name });
+    const body = buildItemsBody(items);
+    if (body.length === 0) {
+      setStep({ kind: "error", message: t("error_no_items") });
+      return;
+    }
+    setStep({ kind: "saving", result: step.result });
 
     const createRes = await createGroup({
-      name: step.name.trim() || t("default_group_name"),
+      name: groupName.trim() || t("default_group_name"),
       kind: "quick_practice",
-      items: buildItemsBody(step.result.items),
+      items: body,
       source_book_hint: step.result.metadata.book_name ?? null,
     });
     if (!createRes.ok) {
@@ -139,14 +188,34 @@ export function IngestDrawerClient({
     onOpenChange(false);
   }
 
-  const itemsByType = (() => {
-    if (step.kind !== "preview" && step.kind !== "saving") {
-      return { word: [], phrase: [], pattern: [] };
-    }
-    const groups: Record<string, ExtractedItem[]> = { word: [], phrase: [], pattern: [] };
-    for (const item of step.result.items) groups[item.type]?.push(item);
-    return groups;
-  })();
+  function updateItem(idx: number, patch: Partial<ExtractedItem>) {
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  }
+  function deleteItem(idx: number) {
+    setItems((prev) => prev.filter((_, i) => i !== idx));
+  }
+  function addItemOfType(type: ItemType) {
+    setItems((prev) => [...prev, blankItem(type)]);
+  }
+
+  const sectionedItems = useMemo(() => {
+    const acc: Record<ItemType, { item: ExtractedItem; index: number }[]> = {
+      word: [],
+      phrase: [],
+      pattern: [],
+    };
+    items.forEach((item, index) => {
+      acc[item.type].push({ item, index });
+    });
+    return acc;
+  }, [items]);
+
+  const counts = {
+    word: sectionedItems.word.length,
+    phrase: sectionedItems.phrase.length,
+    pattern: sectionedItems.pattern.length,
+  };
+  const lowConfidenceCount = items.filter((i) => i.confidence === "low").length;
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -171,7 +240,7 @@ export function IngestDrawerClient({
           <header className="flex shrink-0 items-center justify-between border-b px-4 py-3">
             <DialogPrimitive.Title className="text-sm font-medium">
               {step.kind === "preview" || step.kind === "saving"
-                ? t("title_preview", { count: step.result.items.length })
+                ? t("title_preview", { count: items.length })
                 : t("title_input")}
             </DialogPrimitive.Title>
             <DialogPrimitive.Close
@@ -268,7 +337,7 @@ export function IngestDrawerClient({
 
             {(step.kind === "preview" || step.kind === "saving") && (
               <div className="space-y-4">
-                {step.result.metadata.book_name && (
+                {joinBookName(step.result.metadata) && (
                   <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
                     <div className="text-muted-foreground text-xs">{t("looks_like")}</div>
                     <div className="font-medium">{joinBookName(step.result.metadata)}</div>
@@ -280,47 +349,36 @@ export function IngestDrawerClient({
                     {t("group_name_label")}
                   </span>
                   <input
-                    value={step.name}
-                    onChange={(e) =>
-                      setStep((s) =>
-                        s.kind === "preview" ? { ...s, name: e.target.value } : s,
-                      )
-                    }
+                    value={groupName}
+                    onChange={(e) => setGroupName(e.target.value)}
                     disabled={step.kind === "saving"}
                     className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                   />
                 </label>
 
-                {(["word", "phrase", "pattern"] as const).map((kind) => {
-                  const list = itemsByType[kind];
-                  if (!list || list.length === 0) return null;
-                  return (
-                    <section key={kind}>
-                      <h3 className="mb-1 text-xs font-medium text-muted-foreground">
-                        {t(`section_${kind}` as Parameters<typeof t>[0])}{" "}
-                        ({list.length})
-                      </h3>
-                      <ul className="space-y-1">
-                        {list.map((item, i) => (
-                          <li
-                            key={`${kind}-${i}`}
-                            className="flex items-center justify-between rounded bg-muted/30 px-2 py-1 text-sm"
-                          >
-                            <span>{item.text}</span>
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              {item.cefr ?? ""}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  );
-                })}
+                {step.kind === "preview" && step.mode === "summary" && (
+                  <SummaryView
+                    counts={counts}
+                    lowConfidenceCount={lowConfidenceCount}
+                    warnings={step.result.warnings}
+                  />
+                )}
 
-                {step.result.warnings.length > 0 && (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                    {step.result.warnings.join("; ")}
-                  </div>
+                {step.kind === "preview" && step.mode === "edit" && (
+                  <EditView
+                    sectionedItems={sectionedItems}
+                    onUpdate={updateItem}
+                    onDelete={deleteItem}
+                    onAdd={addItemOfType}
+                  />
+                )}
+
+                {step.kind === "saving" && (
+                  <SummaryView
+                    counts={counts}
+                    lowConfidenceCount={lowConfidenceCount}
+                    warnings={step.result.warnings}
+                  />
                 )}
               </div>
             )}
@@ -350,9 +408,27 @@ export function IngestDrawerClient({
                 {t("extracting")}
               </Button>
             )}
-            {step.kind === "preview" && (
+            {step.kind === "preview" && step.mode === "summary" && (
               <>
-                <Button variant="outline" onClick={() => setStep({ kind: "input" })}>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setStep({ kind: "preview", mode: "edit", result: step.result })
+                  }
+                >
+                  {t("review")}
+                </Button>
+                <Button onClick={handleSave}>{t("use_it")}</Button>
+              </>
+            )}
+            {step.kind === "preview" && step.mode === "edit" && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setStep({ kind: "preview", mode: "summary", result: step.result })
+                  }
+                >
                   {t("back")}
                 </Button>
                 <Button onClick={handleSave}>{t("save_and_use")}</Button>
@@ -371,7 +447,140 @@ export function IngestDrawerClient({
   );
 }
 
-// Convenience component for the three-icon toolbar
+
+// ── Sub-views ────────────────────────────────────────────────────────────────
+
+function SummaryView({
+  counts,
+  lowConfidenceCount,
+  warnings,
+}: {
+  counts: { word: number; phrase: number; pattern: number };
+  lowConfidenceCount: number;
+  warnings: string[];
+}) {
+  const t = useTranslations("Ingest");
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-3 text-sm">
+        <span>
+          <span className="font-medium">{counts.word}</span>{" "}
+          <span className="text-muted-foreground">{t("section_word")}</span>
+        </span>
+        <span>
+          <span className="font-medium">{counts.phrase}</span>{" "}
+          <span className="text-muted-foreground">{t("section_phrase")}</span>
+        </span>
+        <span>
+          <span className="font-medium">{counts.pattern}</span>{" "}
+          <span className="text-muted-foreground">{t("section_pattern")}</span>
+        </span>
+      </div>
+      {lowConfidenceCount > 0 && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{t("low_confidence_hint", { count: lowConfidenceCount })}</span>
+        </div>
+      )}
+      {warnings.length > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          {warnings.join("; ")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditView({
+  sectionedItems,
+  onUpdate,
+  onDelete,
+  onAdd,
+}: {
+  sectionedItems: Record<ItemType, { item: ExtractedItem; index: number }[]>;
+  onUpdate: (idx: number, patch: Partial<ExtractedItem>) => void;
+  onDelete: (idx: number) => void;
+  onAdd: (type: ItemType) => void;
+}) {
+  const t = useTranslations("Ingest");
+  return (
+    <div className="space-y-4">
+      {ITEM_TYPES.map((kind) => {
+        const list = sectionedItems[kind];
+        return (
+          <section key={kind}>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-xs font-medium text-muted-foreground">
+                {t(`section_${kind}` as Parameters<typeof t>[0])} ({list.length})
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onAdd(kind)}
+                className="h-7 text-xs"
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                {t("add_item")}
+              </Button>
+            </div>
+            {list.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">{t("section_empty")}</p>
+            ) : (
+              <ul className="space-y-1">
+                {list.map(({ item, index }) => (
+                  <li
+                    key={index}
+                    className="flex items-center gap-1 rounded bg-muted/30 px-2 py-1"
+                  >
+                    {item.confidence === "low" && (
+                      <AlertTriangle
+                        className="h-3.5 w-3.5 shrink-0 text-amber-600"
+                        aria-label={t("low_confidence_item")}
+                      />
+                    )}
+                    <input
+                      value={item.text}
+                      onChange={(e) => onUpdate(index, { text: e.target.value })}
+                      placeholder={t(`placeholder_${kind}` as Parameters<typeof t>[0])}
+                      className="flex-1 rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-sm focus:border-border focus:bg-background focus:outline-none"
+                    />
+                    <select
+                      value={item.cefr ?? ""}
+                      onChange={(e) =>
+                        onUpdate(index, {
+                          cefr: (e.target.value || null) as CefrLevel | null,
+                        })
+                      }
+                      className="rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted-foreground hover:border-border focus:border-border focus:bg-background focus:outline-none"
+                    >
+                      {CEFR_OPTIONS.map((lvl) => (
+                        <option key={lvl} value={lvl}>
+                          {lvl || "—"}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(index)}
+                      className="text-muted-foreground/40 hover:text-destructive transition"
+                      aria-label={t("delete_item")}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+
+// ── Convenience: three-icon toolbar ──────────────────────────────────────────
+
 export function IngestToolbarClient({
   onOpen,
 }: {
