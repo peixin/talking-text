@@ -1,319 +1,99 @@
-# Curriculum Design
+# 课程与教学大纲设计 · Curriculum Design
 
-> Design notes for the curriculum data model, mastery tracking, and Scope Computer integration.
-> Chinese version: [`curriculum-design.cn.md`](curriculum-design.cn.md)
-
----
-
-## 1. Product Vision
-
-The product's core value is recognition first, then incremental stretch:
-
-> "Hey, this is exactly what I learned in class today."
-
-A child who hears familiar words and patterns gains confidence immediately. On top of that foundation, the system naturally introduces ~10% stretch vocabulary — words from the next lesson or unit — pushing the child's boundary outward one inch at a time, without leaving the comfort zone behind.
-
-Free LLM tools (Doubao, etc.) cannot replicate this because they have no idea what the child studied. Our curriculum binding is the product moat.
-
-The parent's cognitive load must be minimal. Most parents only know "we're on Unit 3." That is enough. The system derives the full vocabulary and grammar scope from that selection — the parent never needs to articulate learning objectives.
+> [!WARNING]
+> **重要弃用声明与架构演进说明**  
+> 本文档记录的旧版 `Curriculum` / `CurriculumUnit` / `CurriculumLesson` / `LessonItem` / `LearnerLesson` 数据库多表树形模型已在 V1 生产版本中**完全废弃**。  
+> 
+> 为了解决层级结构锁死、查询性能低下、无法灵活拓展自定义单词本等弊端，整个系统的数据底层已收敛为以 **`LanguageItem` (原子单元) + `ItemGroup` (万物皆组) + `ItemGroupMember` (多对多关联)** 为核心的统一内容模型。  
+> 最新设计与数据标准请首要参阅：
+> 1. [统一内容模型规范 · content-model.md](content-model.md)
+> 2. [数据库结构字典 · data-dictionary.md](data-dictionary.md)
 
 ---
 
-## 2. Resource Pools
+## 1. 核心产品愿景 (未变)
 
-### Public library
-Maintained by the team. Structured around curriculum content that can be cleanly extracted without copyright risk. Parents select from this library to set their child's scope.
+尽管底层的物理数据表结构发生了重大重构，但产品最核心的教学理念依然保持不变：**认得出已知词汇，并自然地向外踮脚推一寸 (i + 1)**。
 
-### Private materials
-Uploaded by individual parents for personal use only. Supports the long tail of proprietary textbooks (training center materials, school-specific editions) that will never enter the public library. Terms of service make clear that the parent is responsible for the copyright compliance of anything they upload.
+当孩子在和 AI 机器人 Tina 对话时，听到刚好是今天课上学的新词，那种“我听懂了！”的正面反馈会带来无与伦比的开口自信。在 90% 已知词汇建立的安全感边界内，系统悄悄混入约 10% 的未学“进阶词汇” (Stretch Vocabulary)，从而实现边界的渐进式扩张。
 
-### Copyright strategy
-Copyright does not protect facts or knowledge — it protects specific expression. Vocabulary words, grammar rules, and sentence pattern structures are not copyrightable. What must never be reproduced verbatim:
-
-- Original stories, dialogues, or narrative text from textbooks
-- Specific illustrations
-- The textbook's name in product marketing without a license
-
-**Safe approach for the public library:** extract vocabulary lists, sentence patterns, and grammar notes; do not quote original text; use neutral unit naming independent of publisher branding.
-
-**Materials to avoid entirely:** digitally-delivered licensed content (e.g., LingoAce's Reach Higher sessions) — the parent does not hold a copy license.
+市面上常见的闲聊 AI 无法实现这一核心价值，因为它们对孩子的学习进度毫无概念。我们的“大纲绑定与范围计算 (Scope Computing)”正是这款口语陪伴产品的核心商业护城河。
 
 ---
 
-## 3. The Atomic Unit: `language_item`
+## 2. 废弃的旧设计方案归档与复盘
 
-Every curriculum eventually decomposes into three types of language items:
+### 2.1 废弃的旧实体关系图 (Entity-Relationship)
 
-| Type | Example | Detection |
-|---|---|---|
-| `word` | `apple`, `purple` | exact string match |
-| `phrase` | `make a decision`, `by the way` | substring match |
-| `pattern` | `I like ___ and ___.`, `There have been ___` | anchor substring + end-of-session LLM |
+在旧设计中，我们试图用一套非常死板的面向对象表关系来映射现实教材的编排方式：
 
-The curriculum hierarchy (Curriculum → Unit → Lesson) is purely an ingestion and organization structure. Once items are extracted and linked to a learner's scope, the hierarchy is no longer involved in the practice loop.
+```text
+[已废弃]
+Curriculum (课程/教材表)
+  └── CurriculumUnit (单元表)
+        └── CurriculumLesson (课时表/最小练习单位)
+              ├── LessonItem (课时单词多对多映射) ──► LanguageItem (原子单元)
+              └── LearnerLesson (学生已学记录表)
+```
 
-### Grammar notes are not items — but errors are prioritized
+### 2.2 为什么必须废弃这套设计？
 
-Grammar rules (e.g., "use `has` for third-person singular"; "use `an` before vowel sounds") are stored as free text in `CurriculumLesson.prompt_notes` and injected into the system prompt at session start.
+在前期开发和首批种子教材录入时，这套设计暴露出了严重的工程隐患和业务硬伤：
 
-Error correction follows a **priority mechanism** — not correcting everything, not ignoring everything:
-
-- **Highest priority (must correct):** article errors (the + count noun, a/an selection) — these are persistent and high-frequency among Chinese learners; leaving them uncorrected lets them fossilize
-- **Lower priority:** other grammar errors, surfaced gradually as they accumulate
-
-**Correction is delayed** — never interrupting the child mid-expression. Feedback appears after the current turn ends or in the end-of-session report.
-
-**V1 implementation:** the end-of-session LLM call also detects grammar errors; results are stored for future use. Data collection starts in V1.  
-**V2 implementation:** report UI shows color-coded error levels (highest priority in a prominent color); click to see the rule explanation; proactively prompt the child once errors accumulate past a threshold.
+1. **层级结构完全锁死**：  
+   现实生活中的教学材料千奇百怪。有些分级读物只有“Level”和“Book”，没有“Unit”；而日常英文绘本更是扁平的一本书一个词表，没有“Lesson”概念。旧表结构强行要求存在 `CurriculumUnit` 和 `CurriculumLesson`，导致我们在录入非传统教科书时，必须伪造大量的临时记录（如“Default Unit”、“Dummy Lesson”），造成严重的数据库垃圾。
+   
+2. **多表关联带来的高延迟**：  
+   在每一轮对话发起前，Scope Computer 需要瞬间计算出孩子当前已学的所有词汇。在旧结构下，系统需要对 `learner_lesson`、`curriculum_lesson`、`lesson_item` 和 `language_item` 四张表做深度的 `JOIN` 查询。当学习历史变长后，高频的多表联查严重拖慢了 API 的响应首字延迟（TTFT）。
+   
+3. **功能孤岛问题**：  
+   在旧架构下，“教科书教材”和用户自己上传创建的“自定义生词本”、“错词本”是完全隔绝的两套逻辑。这意味着如果我们想给生词本添加掌握度追踪，就必须为生词本单独再建一套表结构，代码复用率极低。
 
 ---
 
-## 4. Hierarchy: Why Lesson Is the Atomic Practice Unit
+## 3. 全新演进方案：万物皆组 (Converged ItemGroup)
 
-Real classroom data shows that every unit spans at least two lessons (often more), with distinct vocabulary and grammar focus per lesson:
+为了彻底根治上述痛点，我们将系统中的“层级组织”这一概念剥离出来，用单一的“组”实体完成自我迭代。
 
-```
-Kids Corner Book 1 — Starter Unit 4
-  Lesson 1 (4.19):  10 color words + 2 patterns, no grammar notes
-  Lesson 2 (4.26):  6 clothing words + 1 pattern, 3 grammar notes
+### 3.1 核心替代路径
+
+旧关系体系被无缝收缩入以下三张表：
+
+- **`LanguageItem`**：原子语言项。不再关心它属于哪本书，只记录它本身（如单词、短语、句型文本和 CEFR 等级）。
+- **`ItemGroup`**：统一的项目组。新增 `parent_id` 自关联外键和 `kind` 字段。
+- **`ItemGroupMember`**：原子项与组的多对多物理连接。
+
+### 3.2 如何映射复杂的教材层级？
+
+借助 `ItemGroup` 强大的自关联自嵌套树形结构，我们能够完美模拟且超越原有的任何复杂层级：
+
+```text
+[ItemGroup] ── (Book 节点: kind="textbook_book")
+    └── [ItemGroup] (Unit 子节点: kind="textbook_unit", parent_id=Book.id)
+          └── [ItemGroup] (Lesson 叶子节点: kind="textbook_lesson", parent_id=Unit.id)
+                └── 连接多对多成员 ──► [LanguageItem] (单词/短语/句型)
 ```
 
-A unit-level scope would be too broad — it combines vocabulary and grammar from different class sessions. Lesson-level scope lets the child practice exactly what they learned in today's class.
+而对于扁平化的“绘本大纲”或“个人生词本”，我们仅需要创建一个普通的 `ItemGroup` 记录即可：
 
+```text
+[ItemGroup] (个人词单: kind="personal_collection", parent_id=NULL)
+    └── 连接多对多成员 ──► [LanguageItem] (单词)
 ```
-Curriculum
-  └── CurriculumUnit        (grouping / display)
-        └── CurriculumLesson  (practice atom)
-              └── LessonItem → LanguageItem
-```
+
+这种“万物皆组”的设计完美兼顾了严谨的大纲约束与极度的业务灵活性。
 
 ---
 
-## 5. Database Schema
+## 4. 重构后的核心业务运转闭环
 
-All models inherit `TimestampMixin` (`created_at`, `updated_at`). All primary keys are UUID generated in the application layer.
+### 4.1 练习范围的计算 (Scope Computing)
 
-### `language_item`
-Global catalog of all words, phrases, and patterns. Shared across curricula. No `level` field — the same word appears at different difficulty levels in different courses; level is a property of the lesson context, not the item itself.
+- **课时专注模式**：当孩子开始某个特定课时 (如 Lesson 2) 的对话时，`session.group_id` 绑定对应的 `ItemGroup.id` (其 `kind` 为 `textbook_lesson`)。系统只加载该课时及前序所有课时组中的 `LanguageItem` 词汇。
+- **自由对话模式**：`session.group_id` 设为 `NULL`。Scope Computer 会拉取该学习者名下所有已学过的 `ItemGroup` 包含的去重词汇合集，作为本次自由闲聊的已知安全范围。
 
-```
-id      UUID PK
-type    VARCHAR(10)   -- "word" | "phrase" | "pattern"
-text    VARCHAR(200)  -- "apple" / "make a decision" / "I like ___ and ___."
-anchor  VARCHAR(200)  -- lowercase fixed substring for fast detection
-                      -- anchor for "I like ___ and ___." = "i like"
+### 4.2 句型与语法的智能检测 (Pattern Detection)
 
-UNIQUE (type, text)
-```
-
-### `curriculum`
-
-```
-id                 UUID PK
-name               VARCHAR(200)   -- "Kids Corner Book 1"
-publisher          VARCHAR(200)
-is_public          BOOLEAN DEFAULT FALSE
-owner_account_id   UUID NULL      -- NULL = public library
-                                  -- FK → account  ON DELETE SET NULL
-```
-
-### `curriculum_unit`
-
-```
-id               UUID PK
-curriculum_id    UUID    FK → curriculum  ON DELETE CASCADE
-sequence         INTEGER
-unit_number      VARCHAR(50)   -- "Starter Unit 4"  (flexible, not integer)
-title            VARCHAR(200)  -- "A New Adventure"
-```
-
-### `curriculum_lesson`
-The practice atom. Holds grammar notes for system prompt injection.
-
-```
-id             UUID PK
-unit_id        UUID     FK → curriculum_unit  ON DELETE CASCADE
-sequence       INTEGER
-title          VARCHAR(200) NULL  -- "Lesson 1" or more descriptive title
-prompt_notes   TEXT NULL          -- grammar notes injected into session system prompt
-```
-
-### `lesson_item`
-Many-to-many join between lessons and language items.
-
-```
-lesson_id   UUID    FK → curriculum_lesson  ON DELETE CASCADE
-item_id     UUID    FK → language_item      ON DELETE CASCADE
-
-PK (lesson_id, item_id)
-```
-
-### `learner_lesson`
-Append-only log of lessons the learner has studied. Grows continuously as the child attends classes; rows are never deleted unless the parent explicitly un-enrolls from a curriculum. `created_at` from `TimestampMixin` serves as the enrollment timestamp.
-
-```
-learner_id   UUID   FK → learner            ON DELETE CASCADE
-lesson_id    UUID   FK → curriculum_lesson  ON DELETE CASCADE
-
-PK (learner_id, lesson_id)
-```
-
-### `learner_item_stats`
-Mastery tracking. A row is created only on first encounter (not pre-populated at enrollment). A missing row means the item has never appeared in a session.
-
-```
-learner_id      UUID       FK → learner        ON DELETE CASCADE
-item_id         UUID       FK → language_item  ON DELETE CASCADE
-seen_count      INTEGER DEFAULT 0   -- item appeared in session context
-used_count      INTEGER DEFAULT 0   -- child produced the item in speech
-correct_count   INTEGER DEFAULT 0   -- LLM judged usage correct
-last_seen       TIMESTAMP NULL
-
-PK (learner_id, item_id)
-```
-
-### `session` (existing table — add one field)
-
-```
-lesson_id   UUID NULL   FK → curriculum_lesson  ON DELETE SET NULL
-                        -- NULL = free practice (no curriculum scope)
-```
-
----
-
-## 6. Two Binding Layers
-
-```
-Layer 1 — Studied lessons (append-only log, grows with each class)
-  LearnerLesson: learner_id + lesson_id
-  "This child has studied Kids Corner Book 1, Lessons 1 and 2."
-
-Layer 2 — Session focus (chosen at session start)
-  session.lesson_id
-  "This session is practicing Lesson 2 specifically."
-```
-
-When starting a session, the UI presents recently studied lessons as quick shortcuts with the newest lesson selected by default. The child can also select older lessons to review. The Scope Computer reads `session.lesson_id` to fetch items for the active session. `LearnerLesson` is used to display the child's study history and overall progress.
-
----
-
-## 7. Scope Computer Query
-
-**Session with lesson binding:**
-
-```sql
-SELECT li.*
-FROM   language_item    li
-JOIN   lesson_item      lsi ON lsi.item_id  = li.id
-WHERE  lsi.lesson_id = :session_lesson_id
-LEFT JOIN learner_item_stats s
-  ON s.item_id = li.id AND s.learner_id = :learner_id
-ORDER BY COALESCE(s.correct_count, 0) ASC,
-         COALESCE(s.seen_count, 0)    ASC
--- Weakest items surface first
-```
-
-**Free practice (`session.lesson_id = NULL`):** scope = all items from all lessons the learner has ever studied
-
-```sql
-SELECT DISTINCT li.*
-FROM   language_item li
-JOIN   lesson_item   lsi ON lsi.item_id  = li.id
-JOIN   learner_lesson ll  ON ll.lesson_id = lsi.lesson_id
-WHERE  ll.learner_id = :learner_id
-LEFT JOIN learner_item_stats s
-  ON s.item_id = li.id AND s.learner_id = :learner_id
-ORDER BY COALESCE(s.correct_count, 0) ASC,
-         COALESCE(s.seen_count, 0)    ASC
-```
-
-Free practice has no `prompt_notes` injection and no targeted pattern focus, but mastery data is updated normally.
-
-`prompt_notes` for sessions with a lesson binding:
-```sql
-SELECT prompt_notes
-FROM   curriculum_lesson
-WHERE  id = :session_lesson_id
-  AND  prompt_notes IS NOT NULL
-```
-
----
-
-## 8. Pattern Detection Strategy
-
-Detecting whether a child used a specific pattern cannot rely on string matching alone. The approach uses two tiers:
-
-**Tier 1 — Anchor match (real-time, zero cost)**
-Each pattern stores a lowercase `anchor` (the fixed part). After STT, check whether the child's transcript contains the anchor substring. This records "item appeared."
-
-**Tier 2 — LLM analysis (end of session, one call)**
-At session end, send the full conversation transcript with the target patterns list to the LLM. Ask: "Did the child use each pattern? Was each usage correct?" Also detect grammar errors by priority category. Update `used_count` and `correct_count` in `learner_item_stats`.
-
-One LLM call per session — not per turn. Sessions are typically 5–15 minutes; the cost is acceptable and the analysis is non-blocking.
-
----
-
-## 9. Session Flow with Curriculum
-
-```
-Parent adds completed lesson to child's record
-  → LearnerLesson row appended (one row per lesson attended)
-
-Child opens practice screen
-  → UI shows recently studied lessons, newest selected by default
-  → Session created with lesson_id (or NULL for free practice)
-
-Session start
-  → Scope Computer loads lesson items + prompt_notes
-  → system prompt assembled:
-      "Vocabulary in scope: red, yellow, blue... dress, jacket..."
-      "Encourage use of patterns: 'What colors do you like?', 'I like ___ and ___'"
-      "Grammar notes: use 'has' for he/she; use 'an' before vowel sounds"
-
-Each turn (real-time)
-  → STT → LLM → TTS
-  → Anchor scan on child's transcript → update seen_count immediately
-
-Session end (async, non-blocking)
-  → One LLM analysis call on full transcript
-  → Upsert learner_item_stats (correct_count, used_count, last_seen)
-  → Record grammar error data (V1: collect only; V2: display in report UI)
-```
-
----
-
-## 10. Kids Corner Book 1 — Starter Unit 4 (Reference Data)
-
-The first dataset to enter the public library. Maps to the schema as:
-
-```
-curriculum:  Kids Corner Book 1  (is_public=true)
-  unit:      Starter Unit 4 / "A New Adventure"  (sequence=4)
-
-    lesson:  Lesson 1  (sequence=1, prompt_notes=NULL)
-      words: red, yellow, blue, green, orange, brown,
-             pink, purple, black, white
-      patterns:
-        "What colors do you like?"   anchor="what colors do you like"
-        "I like ___ and ___."        anchor="i like"
-
-    lesson:  Lesson 2  (sequence=2)
-      prompt_notes: |
-        Use 'has' for he/she (third person singular); 'have' for I/you/they.
-        Clothing nouns: singular vs plural (a jacket / two jackets).
-        'an' before vowel sounds: an orange T-shirt, an orange skirt.
-      words: dress, jacket, T-shirt, jeans, pants, skirt
-      patterns:
-        "He/She has a ___ ___."      anchor="has a"
-```
-
----
-
-## 11. Open Questions
-
-- **Public library seeding:** Which textbooks to cover first? Suggested priority: PEP (人教版) Grade 1–3, then Kids Corner series, then others driven by user demand.
-- **Private upload pipeline:** Photo OCR → AI extraction → parent review → LessonItem rows. The teacher's WeChat lesson summary (plain text) is a better input than a raw book photo — consider making "paste teacher's message" the primary private upload UX.
-- **Stretch vocabulary source:** When Scope Computer V2 introduces stretch words, where do they come from? The next unlearned lesson? Other lessons in the same unit? Needs definition at V2 design time.
-- **Grammar rule priority table:** V2 color-coded error display requires a `grammar_rule` table (rule name, priority, error pattern description). High-priority rules (article errors) can begin data collection in V1.
-- **Mastery definition:** What threshold marks an item as "mastered"? Not defined yet. Suggested starting point: `correct_count >= 3` across at least 2 separate sessions.
-- **IELTS / adult content:** The `language_item` model supports adult-level patterns and argument phrases. Discourse strategies (methodology layer) are out of scope for V1 and would require a separate `speaking_methodology` model.
+为了检验孩子是否掌握了大纲要求的句型 (Sentence Pattern)，系统采用分层检测策略：
+- **实时扫描 (无感)**：在每一轮 turn 结束后，通过 Pydantic 快速进行小写 `anchor` 子串匹配，实时更新“该句型已被听到或说出”的状态。
+- **离线分析 (Session 结束)**：当整个对话会话结束时，启动后台异步线程，调用一次 LLM 对完整的聊天上下文做全面的语法结构和语义合理性评估，并将详细分析写入 `learner_item_stats`。这避免了在每轮实时聊天中引入昂贵的句型判别延迟。

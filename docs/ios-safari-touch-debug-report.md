@@ -23,7 +23,7 @@
   - 黄色的 React 横幅却显示了 **`HYDRATED: NO`**！这说明整个 React 引擎在这台设备上**经历了“水合崩溃（Hydration Mismatch）”并且直接死机了**，导致页面变成了没有交互能力的“干尸 HTML”。
 
 ### 阶段三：定位 Hydration Mismatch 的元凶
-在 Next.js 的 App Router 架构中，如果服务端渲染的 HTML 和客户端第一次执行 JS 生成的结构存在细微差异，水合就会失败。对于 iOS Safari，最常见的元凶有三个：
+在 Next.js 的 App Router 架构中，如果服务端渲染 of HTML 和客户端第一次执行 JS 生成的结构存在细微差异，水合就会失败。对于 iOS Safari，最常见的元凶有三个：
 1. **时间组件不一致**：`SessionSidebarClient.tsx` 中使用了 `dayjs().fromNow()`。由于服务器时间和客户端时间的细微毫秒差，文字发生了微小改变（Text Node Mismatch），这是导致报错的核心代码隐患。
 2. **Safari 自作聪明注入标签**：iOS Safari 会自动扫描网页上的数字格式，并强行将其转变为拨号链接 `<a href="tel:...">`，从而破坏原有的 DOM 树，引发 React 水合惨死。
 - **解决方案**：
@@ -32,7 +32,7 @@
 
 ### 阶段四：幽灵缓存与 HMR 跨域阻断 (The Final Boss)
 即使修复了水合问题，手机依然无法点击按钮，且 Next.js 终端输出了极具迷惑性的错误：
-> `Failed to find Server Action. This request might be from an older or newer deployment.`
+> `Failed to find Server Action. This request might be from an older or newer deployment.`  
 > `Blocked cross-origin request to Next.js dev resource /_next/webpack-hmr from "192.168.31.131"`
 
 - **原因**：Next.js 本地开发服务器出于安全防御，**默认拦截了来自局域网设备（手机）的代码热更新（HMR）WebSocket 连接**。这导致：

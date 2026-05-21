@@ -1,11 +1,11 @@
-# 语音对话管线技术详解（V1 Batch）
+# 语音对话管线技术详解（V1 Batch 与 SSE Streaming 升级）
 
-> 覆盖范围：从用户按下录音按钮，到 AI 语音从扬声器播出，以及本轮数据落库的完整链路。
+> 覆盖范围：从用户按下录音按钮，到 AI 语音从扬声器播出，以及本轮数据落库的完整链路。  
 > 涉及文件：`ChatClient.tsx` · `actions.ts` · `api/conversation.py` · `audio_codec.py` · `adapters/stt/volc.py` · `adapters/llm/volc.py` · `adapters/tts/volc.py` · `core/dialog/orchestrator.py` · `storage/models/turn.py`
 
 ---
 
-## 一、全链路时序图
+## 一、全链路时序图 (V1 Batch 模式)
 
 ```
 User                  浏览器                  FastAPI              Volcengine
@@ -46,7 +46,7 @@ User                  浏览器                  FastAPI              Volcengine
 
 ---
 
-## 二、各段连接类型与生命周期
+## 二、各段连接类型与生命周期 (V1 Batch)
 
 每一跳的协议、是否流式、连接何时开/关：
 
@@ -64,8 +64,7 @@ FastAPI → Volcengine STT   WebSocket         是       每 turn 新开一条 W
                                                        → 收 NEG_SEQ 帧 → 自动关闭
 
 FastAPI → Volcengine LLM   HTTP POST         否 (V1)  单次 request-response；
-  (openai SDK)             OpenAI-compat REST          连接由 SDK 内部连接池管理；
-                                                       V2 切 stream=True 后变流式
+  (openai SDK)             OpenAI-compat REST          连接由 SDK 内部连接池管理
 
 FastAPI → Volcengine TTS   HTTP POST         是(响应体) chunked transfer encoding；
   (httpx.stream)           https://...                 连接保持到收到 code=20000000
@@ -73,10 +72,8 @@ FastAPI → Volcengine TTS   HTTP POST         是(响应体) chunked transfer e
 ```
 
 **关键结论：**
-- 整条链路只有 **STT 用 WebSocket**，其余全是 HTTP
-- LLM 在 V1 是 **批式**（等全文生成完才返回）；V2 换 `stream=True` 后是流式
-- TTS 的"流式"只是 **HTTP 分块响应**，不是 WebSocket；客户端读行，凑完整段 MP3 再返回
-- `Next.js → FastAPI` 这条 HTTP 连接会阻塞约 3-5 秒（串行等三个外部调用）；V2 换 WebSocket + 流水线后可以提前返回第一个音频包
+- 整条链路只有 **STT 用 WebSocket**，其余全是 HTTP。
+- TTS 的"流式"只是 **HTTP 分块响应**，不是 WebSocket；客户端读行，凑完整段 MP3 再返回。
 
 ---
 
@@ -86,7 +83,7 @@ FastAPI → Volcengine TTS   HTTP POST         是(响应体) chunked transfer e
 
 | 步骤 | 操作 | 关键参数 |
 |---|---|---|
-| 1 | `navigator.mediaDevices.getUserMedia()` | `channelCount: 1, sampleRate: 48000, echoCancination: true, noiseSuppression: true` |
+| 1 | `navigator.mediaDevices.getUserMedia()` | `channelCount: 1, sampleRate: 48000, echoCancellation: true, noiseSuppression: true` |
 | 2 | `pickMimeType()` 按优先级探测格式 | 优先 `audio/webm;codecs=opus` → `audio/webm` → `audio/ogg;codecs=opus` → `audio/mp4` |
 | 3 | `MediaRecorder.start()` | 开始收集 chunk |
 | 4 | 用户再次点击 → `recorder.stop()` | `onstop` 触发，拼合 `Blob` |
@@ -319,264 +316,58 @@ STTResult {
 }
 ```
 
-> **ITN 自动生效：** "three" → "3"，"twenty percent" → "20%"  
-> **标点自动生效：** `enable_punc: true`
+---
 
-**计费字段：** `audio_info.duration`（毫秒）→ `stt_audio_seconds`（秒）
+## 八、LLM 适配器与 DeepSeek 深度优化（adapters/llm/）
+
+除了火山引擎的豆包，系统在 `2026-05-02` 下午场的升级中引入了 OpenAI 兼容的 **DeepSeek LLM Adapter**，并支持以下高级特性：
+
+### 8.1 极速非 CoT 对话配置
+在 `config.toml` 中支持按提供商细分配置，并对 DeepSeek 显式配置了 `thinking = "disabled"`。简单日常口语教学对话不需要慢思考 (CoT)，禁用 CoT 可以显著将 LLM 生成延迟从 8 秒以上压缩到 **1.1 秒** 左右：
+
+```toml
+[adapter]
+llm_provider = "deepseek"   # 一键轻松切换全局模型提供商
+
+[adapter.llm.deepseek]
+model = "deepseek-v4-flash"
+thinking = "disabled"       # 对话禁用 CoT
+
+[adapter.llm.volc_ark]
+model = "doubao-seed-2-0-mini-260215"
+```
 
 ---
 
-## 八、LLM 适配器（adapters/llm/volc.py）
+## 九、流式对话管线升级 (SSE Streaming Pipeline)
 
-**服务：** Volcengine Ark（豆包大模型，OpenAI 兼容端点）  
-**端点：** `https://ark.cn-beijing.volces.com/api/v3/chat/completions`  
-**模型：** `doubao-seed-2-0-mini-260215`
+批式模式等待大模型全部打字完毕再整体返回，会导致极长的等待。系统引入了 **FastAPI SSE 端点** 和 **Next.js 服务端 Route Handler 代理**。
 
-### 7.1 请求构造
+### 9.1 SSE 事件发生顺序设计
+FastAPI 的 `POST /sessions/{id}/turns/stream` 端点依次向前端推送以下格式的事件：
 
-```python
-messages = [
-    {"role": "system",    "content": SYSTEM_PROMPT},        # Tina 角色设定
-    {"role": "user",      "content": history[0].text},      # ← 最近 6 轮历史
-    {"role": "assistant", "content": history[1].text},      #   (前端传入)
-    ...
-    {"role": "user",      "content": text_user},            # 本轮 STT 文本
-]
+```
+1. text_user     — STT 语音识别完成（或文字 input echo），让前端立即渲染出孩子说的气泡
+2. text_ai_delta — LLM 吐出的 Delta Token，供前端实现打字机动态生成效果（高频推送）
+3. text_ai_done  — LLM 彻底完成。注意：后端会首先完成 DB 事务落库，再推送本事件（携带 valid turn_id），确保客户端按钮点击时不会发生 404
+4. audio_ready   — 异步 TTS 实时合成完成，包含 audio_b64 Base64 音频段（供语音模式下自动播放）
+5. done          — 对话最终结算事件（包括生成的会话新 title 提示等）
+6. error         — 对话发生任何阻碍的错误（如 EMPTY_TRANSCRIPTION 等）
 ```
 
-**系统提示（System Prompt）：**
-```
-You are Tina, a warm and patient English teacher chatting with an
-elementary-school child in mainland China. Always respond in English.
-Use simple, age-appropriate vocabulary and short sentences (≤ 15 words).
-If the child speaks Chinese, gently re-phrase their idea in English and
-invite them to repeat it. Stay encouraging; never correct mistakes
-harshly. Each turn, ask exactly one short follow-up question to keep
-the conversation going.
-```
+### 9.2 开发环境的 Route Handler 跨域代理
+在本地开发时，由于浏览器无法直接跨端口携带 HttpOnly 的安全 Cookie 去向不同端口的 Python FastAPI 后端发送 POST 连接，我们在前端放置了代理中转：
+- **Next.js Route Handler**: `frontend/app/api/chat/[sessionId]/stream/route.ts`
+- 浏览器向同端口前端的本路由发起流式请求，Route Handler 负责从本地服务端读取 session 凭证并作为 Auth 头转发给 FastAPI。
+- **生产环境策略：** 上线 Nginx 反向代理将前后端同域化后，该代理层可直接去除，由浏览器直连 Python FastAPI 端点。
 
-### 7.2 调用参数
+### 9.3 浏览器端交互时序改进
 
-| 参数 | 值 | 说明 |
+| 对话模式 | 动作阶段 | 瞬时反馈 UI 呈现 |
 |---|---|---|
-| `temperature` | 0.7 | 适度创意，不失稳定 |
-| `max_tokens` | 200 | 防止超长回复 |
-
-### 7.3 响应处理
-
-```
-OpenAI ChatCompletion Response
-  │
-  ├─ choices[0].message.content  → text_ai
-  ├─ usage.prompt_tokens         → llm_input_tokens（计费）
-  └─ usage.completion_tokens     → llm_output_tokens（计费）
-```
-
-**输出：**
-```python
-LLMResponse {
-  text:          "My favorite color is blue! What's yours?"
-  input_tokens:  187
-  output_tokens: 12
-}
-```
-
----
-
-## 九、TTS 适配器（adapters/tts/volc.py）
-
-**服务：** Volcengine 语音合成 2.0（Doubao seed-tts）  
-**协议：** HTTP 流式，Newline-Delimited JSON  
-**端点：** `https://openspeech.bytedance.com/api/v3/tts/unidirectional`
-
-### 8.1 鉴权
-
-```
-Headers:
-  X-Api-App-Id:     <VOLC_SPEECH_APP_ID>
-  X-Api-Access-Key: <VOLC_SPEECH_ACCESS_KEY>
-  X-Api-Resource-Id: seed-tts-2.0
-  X-Api-Request-Id: <random UUID，每次请求唯一>
-  X-Control-Require-Usage-Tokens-Return: text_words   ← 请求返回计费字符数
-  Content-Type: application/json
-```
-
-### 8.2 请求体
-
-```json
-{
-  "user": { "uid": "talking-text" },
-  "req_params": {
-    "text": "My favorite color is blue! What's yours?",
-    "speaker": "zh_female_yingyujiaoxue_uranus_bigtts",
-    "audio_params": {
-      "format": "mp3",
-      "sample_rate": 24000
-    }
-  }
-}
-```
-
-**声音选择：** `zh_female_yingyujiaoxue_uranus_bigtts`（Tina 英语教学声音）
-
-### 8.3 响应流
-
-```
-HTTP/1.1 200 OK
-Transfer-Encoding: chunked
-
-{"code":0,"data":"//NExAAA..."}\n          ← base64 mp3 chunk
-{"code":0,"data":"//NExBAS..."}\n          ← base64 mp3 chunk
-{"code":0,"data":null,"sentence":{...}}\n  ← 句子时间戳（忽略）
-{"code":0,"data":"//NExKQP..."}\n          ← base64 mp3 chunk
-{"code":20000000,"message":"ok","data":null,"usage":{"text_words":12}}\n  ← 结束帧
-```
-
-| code | 含义 |
-|---|---|
-| `0` | 中间帧，包含音频数据或时间戳 |
-| `20000000` | 结束帧，包含计费信息 |
-| 其他 | 错误，抛异常 |
-
-### 8.4 音频拼合
-
-```python
-audio_chunks = []
-for line in response.aiter_lines():
-    msg = json.loads(line)
-    if msg["data"]:
-        audio_chunks.append(base64.b64decode(msg["data"]))
-    if msg["code"] == 20000000:
-        chars = msg["usage"]["text_words"]   # 计费单位：字符数
-        break
-
-audio_bytes = b"".join(audio_chunks)   # 完整 MP3 文件
-```
-
-**输出：**
-```python
-TTSResult {
-  audio:        b"\xff\xf3\x14\x00..."   # MP3 bytes
-  audio_format: "mp3"
-  sample_rate:  24000
-  voice:        "zh_female_yingyujiaoxue_uranus_bigtts"
-  chars:        12                       # 计费字符数
-}
-```
-
----
-
-## 十、对话编排器（core/dialog/orchestrator.py）
-
-串联四个适配器，产出 `TurnResult`，并负责落库。
-
-```
-single_turn(audio_in, audio_in_format, recent_history, ...)
-   │
-   ├─ 1. STT.invoke(audio_in) → STTResult
-   │      if text == "": raise EmptyTranscriptionError
-   │
-   ├─ 2. LLM.invoke([system] + history + [user]) → LLMResponse
-   │      max_tokens = 200
-   │
-   ├─ 3. TTS.invoke(text_ai) → TTSResult
-   │      voice = settings.volc_tts_default_voice
-   │
-   ├─ 4. _maybe_persist_audio()
-   │      if AUDIO_STORAGE_ENABLED:
-   │          写 {turn_id}_in.ogg  → ./storage/audio/{learner_id}/
-   │          写 {turn_id}_out.mp3 → ./storage/audio/{learner_id}/
-   │
-   ├─ 5. INSERT INTO turn (...)
-   │      db.add(Turn(...))
-   │      await db.commit()
-   │
-   └─ 返回 TurnResult {turn_id, text_user, text_ai, audio_out, ...}
-```
-
----
-
-## 十一、数据库落库（storage/models/turn.py）
-
-**表名：** `turn`  
-**触发时机：** 三个外部调用（STT/LLM/TTS）全部成功后，一次原子 INSERT
-
-```sql
-INSERT INTO turn (
-  id,                    -- UUID v4，由 Python 生成
-  learner_id,            -- FK → learner.id（CASCADE DELETE）
-  text_user,             -- STT 识别文本
-  text_ai,               -- LLM 回复文本
-  audio_in_path,         -- ./storage/audio/{learner_id}/{turn_id}_in.ogg
-  audio_out_path,        -- ./storage/audio/{learner_id}/{turn_id}_out.mp3
-  stt_audio_seconds,     -- 音频时长（秒），来自 audio_info.duration / 1000
-  llm_input_tokens,      -- LLM prompt token 数（来自 usage.prompt_tokens）
-  llm_output_tokens,     -- LLM completion token 数（来自 usage.completion_tokens）
-  tts_chars,             -- TTS 字符数（来自 usage.text_words）
-  created_at,            -- DB server_default: now()
-  updated_at             -- DB server_default: now()，onupdate: now()
-)
-```
-
-**计费字段汇总：**
-
-| 字段 | 来源 | 计费单位 |
-|---|---|---|
-| `stt_audio_seconds` | Volcengine STT `audio_info.duration` | 秒（精确到毫秒） |
-| `llm_input_tokens` | Ark `usage.prompt_tokens` | Token |
-| `llm_output_tokens` | Ark `usage.completion_tokens` | Token |
-| `tts_chars` | TTS `usage.text_words` | 字符数 |
-
----
-
-## 十二、完整数据流（数据格式视角）
-
-```
-[Browser]         [FastAPI]          [Volcengine STT]    [Volcengine LLM]    [Volcengine TTS]
-    │                 │                      │                   │                   │
-  webm/opus         webm/opus               │                   │                   │
-  48kHz stereo  ──► ffmpeg ──► ogg/opus     │                   │                   │
-                              16kHz mono ──►│                   │                   │
-                                            │ "Hello, what's    │                   │
-                                            │  your name?" ─────►                   │
-                                            │                   │ "My name is Tina! │
-                                            │                   │  What's yours?" ──►│
-                                            │                   │                   │ mp3 chunks
-                                            │                   │                   │ 24kHz mono
-                                            │                   │                   │ ◄──────────
-  data:audio/mpeg;base64,...                │                   │                   │
-  ◄──────────────────────────────────────────────────────────────────────────────────
-```
-
----
-
-## 十三、关键配置参数
-
-| 参数 | 默认值 | 说明 |
-|---|---|---|
-| `VOLC_ARK_MODEL` | `doubao-seed-2-0-mini-260215` | LLM 模型 ID |
-| `VOLC_STT_RESOURCE_ID` | `volc.seedasr.sauc.duration` | STT 按时长计费资源 |
-| `VOLC_STT_MODEL_NAME` | `bigmodel` | 豆包语音识别模型 |
-| `VOLC_STT_SAMPLE_RATE` | `16000` | STT 输入采样率（Hz） |
-| `VOLC_TTS_RESOURCE_ID` | `seed-tts-2.0` | TTS 资源 ID |
-| `VOLC_TTS_DEFAULT_VOICE` | `zh_female_yingyujiaoxue_uranus_bigtts` | Tina 教师声音 |
-| `VOLC_TTS_AUDIO_FORMAT` | `mp3` | TTS 输出格式 |
-| `VOLC_TTS_SAMPLE_RATE` | `24000` | TTS 输出采样率（Hz） |
-| `AUDIO_STORAGE_ENABLED` | `true` | 是否保存音频到本地 |
-| `AUDIO_STORAGE_DIR` | `./storage/audio` | 音频本地存储根目录 |
-
----
-
-## 附：错误边界
-
-| 阶段 | 错误 | 处理方式 |
-|---|---|---|
-| 麦克风权限拒绝 | `getUserMedia` 抛异常 | → `CHAT_MIC_DENIED`，显示提示 |
-| 音频为空 | blob.size == 0 | → `CHAT_AUDIO_EMPTY`，不发请求 |
-| ffmpeg 失败 | returncode != 0 | → HTTP 500 |
-| STT 返回空文本 | text == "" | → HTTP 422 `EMPTY_TRANSCRIPTION` |
-| STT WS 连接失败 | websockets 异常 | → HTTP 500（未分类） |
-| LLM 调用失败 | openai 异常 | → HTTP 500（未分类） |
-| TTS 返回错误码 | code != 0 / 20000000 | → `RuntimeError` → HTTP 500 |
-| Learner 不属于当前账号 | DB 查询空 | → HTTP 404 `Learner not found` |
-| Session 过期 | cookie 无效 | → proxy.ts 重定向 `/login?expired=1` |
+| 语音模式 | 用户松开录音按钮 | 乐观更新：立刻出现“识别中...”的用户气泡，防止视觉卡顿 |
+| 语音模式 | 1.3 秒 | 收到 `text_user` 事件，用户文本整段被替换为转写的英文 |
+| 语音模式 | 1.3 ~ 2.4 秒 | AI 回复逐字逐 Token 出现，AI 气泡呈现微动的打字光标 |
+| 语音模式 | 2.5 秒 | 收到 `text_ai_done`，光标消失，播放按钮出现（此时 turn 已落库） |
+| 语音模式 | 3.7 秒 | 收到 `audio_ready`，前端绑定的统一 `<audio>` 播放器自动静默开播 |
+| 文字模式 | 点击发送 | 乐观更新插入用户气泡，AI 文本几乎瞬时（1.1 秒内）流式渲染完毕 |

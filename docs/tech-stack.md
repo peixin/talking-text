@@ -1,6 +1,6 @@
-# 技术选型清单 · Tech Stack
+# 技术选型清单
 
-> 本文档记录每一项技术选型的**是什么、为什么选、考虑过哪些替代、为什么不用**。
+> 本文档记录每一项技术选型的**是什么、为什么选、考虑过哪些替代、为什么不用**。  
 > 面向新成员 / AI 助手 / 未来的自己——理解决策背景，避免无意义推翻。
 
 ---
@@ -178,7 +178,7 @@
 **重要心智：全 Next 范式，不当 SPA 写**
 - Client Component 只在需要交互的地方（对话页音频交互等），文件名加 `Client` 后缀
 - Server Actions 处理登录等表单；**返回 Error Code** 交由 UI 翻译
-- **不使用 Next API Routes**（后端是独立 Python）
+- **不使用 Next API Routes**（后端是独立 Python，但开发环境为了解决跨域 Cookie，保留了特定 Route Handler 作为中转代理）
 - **国际化 (i18n)**：使用 `next-intl` 配合 `[locale]` 路由，文案统管于根目录 `i18n/`
 
 **不选：**
@@ -253,7 +253,7 @@
 - **MUI**：Material 重，不对味
 - **Radix 裸用**：可以，但 shadcn 就是 Radix + 写好的 Tailwind 样式，省工
 - **Ant Design**：中后台味道重，和"儿童极简聊天"不贴
-- **Headless UI**（Tailwind 官方）：组件比 shadcn 少，生态小
+- **Headless UI**（Tailwind 官方）：组件比 shadcn少，生态小
 
 ### 辅助库
 
@@ -285,7 +285,7 @@
 
 **为什么：**
 - Next.js 16 起 `eslint-config-next` 原生 Flat Config 导出
-- ESLint 10 和 Next 配置的 FlatCompat 有循环 JSON 的 bug，降到 9 稳定
+- ESLint 10 和 Next 配置 of FlatCompat 有循环 JSON 的 bug，降到 9 稳定
 - Flat Config 比 .eslintrc 清爽
 
 **不选：**
@@ -349,20 +349,19 @@
 
 ## 五、AI / 语音链路
 
-### 全家桶：火山方舟（Volcengine Ark）
+### 全家桶：火山方舟（Volcengine Ark）与 DeepSeek
 
-**选择：** 火山方舟的 STT + LLM（豆包）+ TTS 全家桶
+**选择：** 火山方舟的 STT + TTS，以及 DeepSeek LLM 的混合模式（通过 unified configs 随时在火山和 DeepSeek 间进行切换）
 
 **为什么：**
-- **STT**：火山/讯飞都强，火山和 LLM / TTS 同账号省事
-- **LLM（豆包）**：国内便宜、快、英语够用
-- **TTS**：火山有儿童音色，自然度高
-- 一个账号一套密钥，账单清晰
+- **STT**：火山实时语音识别精度高
+- **LLM**：DeepSeek 提供性价比极高且推理延迟低（`thinking=disabled` 消除 CoT）的对话服务；同时火山豆包作为高可用备选
+- **TTS**：火山提供专门的儿童音色，还原度高
+- 混合架构通过 per-provider 模块设计封装，在保持账号简单的同时实现了最高性价比与最低交互延迟
 
 **不选（但 adapter 接口可切）：**
 - **OpenAI / Claude**：国内不可直连
 - **讯飞 STT**：也强，但账号分离
-- **DeepSeek LLM**：更便宜 + 能力更强，V2 可能切过去
 - **阿里云 CosyVoice TTS**：新秀，值得观察
 
 ### 范围约束策略：Prompt + 事后校验（Level 0+1）
@@ -413,20 +412,9 @@
 
 **不选：** 不强制。但团队在扩大时会吃亏。
 
-### 容器化：V1 不做
+### 容器化：V1 延后实装
 
-**选择：** 延后到发布阶段，一次性补 `Dockerfile` + `docker-compose.yml`
-
-**为什么：**
-- 开发阶段结构频繁变动，每次改同步 Dockerfile 成本高
-- 本地开发用 native 更快
-
-**但代码必须 "Docker-ready"：**
-- 配置走 env vars / config 文件
-- 日志 stdout/stderr
-- 不依赖 `__file__` 相对路径
-- 音频等临时文件用 tempfile 或上传到 TOS
-- 启动不预设文件系统约定
+**选择：** 延后至发布阶段实装，已在 `2026-05-02` 及后续完成 `Dockerfile` 与 `docker-compose.yml` 架构设计，具体参见 `docker.md`。
 
 ---
 
@@ -440,7 +428,6 @@
 | Google Fonts 中文字体 | 国内访问不稳 |
 | Prisma | Python 客户端不官方，架构灾难 |
 | Husky | JS only，多语言 monorepo 痛 |
-| Docker（V1 阶段）| 开发期改得太频繁，成本不划算 |
 | Biome | 舍弃了 Next 的 ESLint 插件生态 |
 | Django / Flask | 异步不原生 |
 | MongoDB | 业务是关系型 |
@@ -451,10 +438,8 @@
 
 | 事项 | 触发条件 |
 |---|---|
-| Docker 化 | V1 稳定后，发布前 |
 | 上云部署（火山 / 阿里 / 腾讯）| 发布前 |
-| 流式语音链路（WebSocket STT/TTS）| V1 整段体验跑通 |
-| DeepSeek 替代豆包 | 当豆包价格 / 能力劣势明显时 |
+| WebSocket 极速双向语音流 | V2 阶段升级 |
 | pgvector 启用 | 做语义相似词推荐时 |
 | PWA 离线模式 | V2 |
 | COPPA / 个保法合规 | 对外推广前 |

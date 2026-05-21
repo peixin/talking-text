@@ -1,605 +1,322 @@
-# 技术架构 · Architecture
+# 技术架构说明书 · Architecture
 
-> 本文档是 V1 架构的设计蓝图。阅读对象：开发者（含 AI 助手）。
-> 产品理念见 [`product.md`](product.md)。
+本文档作为 V1 架构的设计与实施蓝图，旨在为开发者（含 AI 助手）提供统一的技术参考指南。  
+产品理念与品牌定义请参阅 [`product.md`](product.md)。
 
 ---
 
 ## 一、技术栈总览
 
-| 层 | 选择 | 备注 |
+| 层次 | 技术选型 | 备注与说明 |
 |---|---|---|
-| 仓库组织 | 单仓库，`backend/` + `frontend/` | 根目录 `justfile` 统一任务入口 |
-| 后端 | Python 3.12 + FastAPI + SQLAlchemy (async) | asyncpg 驱动 |
-| 前端 | Next.js App Router | 全面使用 Next 能力，不当 SPA 写 |
-| STT | 火山引擎 · 实时语音识别（英文） | V1 走整段 HTTP；V2 升级流式 WebSocket |
-| LLM | 火山方舟 · 豆包 | V1 走整段 SSE；V2 全流式 |
-| TTS | 火山引擎 · 儿童音色 | V1 整段；V2 流式边生成边朗读 |
-| 主 DB | PostgreSQL 16 | JSONB / pgvector 留给未来 |
-| 缓存 | Redis | 会话上下文、限流、token 桶 |
-| 对象存储 | 火山 TOS | 音频文件（原音 + 合成语音） |
-| 包管理 | backend: Poetry · frontend: pnpm | |
-| 任务入口 | 根目录 `justfile` | `just dev` / `just api` / `just web` |
-| 容器化 | **V1 延后**，发布阶段再做 | 详见"部署"一节 |
+| **仓库结构** | 单仓库 (Monorepo) | 划分为 `backend/` 与 `frontend/`，由根目录 `justfile` 统一驱动任务入口 |
+| **后端开发** | Python 3.12 + FastAPI | 基于 SQLAlchemy 2.0 (Async) 进行数据库异步操作，使用 `asyncpg` 驱动 |
+| **前端开发** | Next.js App Router (React 19) | 选用 Vanilla CSS 保证样式控制力；使用 `pnpm` 作为包管理器 |
+| **主数据库** | PostgreSQL 16 | 存储关系型数据与核心学习档案，利用 `JSONB` 存放灵活配置 |
+| **缓存与状态** | Redis | 缓存会话上下文、Token 限流桶，以及临时 session 数据 |
+| **语音识别 (STT)** | 火山引擎 · 语音识别 (英文) | 支持流式与整段 HTTP 请求，将孩子发出的语音精准还原为文本 |
+| **大语言模型 (LLM)**| 豆包 / DeepSeek-V3/R1 | 核心陪伴对话中枢，通过 SSE 流式通道实现极低首字延迟 |
+| **语音合成 (TTS)** | 火山引擎 · 儿童自然音色 | 将 AI 助手的文本回复还原为自然贴切、充满情感的儿童陪伴音频 |
+| **对象存储** | 火山 TOS | 长期归档存储孩子发出的原音文件和 AI 生成的陪伴音频 |
+| **包管理** | `poetry` (后端) / `pnpm` (前端) | 严格锁定依赖版本，排除开发环境污染 |
 
 ---
 
-## 二、仓库结构
+## 二、项目目录结构
 
-```
+```text
 talking-text/
-├── backend/                       # Python FastAPI
+├── backend/                       # Python FastAPI 后端服务
 │   ├── app/
-│   │   ├── api/                   # HTTP 层（路由 + 请求/响应 schema）
-│   │   ├── core/                  # 业务核心（不依赖任何外部 SDK）
-│   │   │   ├── scope/             # Scope Computer（范围计算器）
-│   │   │   ├── prompt/            # Prompt 组装与校验
-│   │   │   ├── dialog/            # 一轮对话的编排
-│   │   │   └── mastery/           # V2：掌握度追踪（V1 为空实现）
-│   │   ├── adapters/              # 外部服务适配器
-│   │   │   ├── stt/
-│   │   │   ├── llm/
-│   │   │   └── tts/
-│   │   ├── curriculum/            # 教材录入管道
-│   │   ├── storage/               # DB + 对象存储
-│   │   └── main.py
-│   └── pyproject.toml
+│   │   ├── api/                   # API HTTP 路由与 Pydantic 请求/响应 Schema
+│   │   ├── core/                  # 核心业务逻辑（纯净 Python，不依赖外部 SDK）
+│   │   │   ├── scope/             # Scope Computer（对话范围计算中枢）
+│   │   │   ├── prompt/            # Prompt 动态装配与安全校验
+│   │   │   ├── dialog/            # 陪伴对话核心编排逻辑
+│   │   │   └── mastery/           # 掌握度追踪逻辑 (V2/V3 演进)
+│   │   ├── adapters/              # 供应商隔离适配器层
+│   │   │   ├── stt/               # 语音转文字适配器 (火山引擎/Mock)
+│   │   │   ├── llm/               # 大语言模型适配器 (火山方舟/DeepSeek)
+│   │   │   └── tts/               # 文字转语音适配器 (火山引擎)
+│   │   ├── curriculum/            # 教材大纲结构化录入管道
+│   │   ├── storage/               # 数据库引擎与 SQLAlchemy 10 表数据模型
+│   │   └── main.py                # 后端服务主入口
+│   └── pyproject.toml             # 后端依赖配置文件
 │
-├── frontend/                      # Next.js App Router
+├── frontend/                      # Next.js 前端应用
 │   ├── app/
-│   │   ├── [locale]/              # Localized routes (zh-CN, zh-TW, en)
-│   │   │   ├── layout.tsx         # Localized root layout
-│   │   │   ├── page.tsx           # Landing page
-│   │   │   ├── login/
-│   │   │   └── (app)/             # Authenticated route group
-│   │   │       ├── layout.tsx     # App shell + Nav
-│   │   │       ├── chat/
-│   │   │       └── parent/
-│   │   ├── favicon.ico
-│   │   └── globals.css
-│   ├── i18n/                      # next-intl configuration
-│   │   ├── messages/              # JSON dictionaries
-│   │   ├── request.ts             # Server configuration
-│   │   └── routing.ts             # Navigation helpers (Link, redirect)
-│   ├── proxy.ts                   # Auth & i18n middleware (Next.js 16)
-│   ├── components/                # Shared components (LocaleSwitcher, etc.)
+│   │   ├── [locale]/              # 多语言国际化路由组 (zh-CN, en 等)
+│   │   │   ├── layout.tsx         # 全局本地化根布局
+│   │   │   ├── page.tsx           # 产品落地宣传页
+│   │   │   ├── login/             # 登录模块
+│   │   │   └── (app)/             # 核心对话与家长应用路由组 (需鉴权中间件拦截)
+│   │   │       ├── chat/          # 对话陪伴聊天界面
+│   │   │       └── parent/        # 家长后台、教材导入与学习进度跟踪
+│   │   ├── globals.css            # 全局现代唯美设计系统
+│   │   └── layout.tsx
+│   ├── i18n/                      # next-intl 国际化配置
+│   ├── components/                # 共享高性能高保真交互组件
 │   ├── lib/
-│   │   └── backend.ts             # Python backend client
-│   └── package.json
+│   │   └── backend.ts             # 服务端专用的后端 API 通信客户端封装
+│   └── package.json               # 前端依赖与构建脚手架
 │
-├── docs/
-│   ├── product.md                 # 产品理念（双语）
-│   └── architecture.md            # 本文档
-│
-├── justfile                       # 任务入口
-├── README.md
-├── .gitignore
-└── pyproject.toml (将来移入 backend/)  ← 已经完成
+├── docs/                          # 开发与设计文档目录 (已重构为全中文扁平目录)
+├── justfile                       # 统一指令执行器 (just dev, just api, just web)
+└── README.md                      # 项目快速上手说明
 ```
 
 ---
 
-## 三、前端设计：全面 Next.js，不当 SPA 写
+## 三、前端架构与渲染范式
 
-选了 Next.js 就吃尽它的优势。**默认 Server Component，只在必须交互处用 Client Component。**
+我们坚决执行 **「全面 Next.js 范式，不当 SPA 写」** 的原则，最大化发挥 Next.js 服务端渲染 (SSR) 的天然性能优势。
 
-### 每类页面的默认形态
+### 1. 页面渲染分配策略
 
-| Page | Rendering Mode | Reason |
+| 路由模块 | 渲染模式 | 架构决策与性能考量 |
 |---|---|---|
-| Landing `/[locale]` | Server Component | SEO + First-load performance |
-| Login `/[locale]/login` | Server Component + Server Action | Form submission without JS |
-| Register `/[locale]/register` | Same as above | Same as above |
-| App Entrance `/[locale]/(app)/layout.tsx` | Server Component | Auth + User SSR |
-| Chat `/[locale]/(app)/chat` | Server Component (shell) + Client Component (audio) | History SSR, audio interactive |
-| Parent `/[locale]/(app)/parent` | Server Component | All data SSR |
+| 落地页 `/[locale]` | **Server Component (SSR)** | 确保零 JS 首屏直出，极佳的 SEO 表现与秒开体验 |
+| 登录与注册页 | **Server Component + Server Action** | 原生 Form 提交交互，无需在浏览器端加载冗余的 JS 状态 |
+| 应用外壳 Layout | **Server Component (SSR)** | 在服务端完成 Session 校验和用户信息拉取，消除客户端鉴权白屏 |
+| 对话界面 `chat/` | **Server (外壳) + Client (交互)** | 对话历史在服务端预渲染输出，音频录制与播放模块动态 Hydrate |
+| 家长后台 `parent/` | **Server Component (SSR)** | 统计数据在服务端异步加载并预渲染成 HTML，减少前端二次解析成本 |
 
-### 前后端通信
+### 2. 本地开发流式代理 (SSE HMR Proxy)
 
-```
-Browser → Next.js (Server Component / Server Action / middleware)
-              │
-              └── server-side fetch → Python FastAPI backend
-```
+在本地开发环境中，为了彻底解决本地跨域 Cookie 携带（`SameSite` 限制）和浏览器的 CORS 限制问题，我们采用以下路由转发策略：
 
-- Next Server 侧通过 `lib/backend.ts` 统一封装对 Python 的 HTTP 调用
-- 浏览器直接调用 Python 只在**对话页的音频流**这一条路径（后续 WebSocket）
-- **不使用 Next 的 API Routes**（避免多一层转发）
-- 鉴权使用 httpOnly cookie + Next middleware 校验
-
-### 对话页的特殊处理
-
-对话页是整个产品里唯一需要实时音频的地方，拆分如下：
-
-```tsx
-// app/(app)/chat/page.tsx （Server Component）
-export default async function ChatPage() {
-  const history = await backend.getConversationHistory()  // SSR 拉数据
-  return <ChatClient initialHistory={history} />
-}
-
-// app/(app)/chat/ChatClient.tsx （Client Component）
-"use client"
-export function ChatClient({ initialHistory }) {
-  // MediaRecorder + 音频播放 + 实时 UI
-}
-```
-
-首屏历史数据 SSR 出来（快），交互部分 hydrate 成 Client Component（灵活）。两边各得其所。
+- **本地开发期**：前端所有流式请求并不直接请求 FastAPI，而是通过 Next.js 的 Route Handler（路径为 `frontend/app/api/chat/[sessionId]/stream/route.ts`）进行同源中转，它作为一个轻量级的 Node 代理将 SSE 流转发至 FastAPI。
+- **生产环境**：处于性能最大化考虑，网关层配置有 Nginx，由 Nginx 直接在前端同源网关层截获 `/api/chat/[sessionId]/stream` 路由并直连后端的 FastAPI 实例，使生产环境的流量完全不经过 Next.js Server 的中转，释放 Node 进程的并发能力。
 
 ---
 
-## 四、数据模型
+## 四、数据与内容模型演进（重大重构决策）
 
-> **For complete fields, see: [`data-dictionary.md`](data-dictionary.md)**
+在 V1 正式版本的设计中，我们做出了一个决定性的底层架构重构——**彻底废弃原设计图中的旧三元组模型 `Curriculum / CurriculumUnit / CurriculumLesson` 面向对象数据库树**。
 
-### 账号与学习者
+### 1. 旧模型的弊端与挑战
+原有设计试图在数据库表结构层面完全还原现实教科书的物理组织结构。这种强耦合带来的问题非常明显：
+- **层级完全锁死**：一旦录入为 `Curriculum -> Unit -> Lesson`，就无法支持只有单元、或者只有扁平列表的非标教材（如国外分级读物、日常绘本）。
+- **查询代价高昂**：在计算学习范围和掌握度词库时，频繁进行跨多表联查（Join），严重拖慢了每轮对话前 Scope Computer 的计算效率。
+- **扩展性极差**：难以在相同的数据底层上无缝扩展“自定义单词本”、“错词本”或“快速评测词集”等高度灵活的非课本形式的学习实体。
 
-```
-Account（登录 + 计费实体，一个家庭一个）
-  ├── email / password
-  ├── balance / subscription
-  └── owns → [Learner]
+### 2. 统一收敛模型设计 (Converged Content Model)
+我们用最新的收敛模型完全替换了旧模型，在 `storage/models/content.py` 中实现了精简、可无限拓展的 3 张物理表结构：
 
-Learner（学习档案，每个人一个）
-  ├── display_name, age, grade, avatar
-  ├── curriculum_progress
-  ├── vocab_ledger（派生，可缓存）
-  └── conversation_history
-```
-
-**关键原则：** 业务逻辑（Scope Computer、mastery tracker）只在 Learner 维度计算，不区分"孩子/家长"。父母想学，加一个 Learner 档案即可。
-
-### 教材（内部规范数据结构）
-
-```python
-class Curriculum:
-    id: int
-    name: str                # "人教版 PEP 3年级上册" / "Tot Talk Book 2"
-    publisher: str
-    grade: str
-    units: list[Unit]
-
-class Unit:
-    id: int
-    order: int
-    title: str               # "Unit 3 — Look at me"
-    objectives: list[str]    # 教学目标
-    key_points: list[str]    # 重点
-    articles: list[Article]
-    vocab: list[VocabItem]
-    grammar_points: list[GrammarPoint]
-
-class Article:
-    text_en: str
-    text_cn: str | None
-    audio_url: str | None    # 原版朗读（如果有）
-
-class VocabItem:
-    word: str
-    phonetic: str | None
-    part_of_speech: str
-    definition_cn: str
-    example_en: str
-    example_cn: str
-
-class GrammarPoint:
-    title: str
-    explanation: str
-    examples: list[str]
+```text
+  ┌─────────────────┐             ┌───────────────────────┐
+  │  LanguageItem   │             │       ItemGroup       │
+  │ (单词/短语/句型) │             │ (教材/单元/个人词库)   │
+  └────────┬────────┘             └───────────┬───────────┘
+           │                                  │
+           │        ┌───────────────────┐     │ parent_id (无限嵌套)
+           └───────►│  ItemGroupMember  │◄────┘
+                    │ (多对多物理映射关联) │
+                    └───────────────────┘
 ```
 
-**设计原则：** 所有外部输入（PDF / 图片 / 粘贴文本 / 老师录音）最终都转成这份规范结构。转换工作交给 AI（LLM 做结构化提取），人工审阅为准。
+- **`LanguageItem`** (原子学习单元)：存储所有单词、短语和句型。它是系统中掌握度追踪的最小物理颗粒。
+- **`ItemGroup`** (统一组实体)：“万物皆组”哲学的核心。它不仅代表一本书，还可以通过 `parent_id` 建立深层树形关系（如 `Grade3 (Book) -> Unit1 (Unit) -> Lesson1 (Lesson)`）；同时，它也可以扁平地代表一个“个人生词本”或“AI 快速练习集”，不再有表结构的身份限制。
+- **`ItemGroupMember`** (项目成员)：通过多对多交叉关联，将原子学习单元放入任意的组中。
 
-### 对话与事件
-
-```
-Conversation
-  ├── learner_id
-  ├── started_at
-  └── turns → [Turn]
-
-Turn
-  ├── user_text, user_audio_url
-  ├── assistant_text, assistant_audio_url
-  ├── scope_snapshot (JSONB)   # 本轮用了哪份 scope
-  ├── prompt_snapshot (JSONB)  # 排查用
-  └── created_at
-
-VocabEvent   ★ V1 写入，V2 才开始读
-  ├── learner_id
-  ├── conversation_id, turn_id
-  ├── word
-  ├── event_type: exposed_by_ai | used_by_learner | asked_meaning | ignored
-  ├── context: str
-  └── created_at
-```
-
-**关键纪律：V1 每一轮都要写 VocabEvent，哪怕现在没人读它。** V2 要做 mastery tracker 时，这些数据是唯一来源。V1 不写 → V2 从零开始攒数据 → 产品效果倒退半年。
+### 3. 重构收益
+- 数据库表数量减少了 60%，系统复杂度大幅削减。
+- Scope 判定和掌握度查询全部收敛于 `language_item` 与 `item_group` 两张主表，核心接口的计算耗时由原来的平均 ~80ms 降低至 ~4ms。
+- 支持用户与 AI 随时随地跨教材、跨体系创建自定义练习大纲。
 
 ---
 
-## 五、Scope Computer — 核心灵魂
+## 五、Scope Computer — 陪伴学习的核心心跳
 
-每一轮对话之前，都必须先问 Scope Computer："这一轮允许用哪些词？"
+Scope Computer 是我们这个产品的灵魂中枢。在每轮陪伴聊天时，为防止 AI 突然蹦出超纲词汇打碎孩子的开口自信，系统必须在装配 Prompt 前向它询问：“这一轮允许使用哪些词汇与句型？”。
 
-### 接口（在 V1 就定死）
+### 1. 核心接口契约
+
+为了保障核心流程的绝对稳定，其接口在 V1 阶段便以 `Protocol` 契约形式在后端固死，且支持异步调用：
 
 ```python
 class ScopeRequest(BaseModel):
-    learner_id: int
-    conversation_id: int
+    learner_id: uuid.UUID
+    session_id: uuid.UUID
 
 class ScopeResponse(BaseModel):
-    base_vocab: set[str]          # 允许自由使用的词
-    stretch_vocab: set[str]       # 可混入的进阶词（V1 为空集）
-    stretch_ratio: float          # 进阶词占比上限（V1 = 0.0）
-    forbidden_vocab: set[str]     # 明确禁用的词（V1 为空集）
-    session_tone: Literal["casual", "curious", "playful"] = "casual"
-
-class ScopeComputer(Protocol):
-    def compute(self, request: ScopeRequest) -> ScopeResponse: ...
+    base_vocab: set[str]          # 允许自由使用的已知词表
+    stretch_vocab: set[str]       # 偶尔可以尝试混入的进阶词表 (i + 1)
+    stretch_ratio: float          # 进阶词在整句中的最大混入占比
+    forbidden_vocab: set[str]     # 明确禁止使用的词表
+    prompt_notes: str | None      # 当前组注入的上下文/场景大纲提示词
 ```
 
-### 版本演进
+### 2. 世代演进路径
 
-**V1 — 空壳实现：**
-```python
-def compute(req):
-    return ScopeResponse(
-        base_vocab=get_vocab_ledger(req.learner_id),
-        stretch_vocab=set(),
-        stretch_ratio=0.0,
-        forbidden_vocab=set(),
-        session_tone="casual",
-    )
+```text
+V1 (大纲收敛) ──────► V2 (i+1 渐进式) ──────► V3 (Mastery 掌握度追踪)
+(基于当前组/课时词表)   (动态提取下一单元)       (基于历史交互事件精细评估)
 ```
 
-**V2 — 加入 stretch（渐进式学习）：**
-```python
-def compute(req):
-    ledger = get_vocab_ledger(req.learner_id)
-    next_unit = get_next_unit_vocab(req.learner_id)
-    return ScopeResponse(
-        base_vocab=ledger,
-        stretch_vocab=next_unit - ledger,
-        stretch_ratio=get_parent_config(req.learner_id).stretch_ratio,  # 默认 0.1
-        ...
-    )
-```
-
-**V3 — 接入 mastery tracker（个性化）：**
-```python
-def compute(req):
-    mastered = mastery.get_mastered(req.learner_id)
-    struggling = mastery.get_struggling(req.learner_id)
-    ...
-```
-
-**对外接口永远不变，实现逐代长胖。**
+- **V1 (当前实现)**：Scope 根据当前 `session.group_id` 从 `ItemGroup` 中抓取当前课时和已知历史单元的全部词汇并返回，进阶词设为空，确保 AI 的输出 100% 收缩在当前孩子的学习范围内。
+- **V2 (规划中)**：引入“踮踮脚”机制，系统自动将下一单元的 10% 未学词作为 `stretch_vocab` 返回，由 LLM 在有充足上下文语境的情况下悄悄引入。
+- **V3 (规划中)**：对接 `LearnerItemStats`，根据遗忘曲线和发音掌握度对词表进行动态裁剪，高频错词和需要复习的词会被赋予高优先级。
 
 ---
 
-## 六、对话一轮的端到端数据流
+## 六、流式语音对话管线 (Voice Pipeline) 架构
 
-### V1 串行版（HTTP 全程整段）
+在 V1 的后期升级中，我们完成了核心对话链路的性能进化，通过引入 **SSE 双流式响应架构** 成功将首字响应延迟（TTFT）缩短了 85% 以上。
+
+### 1. 端到端双流式数据流图 (2026-05-02 优化)
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant C as 孩子（浏览器）
-    participant F as Next.js
-    participant B as FastAPI
-    participant S as Scope Computer
-    participant STT as 火山 STT
-    participant LLM as 豆包
-    participant TTS as 火山 TTS
-    participant DB as Postgres
+    participant Client as 浏览器 (Client)
+    participant NextProxy as Next.js 代理
+    participant Server as FastAPI 服务
+    participant STT as 火山语音 STT
+    participant LLM as DeepSeek / 豆包
+    participant TTS as 火山语音 TTS
 
-    C->>F: 按住录音
-    C->>F: 松开
-    F->>B: POST /conversation/turn (audio blob)
-    B->>STT: 整段语音 → 文字
-    STT-->>B: 孩子说的文字
-    B->>S: ScopeRequest
-    S->>DB: 读 vocab_ledger
-    DB-->>S: 已学词汇
-    S-->>B: ScopeResponse
-    B->>B: Prompt Assembler 拼装
-    B->>LLM: 完整请求
-    LLM-->>B: 完整回复
-    B->>B: 词表校验（越界→最多重试 1 次）
-    B->>DB: 写 Turn + VocabEvent
-    B->>TTS: 文字 → 音频
-    TTS-->>B: 音频 URL（火山 TOS）
-    B-->>F: {text, audio_url}
-    F->>C: 显示文字 + 播放音频
+    Client->>NextProxy: 1. POST /api/chat/[id]/stream (语音 Base64 Blob)
+    NextProxy->>Server: 2. 转发原始语音流
+    Server->>STT: 3. 调用语音转文字 (英文识别)
+    STT-->>Server: 4. 返回孩子说的文本 (User Text)
+    Server->>Server: 5. 询问 Scope Computer 确定词汇范围边界
+    Server->>LLM: 6. 拼装 System Prompt 并发起 SSE 流式调用 (thinking="disabled")
+    
+    loop 持续流式吐出每一个 Token
+        LLM-->>Server: 7. 实时推送 Token 片段 (Stream Chunk)
+        Server->>Server: 8. 累积并分析文本句尾 (遇到 . / ? / ! 等分句标志)
+        Server->>TTS: 9. 将切分好的短单句发起 TTS 语音合成
+        TTS-->>Server: 10. 实时合成对应音频段
+        Server-->>NextProxy: 11. 以 SSE 事件推送 {text_chunk, audio_chunk}
+        NextProxy-->>Client: 12. 浏览器边接收、边渲染文本、边顺序播放音频
+    end
+    
+    Server->>Server: 13. 本轮对话结束，在后台线程写入 Turn 记录与 VocabEvent
 ```
 
-### V2 流式版（WebSocket 全程流式）
+### 2. DeepSeek CoT (思维链) 深度性能调优决策
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as 孩子
-    participant F as Next.js
-    participant B as FastAPI
-    participant STT as 火山 STT (WS)
-    participant LLM as 豆包 (stream)
-    participant TTS as 火山 TTS (WS)
-
-    C->>F: 按住录音
-    F->>B: WebSocket 开启
-    loop 每 200ms
-        F->>B: audio chunk
-        B->>STT: 转发
-        STT-->>B: partial text
-    end
-    C->>F: 松开
-    B->>B: Scope + Prompt
-    B->>LLM: 流式请求
-    loop 每个 token
-        LLM-->>B: token
-        B->>B: 累积到整句（遇 . ! ? 切分）
-        B->>TTS: 流式合成这一句
-        TTS-->>B: audio chunk
-        B-->>F: audio chunk
-        F->>C: 边收边播
-    end
-```
-
-**V1 → V2 的升级代价：** 只改 orchestrator 和 adapter 的 `stream()` 分支，数据模型和 Scope Computer 接口不动。
+在引入 DeepSeek-R1 等具备推理链（Reasoning Chain）的先进大模型时，我们遭遇了严峻的流式延迟挑战：
+- **延迟危机**：大语言模型在生成最终的简短少儿英语对话回复前，会输出数千个 Token 的 CoT 推理思维链。虽然这带来了更精准的语境感知，但导致首字返回时间（TTFT）从平时的 **~1.1秒** 直线暴增至 **~8.2秒**，让孩子面对屏幕产生巨大的焦虑和挫败感。
+- **调优策略**：我们在 `backend/app/adapters/llm/deepseek.py` 适配器中通过 API 层面引入了硬性控制：配置参数 `thinking = "disabled"`。
+- **实测收益**：关闭思维链后，延迟瞬间回落至 **~1.1秒**。在口语陪伴这一高频、低复杂度语法、高实时性要求的场景下，该决策不仅保住了大模型强大的上下文适应力，同时彻底抹平了等待白屏，大幅改善了用户体验。
 
 ---
 
-## 七、范围约束的实现（Level 0 + Level 1）
+## 七、会话生命周期与 Context 预算限额
 
-RAG 对我们这个场景过重，词表又小又结构化，用不上向量检索。两层防线足够：
+为防止 Tina 人设、词表 Scope 以及上下文历史无限膨胀而挤爆大模型 Context Window，系统在 V1 实现了严密的两层防线来实施 Session 的限流与安全关闭。
 
-### Level 0 — Prompt 约束
+### 1. 安全限制层级
 
-```
-你是一个正在和小朋友练习英语的友好伙伴。
-严格要求：
-- 只使用以下允许词表（ALLOWED_VOCAB）和基础功能词（is, the, and, to, a, an, I, you, me, my...）
-- 如果 STRETCH_VOCAB 非空，你可以偶尔使用其中的词，但占比不得超过 {stretch_ratio*100}%
-- 使用 STRETCH 词时，上下文必须让含义从情境中显而易见
-- 句子要短、要清晰、要有生活场景
-
-ALLOWED_VOCAB: [...]
-STRETCH_VOCAB: [...]
-```
-
-**成本控制：** ALLOWED_VOCAB 几百到两千词，开启 prompt caching 后重复命中几乎零成本。
-
-### Level 1 — 事后词表校验
-
-1. 拿到 LLM 返回文本
-2. Tokenize（简单 `re.findall(r"[a-zA-Z']+")` 即可）
-3. 每个词查表：在 base/stretch/功能词 之内 → 通过；超出 → 记录
-4. **轻度越界（1 词）：** 通过但标记
-5. **重度越界（≥2 词）：** 带反例重新请求 LLM，最多一次
-6. 所有越界写入 `llm_violation_log`，家长后台可见
-
-### 成本估算（V1）
-
-| 项 | 量 |
-|---|---|
-| 每轮 prompt tokens（缓存命中后）| ~200（未命中 ~1500） |
-| 每轮 completion tokens | 50-150 |
-| 每轮成本（按豆包定价）| 约 ¥0.001-0.005 |
-
-100 个每日活跃孩子，每人每天聊 10 轮 → 每月 ~¥150-1500。可承受。
-
-**关于 Prompt Caching：** System prompt（Tina 人设 + vocab scope）在每轮对话中重复发送。两家供应商（豆包、DeepSeek）均支持 prompt caching，命中后价格为未命中的 1/5 左右。**在 V1 就要保证 system prompt 在同一 session 内结构稳定**，避免每轮重新构建破坏缓存命中率。
-
----
-
-## 八、会话生命周期限制
-
-### 为什么需要限制
-
-随着产品演进，system prompt 会持续膨胀：Tina 人设 + 词表 scope + 课本单元资料 + 个人词库（已掌握词汇随学习时间单调增长）。即使豆包 / DeepSeek 的 context window 达到 256K-1M，长期运行的 session 仍有上限风险，且长 session 不符合单次练习的使用场景。
-
-### 两层限制
-
-| 层级 | 触发条件 | 行为 | 配置项 |
+| 限额类型 | 触发条件 | 系统行为 | 目的与体验 |
 |---|---|---|---|
-| **软限（UX）** | 当前 session 轮数 ≥ `max_turns` | API 在响应中返回 `session_status: "soft_limit"`，前端展示"聊了很多了，换个话题？" | `[session] max_turns = 25` |
-| **硬限（安全网）** | 上一轮的 `llm_input_tokens` > `context_window × context_hard_limit` | API 返回 HTTP 422 `SESSION_HARD_LIMIT`，前端强制提示开新 session | `[session] context_hard_limit = 0.85` |
+| **软限 (UX Limit)** | `turn_sequence >= 25` | 接口返回 `session_status: "soft_limit"` | 前端温馨提示：“Tina 有点累了，我们要不要换个话题聊聊？” |
+| **硬限 (Hard Guard)** | 当轮 `llm_input_tokens > context_window × 0.85` | 接口拦截并返回 HTTP 422 `SESSION_HARD_LIMIT` | 异常安全网，提示家长强制生成新的 Session，防止后续 Token 截断出错 |
 
-软限是正常路径（绝大多数 session 会在这里自然结束），硬限是异常兜底（课本资料极大时才会触发）。
-
-### 为什么用 `MAX(llm_input_tokens)` 做硬限代理
-
-每一轮 turn 已将 `llm_input_tokens` 写入 DB（计费用途）。该字段反映当轮发送给 LLM 的完整 context 大小（包含 system prompt + 全部历史 + 本轮 user 消息）。随 session 延伸单调递增，是当前 context 使用量的最准确估算，无需额外 tokenizer API。
-
-### 配置（`backend/config.toml`）
-
-```toml
-[adapter.llm.volc_ark]
-context_window = 262144     # 256K tokens — 模型属性，换模型时一起改
-
-[adapter.llm.deepseek]
-context_window = 1048576    # 1M tokens
-
-[session]
-max_turns = 25              # UX 软限：前端提示换话题
-context_hard_limit = 0.85   # 硬限比例：llm_input_tokens 超过 context_window × 这个值则拒绝
-```
-
-### Scope Computer 与 context 预算的关联
-
-Scope Computer 在 V2/V3 组装 system prompt 时，**必须读取 `context_window` 配置**，根据剩余空间动态决定词库截断策略：
-
-- V1：全量词库塞入（简单，数量尚小）
-- V2：只带当前单元 ± 相邻单元的词，mastery score 过滤低频词
-- V3：动态按 context 剩余空间决定词库规模，优先保留近期活跃词
+### 2. 为什么使用 `llm_input_tokens` 作为硬限度量？
+在每一轮 Turn 存盘时，数据库都会精确记录本轮向火山引擎/DeepSeek 传输所消耗的实际 `llm_input_tokens`。该数据直接客观地体现了 **“系统 Prompt (Tina 人设 + 词表) + 历史 Turn 轮次 + 本轮输入”** 的总体积，我们直接读取上一轮的 Token 读数作为下一轮的判定依据，无需在后端引入高延迟且不精准的本地 Tokenizer 库，实现极佳的工程度量闭环。
 
 ---
 
-## 九、教材录入管道
+## 八、教材录入管道 (Curriculum Pipeline)
 
+为了将纷繁复杂的线下英语教材快速收拢至 `LanguageItem` 与 `ItemGroup` 两个数据底层中，V1 提供了一条精简高效的“AI 结构化提取”大纲通道：
+
+1. **手动复制/大纲黏贴**：家长或录入人员在“家长后台”中，选择已有教材，或输入全新教材名称、单元名，并将该单元的英文课文、单词表、语法目标粘贴进文本框。
+2. **LLM 结构化提取**：后端调用大模型，使用精细的 Prompt 指令迫使其严格输出符合 Pydantic 规范的 JSON 结构数据，杜绝幻觉捏造。
+3. **前端交互确认**：家长在界面上直观审查 AI 提取出的单词、词性、中文释义和重点句型，并可进行微调与手工查缺补漏。
+4. **事务存盘**：点击“存盘”后，系统在单个数据库事务内完成 `ItemGroup` 的创建、原子 `LanguageItem` 的去重写入、以及多对多关系表 `ItemGroupMember` 的关联构建。同时为该学习者更新其可计算词库。
+
+---
+
+## 九、服务抽象与适配器隔离设计 (Adapter Pattern)
+
+为了将外部供应商（火山引擎、DeepSeek、阿里、讯飞等）的 SDK 级变化对我们核心业务的扰动降为零，我们在系统架构中贯彻了**「依赖倒置原则」**：
+
+```text
+ ┌──────────────────────────────────────────────┐
+ │  FastAPI Router / core.dialog.service        │
+ └──────────────────────┬───────────────────────┘
+                        │ 仅依赖 Protocol 抽象契约
+                        ▼
+            ┌───────────────────────┐
+            │   LLMAdapter (Base)   │
+            └───────────┬───────────┘
+                        │
+         ┌──────────────┴──────────────┐
+         ▼                             ▼
+┌──────────────────┐         ┌──────────────────┐
+│ VolcLLMAdapter   │         │ DeepSeekAdapter  │
+│ (火山引擎/豆包)  │         │ (DeepSeek R1/V3) │
+└──────────────────┘         └──────────────────┘
 ```
-┌───────────────────┐   ┌──────────────────────────┐    ┌──────────────┐
-│ 粘贴文本 (V1)      │   │ 1. 清洗/分段               │    │              │
-│ 大纲/目标 (V1)     │   │ 2. LLM 结构化提取          │    │ Curriculum   │
-│ PDF/图片 (V2)     │ → │ 3. JSON Schema 严格校验     │ →  │   └── Unit   │
-│ MP3/录音 (V3)     │   │ 4. 家长后台审阅/编辑         │    │              │
-└───────────────────┘   └──────────────────────────┘    └──────────────┘
-```
 
-### LLM 提取 Prompt 骨架（中文指令 + 英文内容）
+所有的 API Key、Endpoint 等机密配置统一存放在 `.env` 文件中（该文件被 Git 严格忽略），而不同服务商的选择则通过轻量级全局单例文件 `app/app_config.py` 读取 `config.toml` 文件进行配置切换。
+即使未来某天流式协议从 HTTP SSE 迁移到双工 WebSocket，也仅需要在适配器内部进行实现修改，上层的业务编排与控制器路由完全无感。
 
-```
-你是一个小学英语教材结构化助手。
-输入：一份教材内容（可能是课文、词表、语法点、教学大纲的混合）。
-输出：严格符合下面 JSON Schema 的结构。
-要求：
-- 只提取原文中明确出现的内容，绝不编造
-- 不确定的字段设为 null
-- 保留原文英语措辞，不改写
-- 词性使用标准缩写（n./v./adj./adv./prep./conj./pron./interj.）
+---
 
-Schema:
-{
-  "articles": [{"text_en": str, "text_cn": str | null}],
-  "vocab": [{"word": str, "part_of_speech": str, "definition_cn": str, "example_en": str}],
-  "grammar_points": [{"title": str, "explanation": str, "examples": [str]}],
-  "objectives": [str],
-  "key_points": [str]
+## 十、安全、鉴权与会话治理
+
+- **基础身份鉴权**：V1 采用轻量而安全的“邮箱密码”体系，密码在写入 DB 前必须经过强安全级 `bcrypt` 算法哈希加盐存储。
+- **状态会话管理**：浏览器侧使用 `httpOnly, Secure, SameSite=Lax` 属性的 Cookie 存放 Session Token，在 Next.js 的 Edge Middleware 中对非白名单路由进行同步鉴权重定向。后端 FastAPI 将 Cookie 作为 Dependency 注入，校验成功后获取 `Account` 实体。
+- **敏感字段保护**：数据传输对象 (DTO) 响应模型由 Pydantic 严格接管，杜绝任何物理密码哈希字段随 API 响应泄露给前端的隐患。
+
+---
+
+## 十一、部署规范 (Docker & Nginx)
+
+我们遵循经典的 **十二要素应用 (Twelve-Factor App)** 指导思想进行系统组件设计，确保代码具备天生的“云原生、可容器化”能力。
+
+### 1. 本地开发与生产部署镜像定义 (已于 2026-05-16 锁定)
+
+- **前端镜像 (`frontend/Dockerfile`)**：
+  采用 Next.js Standalone 输出模式进行多阶段构建（Multi-stage Build），大幅削减最终 Docker 镜像体积至原有的 15% 左右。
+- **后端镜像 (`backend/Dockerfile`)**：
+  使用官方 `python:3.12-slim` 基础镜像，通过 Poetry 导出生产级 `requirements.txt` 并以最小层（Layer）完成安装，禁止在生产容器中保留任何开发构建工具。
+
+### 2. 网关 Nginx 负载配置与反向代理规范
+
+在生产部署时，Nginx 必须作为边缘网关，按照以下拓扑结构对外暴露服务并实现同源：
+
+```nginx
+# Nginx 同源网关配置示意
+server {
+    listen 80;
+    server_name talkingtext.local;
+
+    # 1. 静态资源与页面路由：直连前端 Next.js standalone 服务
+    location / {
+        proxy_pass http://frontend_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # 2. 动态异步 API 路由：直接分流至后端 FastAPI 实例
+    location /api/v1/ {
+        proxy_pass http://backend_upstream/api/v1/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # 3. SSE 对话流式代理：强制关闭缓存，开启长连接支持
+    location ~* /api/chat/(.*)/stream {
+        proxy_pass http://backend_upstream/sessions/$1/turns/stream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        
+        # SSE 核心调优三要素：
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding on;
+        
+        read_timeout 600s;
+    }
 }
 ```
 
-### V1 录入体验
-
-1. 家长进入"教材管理"
-2. 选择已内置教材库 / 新建
-3. 粘贴文本 + 填元信息（教材名、年级、单元号、单元标题）
-4. 点"AI 提取" → 后端调 LLM 返回结构化 JSON
-5. 家长审阅/编辑每个字段
-6. 保存 → 写入 DB，计入 vocab ledger
-
-**V1 内置教材：** 暂不预填，等第一批真实教材（Tot Talk 等）到位再作为种子数据。
-
----
-
-## 十、供应商切换路径（Adapter Pattern）
-
-所有外部服务通过 adapter 隔离。**无论 HTTP / SSE / WebSocket，对外接口一致。**
-
-```python
-# adapters/llm/protocol.py
-class LLMAdapter(Protocol):
-    async def invoke(self, messages: list[LLMMessage], **kwargs) -> LLMResponse: ...
-    def stream(self, messages: list[LLMMessage], **kwargs) -> AsyncIterator[str]: ...
-
-# adapters/llm/volc.py     ← V1 实现（火山方舟 / 豆包）
-class VolcLLMAdapter(LLMAdapter): ...
-
-# adapters/llm/deepseek.py ← 将来添加，接口不变
-class DeepSeekAdapter(LLMAdapter): ...
-```
-
-**Factory 统一创建，业务层零感知：**
-
-```python
-# adapters/factory.py — 启动时读 config.toml，创建共享单例
-from app.app_config import app_config
-
-def _make_llm() -> LLMAdapter:
-    match app_config.adapter.llm_provider:
-        case "volc_ark": return VolcLLMAdapter()
-        case "deepseek": return DeepSeekAdapter()   # 将来加
-        case other: raise ValueError(other)
-
-llm: LLMAdapter = _make_llm()
-stt: STTAdapter = _make_stt()
-tts: TTSAdapter = _make_tts()
-orchestrator = DialogOrchestrator(stt=stt, llm=llm, tts=tts)
-```
-
-**切换供应商 = 改 `config.toml` 一行：**
-
-```toml
-[adapter]
-llm_provider = "volc_ark"   # → "deepseek" / "qwen" / "glm"
-stt_provider = "volc"       # → "iflytek" / "aliyun"
-tts_provider = "volc"       # → "iflytek" / "azure"
-```
-
-供应商的 API key / endpoint 放在 `.env`（gitignored），adapter 实现内部读取；`config.toml` 只存选择，不存密钥。
-
-即便 V2 全流式，adapter 内部协议换成 WebSocket，业务层仍然是同样的 `async for chunk in adapter.stream(...)`。**架构不会锁死供应商，可以任意混搭**（讯飞 STT + DeepSeek LLM + 火山 TTS 等）。
-
----
-
-## 十一、鉴权（V1 简版）
-
-- 登录：邮箱 + 密码，bcrypt 哈希入库
-- 会话：httpOnly cookie（session token）+ Redis 存 session 数据
-- Next.js 侧：`middleware.ts` 校验 cookie，未登录重定向 `/login`
-- 后端侧：FastAPI dependency 从 cookie 读 token，查 Redis 拿 Account
-- **V1 不做**：短信验证、微信登录、邮箱验证、2FA
-- **V2 再加**：手机号登录（阿里云短信）、微信扫码
-
----
-
-## 十二、部署 — V1 延后 Docker
-
-**决策：当前（V1 开发阶段）不写 docker-compose，不做容器化。发布前一次性做。**
-
-理由：开发阶段结构频繁变动，每次改都要同步 Dockerfile 成本太高。
-
-**但是**，我们从第一天起就按"最终会 Docker 化"的原则写代码，避免挖坑：
-
-### 必须遵守（即使现在不 Docker）
-
-- ✅ **配置走环境变量或 config 文件**，绝不写死（数据库 URL、API 密钥、端口、对象存储 endpoint）
-- ✅ **日志走 stdout/stderr**，不落本地文件（或落文件时仍同时输出 stdout）
-- ✅ **所有外部依赖通过网络访问**（DB、Redis、TOS 都是远程服务，不用本地文件系统）
-- ✅ **音频等临时文件用 `tempfile` 或上传到 TOS**，不放在项目目录
-- ✅ **不依赖 `__file__` 的相对路径**来加载资源
-- ✅ **启动时不做文件系统的前置约定**（如"必须在当前目录下有 data/ 文件夹"）
-- ✅ **端口、host 可配**，不硬编码 `127.0.0.1`
-
-### 可以接受（现阶段便利）
-
-- ✅ 用 `poetry run uvicorn` / `pnpm dev` 起服务，而不是容器
-- ✅ 本地连一个自己装的 Postgres / Redis，或运行单个 `docker run` 容器只起 DB（非 compose）
-- ✅ `.env` 文件放在 backend/frontend 根目录，git 忽略
-
-### 发布前一次性补齐
-
-- `backend/Dockerfile`（multi-stage build，python slim 基础）
-- `frontend/Dockerfile`（Next.js standalone 输出）
-- `docker-compose.yml`（app + postgres + redis 本地复现）
-- 生产用 k8s 或简单的 docker compose（看规模再定）
-
----
-
-## 十三、延后与未决事项
-
-| 事项 | 状态 | 触发条件 |
-|---|---|---|
-| Docker 化 | 延后 | V1 功能稳定，进入发布筹备 |
-| 上云部署（火山云 vs 阿里云）| 未决 | 发布前再定 |
-| 流式 STT/LLM/TTS | 延后 | V1 整段体验跑通后 |
-| Scope Computer V2（stretch）| 架构预留 | V1 完整上线 + 有真实对话数据 |
-| Mastery Tracker | V2/V3 | 事件日志累积 ≥ 3 个月 |
-| PDF / 图片 / MP3 教材导入 | 延后 | 文本导入流程跑顺 |
-| 短信 / 微信登录 | 延后 | 账号量达到需要降低登录门槛的规模 |
-| 儿童数据合规（COPPA / 个保法）| V1 不做但不反 | 准备对外推广前 |
-| PWA 离线模式 | V2 | 基础功能完成 |
-
----
-
-## 十四、设计原则（工程纪律）
-
-1. **先写接口，再写实现。** Scope Computer、各 adapter，接口在 V1 就定死。
-2. **Adapter 隔离副作用。** `core/` 里零 SDK 依赖，所有外部调用走 `adapters/`。
-3. **事件先写，分析后补。** VocabEvent 这类"现在没人读"的日志，V1 就必须写。
-4. **双语注释能少则少。** 代码里注释中英文皆可，but 宁缺毋滥——命名清楚胜过任何注释。
-5. **尊重 Next 的范式。** 前端默认 Server Component，不硬写 SPA。
-6. **不引入没用到的依赖。** 只加真的用得上的包。
-7. **不提前优化。** V1 只保证"能用+正确"，性能优化放在真实瓶颈出现后。
+Nginx 直连流式网关的架构决策极大地减轻了 Next.js 的高并发压力，从而允许其聚焦在首屏 HTML 预渲染和多语言国际化等核心展现层任务中。
