@@ -17,7 +17,7 @@ export default async function LearnersPage() {
         </Link>
         <h1 className="text-xl font-medium">{t("page_title")}</h1>
       </div>
-      
+
       <LearnerClient learners={learners} />
     </div>
   );

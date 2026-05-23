@@ -60,14 +60,14 @@ export function OnboardingLearnerClient() {
                 defaultChecked
                 className="peer sr-only"
               />
-              <span className="border-input peer-checked:border-primary peer-checked:bg-primary/10 inline-block rounded-md border px-3 py-1.5 text-sm transition hover:border-foreground/40">
+              <span className="border-input peer-checked:border-primary peer-checked:bg-primary/10 hover:border-foreground/40 inline-block rounded-md border px-3 py-1.5 text-sm transition">
                 {t("cefr_unknown")}
               </span>
             </label>
             {CEFR_OPTIONS.map((lvl) => (
               <label key={lvl} className="cursor-pointer">
                 <input type="radio" name="cefr_level" value={lvl} className="peer sr-only" />
-                <span className="border-input peer-checked:border-primary peer-checked:bg-primary/10 inline-block rounded-md border px-3 py-1.5 text-sm transition hover:border-foreground/40">
+                <span className="border-input peer-checked:border-primary peer-checked:bg-primary/10 hover:border-foreground/40 inline-block rounded-md border px-3 py-1.5 text-sm transition">
                   {lvl}
                 </span>
               </label>

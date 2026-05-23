@@ -40,7 +40,7 @@ export function LearnerSettingsClient({
       <div className="mb-2 flex items-center gap-4">
         <Link
           href="/parent"
-          className="text-muted-foreground hover:text-primary transition text-sm"
+          className="text-muted-foreground hover:text-primary text-sm transition"
         >
           ← 家长中心
         </Link>

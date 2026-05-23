@@ -204,8 +204,7 @@ export const backend = {
         body: { email, password },
         headers,
       }),
-    logout: (headers?: HeadersInit) =>
-      request<void>("/auth/logout", { method: "POST", headers }),
+    logout: (headers?: HeadersInit) => request<void>("/auth/logout", { method: "POST", headers }),
     me: (headers?: HeadersInit) => request<AccountOut>("/auth/me", { headers }),
   },
   learners: {
@@ -237,10 +236,7 @@ export const backend = {
   },
   groups: {
     list: (includeArchived?: boolean, headers?: HeadersInit) =>
-      request<GroupOut[]>(
-        `/groups${includeArchived ? "?include_archived=true" : ""}`,
-        { headers },
-      ),
+      request<GroupOut[]>(`/groups${includeArchived ? "?include_archived=true" : ""}`, { headers }),
     create: (body: GroupCreateBody, headers?: HeadersInit) =>
       request<GroupOut>("/groups", {
         method: "POST",

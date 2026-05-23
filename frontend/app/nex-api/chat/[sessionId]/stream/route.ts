@@ -38,7 +38,7 @@ export async function POST(
 
   if (!upstream.ok) {
     try {
-      const json = await upstream.json() as Record<string, unknown>;
+      const json = (await upstream.json()) as Record<string, unknown>;
       return NextResponse.json(json, { status: upstream.status });
     } catch {
       const text = await upstream.text();

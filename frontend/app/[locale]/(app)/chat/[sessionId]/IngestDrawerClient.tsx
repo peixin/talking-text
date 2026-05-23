@@ -110,18 +110,23 @@ export function IngestDrawerClient({
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
     if (open) {
-      setStep({ kind: "input" });
-      setFiles([]);
-      setDescription("");
-      setItems([]);
-      setGroupName("");
-      setRecordMode("idle");
-      setRecordError(null);
+      timer = setTimeout(() => {
+        setStep({ kind: "input" });
+        setFiles([]);
+        setDescription("");
+        setItems([]);
+        setGroupName("");
+        setRecordMode("idle");
+        setRecordError(null);
+      }, 0);
     } else {
       stopRecorderStream();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -332,7 +337,7 @@ export function IngestDrawerClient({
         <DialogPrimitive.Popup
           className={cn(
             "fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[80vh] w-full max-w-2xl flex-col",
-            "rounded-t-2xl border-t bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10",
+            "bg-popover text-popover-foreground ring-foreground/10 rounded-t-2xl border-t shadow-lg ring-1",
             "duration-200 outline-none",
             "data-open:animate-in data-open:slide-in-from-bottom",
             "data-closed:animate-out data-closed:slide-out-to-bottom",
@@ -366,11 +371,7 @@ export function IngestDrawerClient({
                     <Camera className="mr-2 h-4 w-4" />
                     {t("take_photo")}
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
                     <ImageIcon className="mr-2 h-4 w-4" />
                     {t("upload_images")}
                   </Button>
@@ -398,9 +399,7 @@ export function IngestDrawerClient({
                     )}
                   </Button>
                 </div>
-                {recordError && (
-                  <p className="text-destructive text-xs">{recordError}</p>
-                )}
+                {recordError && <p className="text-destructive text-xs">{recordError}</p>}
                 <input
                   ref={cameraInputRef}
                   type="file"
@@ -424,14 +423,14 @@ export function IngestDrawerClient({
                     {previews.map((p, i) => (
                       <div
                         key={p.url}
-                        className="group relative h-20 w-20 overflow-hidden rounded-md border bg-muted"
+                        className="group bg-muted relative h-20 w-20 overflow-hidden rounded-md border"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
                         <button
                           type="button"
                           onClick={() => setFiles(files.filter((_, idx) => idx !== i))}
-                          className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5 text-white opacity-0 transition group-hover:opacity-100"
+                          className="absolute top-1 right-1 rounded-full bg-black/60 p-0.5 text-white opacity-0 transition group-hover:opacity-100"
                           aria-label={t("remove_image")}
                         >
                           <X className="h-3 w-3" />
@@ -442,7 +441,7 @@ export function IngestDrawerClient({
                 )}
 
                 <label className="block">
-                  <span className="mb-1 block text-xs text-muted-foreground">
+                  <span className="text-muted-foreground mb-1 block text-xs">
                     {t("description_label")}
                   </span>
                   <textarea
@@ -450,14 +449,14 @@ export function IngestDrawerClient({
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder={t("description_placeholder")}
                     rows={2}
-                    className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="border-border bg-background focus:ring-ring w-full resize-none rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
                   />
                 </label>
               </div>
             )}
 
             {step.kind === "extracting" && (
-              <div className="flex flex-col items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+              <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-12 text-sm">
                 <Loader2 className="h-6 w-6 animate-spin" />
                 {t("extracting")}
               </div>
@@ -466,21 +465,21 @@ export function IngestDrawerClient({
             {(step.kind === "preview" || step.kind === "saving") && (
               <div className="space-y-4">
                 {joinBookName(step.result.metadata) && (
-                  <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                  <div className="bg-muted/40 rounded-md border px-3 py-2 text-sm">
                     <div className="text-muted-foreground text-xs">{t("looks_like")}</div>
                     <div className="font-medium">{joinBookName(step.result.metadata)}</div>
                   </div>
                 )}
 
                 <label className="block">
-                  <span className="mb-1 block text-xs text-muted-foreground">
+                  <span className="text-muted-foreground mb-1 block text-xs">
                     {t("group_name_label")}
                   </span>
                   <input
                     value={groupName}
                     onChange={(e) => setGroupName(e.target.value)}
                     disabled={step.kind === "saving"}
-                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    className="border-border bg-background focus:ring-ring w-full rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:opacity-50"
                   />
                 </label>
 
@@ -521,12 +520,9 @@ export function IngestDrawerClient({
             )}
           </div>
 
-          <footer className="flex shrink-0 items-center justify-end gap-2 border-t bg-muted/30 px-4 py-3">
+          <footer className="bg-muted/30 flex shrink-0 items-center justify-end gap-2 border-t px-4 py-3">
             {step.kind === "input" && (
-              <Button
-                onClick={handleExtract}
-                disabled={files.length === 0 && !description.trim()}
-              >
+              <Button onClick={handleExtract} disabled={files.length === 0 && !description.trim()}>
                 {t("extract")}
               </Button>
             )}
@@ -540,9 +536,7 @@ export function IngestDrawerClient({
               <>
                 <Button
                   variant="outline"
-                  onClick={() =>
-                    setStep({ kind: "preview", mode: "edit", result: step.result })
-                  }
+                  onClick={() => setStep({ kind: "preview", mode: "edit", result: step.result })}
                 >
                   {t("review")}
                 </Button>
@@ -553,9 +547,7 @@ export function IngestDrawerClient({
               <>
                 <Button
                   variant="outline"
-                  onClick={() =>
-                    setStep({ kind: "preview", mode: "summary", result: step.result })
-                  }
+                  onClick={() => setStep({ kind: "preview", mode: "summary", result: step.result })}
                 >
                   {t("back")}
                 </Button>
@@ -574,7 +566,6 @@ export function IngestDrawerClient({
     </DialogPrimitive.Root>
   );
 }
-
 
 // ── Sub-views ────────────────────────────────────────────────────────────────
 
@@ -638,28 +629,20 @@ function EditView({
         return (
           <section key={kind}>
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-medium text-muted-foreground">
+              <h3 className="text-muted-foreground text-xs font-medium">
                 {t(`section_${kind}` as Parameters<typeof t>[0])} ({list.length})
               </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onAdd(kind)}
-                className="h-7 text-xs"
-              >
+              <Button variant="ghost" size="sm" onClick={() => onAdd(kind)} className="h-7 text-xs">
                 <Plus className="mr-1 h-3 w-3" />
                 {t("add_item")}
               </Button>
             </div>
             {list.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">{t("section_empty")}</p>
+              <p className="text-muted-foreground text-xs italic">{t("section_empty")}</p>
             ) : (
               <ul className="space-y-1">
                 {list.map(({ item, index }) => (
-                  <li
-                    key={index}
-                    className="flex items-center gap-1 rounded bg-muted/30 px-2 py-1"
-                  >
+                  <li key={index} className="bg-muted/30 flex items-center gap-1 rounded px-2 py-1">
                     {item.confidence === "low" && (
                       <AlertTriangle
                         className="h-3.5 w-3.5 shrink-0 text-amber-600"
@@ -670,7 +653,7 @@ function EditView({
                       value={item.text}
                       onChange={(e) => onUpdate(index, { text: e.target.value })}
                       placeholder={t(`placeholder_${kind}` as Parameters<typeof t>[0])}
-                      className="flex-1 rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-sm focus:border-border focus:bg-background focus:outline-none"
+                      className="focus:border-border focus:bg-background flex-1 rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-sm focus:outline-none"
                     />
                     <select
                       value={item.cefr ?? ""}
@@ -679,7 +662,7 @@ function EditView({
                           cefr: (e.target.value || null) as CefrLevel | null,
                         })
                       }
-                      className="rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted-foreground hover:border-border focus:border-border focus:bg-background focus:outline-none"
+                      className="text-muted-foreground hover:border-border focus:border-border focus:bg-background rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-xs focus:outline-none"
                     >
                       {CEFR_OPTIONS.map((lvl) => (
                         <option key={lvl} value={lvl}>
@@ -706,21 +689,16 @@ function EditView({
   );
 }
 
-
 // ── Convenience: three-icon toolbar ──────────────────────────────────────────
 
-export function IngestToolbarClient({
-  onOpen,
-}: {
-  onOpen: (trigger: IngestTrigger) => void;
-}) {
+export function IngestToolbarClient({ onOpen }: { onOpen: (trigger: IngestTrigger) => void }) {
   const t = useTranslations("Ingest");
   return (
     <div className="flex shrink-0 items-center gap-1 px-2">
       <button
         type="button"
         onClick={() => onOpen("camera")}
-        className="text-muted-foreground hover:text-foreground transition flex h-9 w-9 items-center justify-center rounded-full"
+        className="text-muted-foreground hover:text-foreground flex h-9 w-9 items-center justify-center rounded-full transition"
         aria-label={t("trigger_camera")}
       >
         <Camera className="h-4 w-4" />
@@ -728,7 +706,7 @@ export function IngestToolbarClient({
       <button
         type="button"
         onClick={() => onOpen("voice")}
-        className="text-muted-foreground hover:text-foreground transition flex h-9 w-9 items-center justify-center rounded-full"
+        className="text-muted-foreground hover:text-foreground flex h-9 w-9 items-center justify-center rounded-full transition"
         aria-label={t("trigger_voice")}
       >
         <Mic className="h-4 w-4" />
@@ -736,7 +714,7 @@ export function IngestToolbarClient({
       <button
         type="button"
         onClick={() => onOpen("file")}
-        className="text-muted-foreground hover:text-foreground transition flex h-9 w-9 items-center justify-center rounded-full"
+        className="text-muted-foreground hover:text-foreground flex h-9 w-9 items-center justify-center rounded-full transition"
         aria-label={t("trigger_file")}
       >
         <Paperclip className="h-4 w-4" />

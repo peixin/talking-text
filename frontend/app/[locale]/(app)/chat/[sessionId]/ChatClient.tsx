@@ -11,11 +11,7 @@ import { Message, createSession, deleteSession, getAudio, renameSession } from "
 import { SessionSidebarClient } from "./SessionSidebarClient";
 import { MessageListClient, AudioState } from "./MessageListClient";
 import { RecordButtonClient, Mode } from "./RecordButtonClient";
-import {
-  IngestDrawerClient,
-  IngestToolbarClient,
-  IngestTrigger,
-} from "./IngestDrawerClient";
+import { IngestDrawerClient, IngestToolbarClient, IngestTrigger } from "./IngestDrawerClient";
 import { ScopeSwitcherClient } from "./ScopeSwitcherClient";
 
 function pickMimeType(): string {
@@ -122,8 +118,11 @@ export function ChatClient({
   }, []);
 
   useEffect(() => {
-    setSessionStatus("active");
-    setSoftLimitDismissed(false);
+    const timer = setTimeout(() => {
+      setSessionStatus("active");
+      setSoftLimitDismissed(false);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [activeSession.id]);
 
   useEffect(() => {
@@ -137,7 +136,9 @@ export function ChatClient({
   useEffect(() => {
     // Restore preferred input mode
     const savedMode = localStorage.getItem("talking-text-input-mode") || "voice";
-    setInputMode(savedMode as "voice" | "text");
+    const timer = setTimeout(() => {
+      setInputMode(savedMode as "voice" | "text");
+    }, 0);
 
     const ageMs = Date.now() - new Date(activeSession.created_at).getTime();
     const isNew = ageMs < 10_000;
@@ -152,6 +153,7 @@ export function ChatClient({
         void handlePlay(turnId, "out");
       }
     }
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -394,9 +396,7 @@ export function ChatClient({
       }
     } finally {
       setMessages((prev) =>
-        prev.map((m) =>
-          m.turnId === tempId ? { ...m, streaming: false, pending: false } : m,
-        ),
+        prev.map((m) => (m.turnId === tempId ? { ...m, streaming: false, pending: false } : m)),
       );
       setRecordMode("idle");
     }
@@ -418,7 +418,9 @@ export function ChatClient({
       streamRef.current = stream;
       const mime = pickMimeType();
       mimeRef.current = mime;
-      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      const recorder = mime
+        ? new MediaRecorder(stream, { mimeType: mime })
+        : new MediaRecorder(stream);
       recorderRef.current = recorder;
       chunksRef.current = [];
 
@@ -490,11 +492,11 @@ export function ChatClient({
         onDeleteSession={handleDeleteSession}
       />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <div className="bg-background flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Title bar */}
-        <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
+        <div className="border-border flex shrink-0 items-center gap-2 border-b px-4 py-2.5">
           <button
-            className="shrink-0 text-muted-foreground hover:text-foreground md:hidden"
+            className="text-muted-foreground hover:text-foreground shrink-0 md:hidden"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open sidebar"
           >
@@ -510,14 +512,11 @@ export function ChatClient({
                   if (e.key === "Enter") commitTitle();
                   if (e.key === "Escape") cancelEditTitle();
                 }}
-                className="flex-1 rounded border border-border bg-background px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                className="border-border bg-background focus:ring-ring flex-1 rounded border px-2 py-0.5 text-sm focus:ring-1 focus:outline-none"
                 placeholder={t("session_title_placeholder")}
                 maxLength={200}
               />
-              <button
-                onClick={commitTitle}
-                className="text-muted-foreground hover:text-foreground"
-              >
+              <button onClick={commitTitle} className="text-muted-foreground hover:text-foreground">
                 <Check className="h-4 w-4" />
               </button>
               <button
@@ -533,12 +532,12 @@ export function ChatClient({
                 {activeSession.title ? (
                   activeSession.title
                 ) : (
-                  <span className="inline-block h-4 w-32 animate-pulse rounded bg-muted" />
+                  <span className="bg-muted inline-block h-4 w-32 animate-pulse rounded" />
                 )}
               </span>
               <button
                 onClick={startEditTitle}
-                className="text-muted-foreground/40 transition hover:text-muted-foreground"
+                className="text-muted-foreground/40 hover:text-muted-foreground transition"
                 title={t("session_rename")}
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -551,27 +550,25 @@ export function ChatClient({
         <button
           type="button"
           onClick={() => setScopeSwitchOpen(true)}
-          className="flex w-full items-center gap-2 border-b bg-muted/40 px-4 py-2 text-left text-xs text-muted-foreground transition hover:bg-muted"
+          className="bg-muted/40 text-muted-foreground hover:bg-muted flex w-full items-center gap-2 border-b px-4 py-2 text-left text-xs transition"
         >
           {currentGroup ? (
             <>
               <span>📕</span>
-              <span className="font-medium text-foreground">{currentGroup.name}</span>
+              <span className="text-foreground font-medium">{currentGroup.name}</span>
               <span>· {currentGroup.item_count} items</span>
             </>
           ) : (
             <span>✨ {t("scope_free_practice")}</span>
           )}
-          <ChevronDown className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+          <ChevronDown className="text-muted-foreground ml-auto h-3.5 w-3.5" />
         </button>
 
         {/* Singleton audio element — owned here, shared via handlePlay */}
         <audio
           ref={audioRef}
           hidden
-          onEnded={() =>
-            setAudioState({ playingTurnId: null, playingDir: null, loadingKey: null })
-          }
+          onEnded={() => setAudioState({ playingTurnId: null, playingDir: null, loadingKey: null })}
         />
 
         <MessageListClient
@@ -605,14 +602,14 @@ export function ChatClient({
           </div>
         )}
 
-        <div className="shrink-0 border-t border-border bg-background">
+        <div className="border-border bg-background shrink-0 border-t">
           {sessionStatus === "hard_limit" ? (
             <div className="flex flex-col items-center gap-3 px-4 py-6 text-center">
-              <p className="text-sm text-muted-foreground">{t("session_hard_limit_text")}</p>
+              <p className="text-muted-foreground text-sm">{t("session_hard_limit_text")}</p>
               <button
                 type="button"
                 onClick={() => void handleNewSession()}
-                className="rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                className="bg-primary text-primary-foreground rounded-lg px-5 py-2 text-sm font-medium transition hover:opacity-90"
               >
                 {t("new_session")}
               </button>
@@ -632,7 +629,7 @@ export function ChatClient({
                       return next;
                     });
                   }}
-                  className="mr-2 flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
+                  className="text-muted-foreground hover:text-foreground mr-2 flex items-center gap-1 text-xs transition"
                 >
                   {inputMode === "voice" ? (
                     <>
@@ -655,7 +652,7 @@ export function ChatClient({
                   onRecordToggle={handleRecordToggle}
                 />
               ) : (
-                <div className="flex flex-col gap-2 px-4 pb-4 pt-2">
+                <div className="flex flex-col gap-2 px-4 pt-2 pb-4">
                   {error && (
                     <p className="text-destructive text-center text-sm">
                       {tErr(error as Parameters<typeof tErr>[0])}
@@ -674,13 +671,13 @@ export function ChatClient({
                       disabled={recordMode === "uploading"}
                       placeholder={t("text_placeholder")}
                       rows={2}
-                      className="flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                      className="border-border bg-background focus:ring-ring flex-1 resize-none rounded-xl border px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:opacity-50"
                     />
                     <button
                       type="button"
                       onClick={() => void submitTextTurn()}
                       disabled={!textDraft.trim() || recordMode === "uploading"}
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="bg-primary text-primary-foreground flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label={t("send")}
                     >
                       {recordMode === "uploading" ? (

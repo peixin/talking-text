@@ -37,8 +37,10 @@ def _make_vision() -> LLMAdapter:
     match app_config.adapter.vision_provider:
         case "volc_ark":
             from app.adapters.llm.volc import VolcLLMAdapter
+            from app.config import settings
 
-            return VolcLLMAdapter(vision_model=app_config.adapter.vision.model or None)
+            vision_model = settings.volc_ark_vision_model or app_config.adapter.vision.model or None
+            return VolcLLMAdapter(vision_model=vision_model)
         case other:
             raise ValueError(f"Unknown vision provider: {other!r}")
 

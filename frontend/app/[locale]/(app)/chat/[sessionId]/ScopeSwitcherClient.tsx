@@ -64,7 +64,7 @@ export function ScopeSwitcherClient({
         <DialogPrimitive.Popup
           className={cn(
             "fixed top-1/2 left-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2",
-            "rounded-xl border bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10",
+            "bg-popover text-popover-foreground ring-foreground/10 rounded-xl border shadow-lg ring-1",
             "duration-150 outline-none",
             "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
             "data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
@@ -78,7 +78,7 @@ export function ScopeSwitcherClient({
 
           <ul className="max-h-[60vh] divide-y overflow-y-auto">
             <ScopeRow
-              icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
+              icon={<Sparkles className="text-muted-foreground h-4 w-4" />}
               label={t("free_practice")}
               hint={t("free_practice_hint")}
               selected={currentGroupId === null}
@@ -86,7 +86,7 @@ export function ScopeSwitcherClient({
               onClick={() => applyGroup(null)}
             />
             {groups.length === 0 && (
-              <li className="px-4 py-6 text-center text-xs text-muted-foreground">
+              <li className="text-muted-foreground px-4 py-6 text-center text-xs">
                 {t("no_groups_yet")}
               </li>
             )}
@@ -95,7 +95,7 @@ export function ScopeSwitcherClient({
               return (
                 <ScopeRow
                   key={g.id}
-                  icon={<Icon className="h-4 w-4 text-muted-foreground" />}
+                  icon={<Icon className="text-muted-foreground h-4 w-4" />}
                   label={g.name}
                   hint={t("items_count", { count: g.item_count })}
                   selected={currentGroupId === g.id}
@@ -106,9 +106,13 @@ export function ScopeSwitcherClient({
             })}
           </ul>
 
-          <footer className="flex justify-end border-t bg-muted/30 px-4 py-2">
+          <footer className="bg-muted/30 flex justify-end border-t px-4 py-2">
             <DialogPrimitive.Close
-              render={<Button variant="ghost" size="sm">{t("close")}</Button>}
+              render={
+                <Button variant="ghost" size="sm">
+                  {t("close")}
+                </Button>
+              }
             />
           </footer>
         </DialogPrimitive.Popup>
@@ -145,11 +149,11 @@ function ScopeRow({
         )}
       >
         {icon}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="truncate font-medium">{label}</div>
-          {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+          {hint && <div className="text-muted-foreground text-xs">{hint}</div>}
         </div>
-        {selected && <Check className="h-4 w-4 text-primary" />}
+        {selected && <Check className="text-primary h-4 w-4" />}
       </button>
     </li>
   );

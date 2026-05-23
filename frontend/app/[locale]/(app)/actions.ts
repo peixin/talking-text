@@ -22,7 +22,7 @@ export async function logout(): Promise<void> {
 
   const jar = await cookies();
   jar.delete(COOKIE_NAME);
-  
+
   const locale = await getLocale();
   redirect({ href: "/login", locale });
 }

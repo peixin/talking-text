@@ -58,13 +58,9 @@ export async function setSessionGroup(
 
 // ── Ingestion actions ────────────────────────────────────────────────────────
 
-export type TranscribeIngestionResult =
-  | { ok: true; text: string }
-  | { ok: false; error: string };
+export type TranscribeIngestionResult = { ok: true; text: string } | { ok: false; error: string };
 
-export async function transcribeIngestion(
-  formData: FormData,
-): Promise<TranscribeIngestionResult> {
+export async function transcribeIngestion(formData: FormData): Promise<TranscribeIngestionResult> {
   const h = await authHeaders();
   try {
     const result = await backend.ingest.transcribe(formData, h);
@@ -102,9 +98,7 @@ export async function extractIngestion(formData: FormData): Promise<ExtractInges
   }
 }
 
-export type CreateGroupResult =
-  | { ok: true; group: GroupOut }
-  | { ok: false; error: string };
+export type CreateGroupResult = { ok: true; group: GroupOut } | { ok: false; error: string };
 
 export async function createGroup(body: GroupCreateBody): Promise<CreateGroupResult> {
   const api = await createApi();

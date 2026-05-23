@@ -24,7 +24,7 @@ export default function RegisterFormClient() {
       <h1 className="mb-2 text-2xl font-semibold">{t("register")}</h1>
 
       {errorMessage && (
-        <p className="text-destructive rounded-md bg-destructive/10 px-3 py-2 text-sm">
+        <p className="text-destructive bg-destructive/10 rounded-md px-3 py-2 text-sm">
           {errorMessage}
         </p>
       )}

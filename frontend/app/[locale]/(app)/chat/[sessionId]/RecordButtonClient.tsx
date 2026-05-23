@@ -16,7 +16,7 @@ export function RecordButtonClient({ mode, error, onRecordToggle }: Props) {
   const tErr = useTranslations("Chat.errors");
 
   return (
-    <div className="flex flex-col items-center gap-2 border-t border-border px-4 py-4 bg-background">
+    <div className="border-border bg-background flex flex-col items-center gap-2 border-t px-4 py-4">
       {error && <p className="text-destructive text-center text-sm">{tErr(error)}</p>}
       <button
         type="button"
@@ -24,19 +24,19 @@ export function RecordButtonClient({ mode, error, onRecordToggle }: Props) {
         disabled={mode === "uploading"}
         className={`flex h-16 w-16 items-center justify-center rounded-full transition active:scale-95 ${
           mode === "recording"
-            ? "animate-pulse bg-destructive text-destructive-foreground"
+            ? "bg-destructive text-destructive-foreground animate-pulse"
             : mode === "uploading"
-              ? "cursor-not-allowed bg-muted text-muted-foreground"
+              ? "bg-muted text-muted-foreground cursor-not-allowed"
               : "bg-primary text-primary-foreground hover:opacity-90"
         }`}
         aria-label={mode === "recording" ? t("stop") : t("press_to_talk")}
       >
         {mode === "recording" ? (
-          <Square className="h-6 w-6 pointer-events-none" />
+          <Square className="pointer-events-none h-6 w-6" />
         ) : mode === "uploading" ? (
-          <Loader2 className="h-6 w-6 animate-spin pointer-events-none" />
+          <Loader2 className="pointer-events-none h-6 w-6 animate-spin" />
         ) : (
-          <Mic className="h-6 w-6 pointer-events-none" />
+          <Mic className="pointer-events-none h-6 w-6" />
         )}
       </button>
       <span className="text-muted-foreground text-xs">

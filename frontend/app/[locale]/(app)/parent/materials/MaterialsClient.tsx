@@ -2,7 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Archive, ArchiveRestore, BookOpen, Bookmark, Check, Pencil, Trash2, X, Zap } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  BookOpen,
+  Bookmark,
+  Check,
+  Pencil,
+  Trash2,
+  X,
+  Zap,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -122,7 +132,7 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
 
       {archived.length > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-medium text-muted-foreground">
+          <h2 className="text-muted-foreground mb-2 text-sm font-medium">
             {t("archived_section")} ({archived.length})
           </h2>
           <ul className="space-y-2">
@@ -206,9 +216,7 @@ function GroupRow({
               {group.name}
             </span>
             {group.source_book_hint && (
-              <span className="text-muted-foreground ml-2 text-xs">
-                · {group.source_book_hint}
-              </span>
+              <span className="text-muted-foreground ml-2 text-xs">· {group.source_book_hint}</span>
             )}
           </button>
         )}

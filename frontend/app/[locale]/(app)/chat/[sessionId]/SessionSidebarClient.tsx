@@ -40,7 +40,12 @@ export function SessionSidebarClient({
   const router = useRouter();
   const locale = useLocale();
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMounted(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   async function switchLearner(learnerId: string) {
     await setActiveLearner(learnerId);
@@ -50,39 +55,31 @@ export function SessionSidebarClient({
   return (
     <>
       {/* Mobile backdrop — conditional render so it never blocks touch when closed */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
-          onClick={onClose}
-        />
-      )}
+      {isOpen && <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={onClose} />}
 
       <aside
         className={[
-          "shrink-0 flex-col border-r border-border bg-background",
+          "border-border bg-background shrink-0 flex-col border-r",
           // Desktop: always visible as static sidebar
-          "md:static md:flex md:w-56 md:z-auto",
+          "md:static md:z-auto md:flex md:w-56",
           // Mobile: hidden (display:none) when closed so iOS touch-area bug cannot block events;
           //         fixed overlay when open
-          isOpen ? "flex fixed inset-y-0 left-0 z-50 w-72" : "hidden",
+          isOpen ? "fixed inset-y-0 left-0 z-50 flex w-72" : "hidden",
         ].join(" ")}
       >
         {/* Mobile close button */}
-        <div className="flex items-center justify-end border-b border-border px-3 py-2 md:hidden">
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground"
-          >
+        <div className="border-border flex items-center justify-end border-b px-3 py-2 md:hidden">
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {learners.length > 1 && (
-          <div className="border-b border-border px-3 py-2">
+          <div className="border-border border-b px-3 py-2">
             <select
               value={activeLearner.id}
               onChange={(e) => switchLearner(e.target.value)}
-              className="w-full rounded border border-border bg-background px-2 py-1 text-sm focus:outline-none"
+              className="border-border bg-background w-full rounded border px-2 py-1 text-sm focus:outline-none"
             >
               {learners.map((l) => (
                 <option key={l.id} value={l.id}>
@@ -96,7 +93,7 @@ export function SessionSidebarClient({
         <div className="px-3 py-2">
           <button
             onClick={onNewSession}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition"
           >
             <Plus className="h-4 w-4" />
             {t("new_session")}
@@ -111,7 +108,7 @@ export function SessionSidebarClient({
                 router.push(`/chat/${s.id}`);
                 onClose();
               }}
-              className={`group relative flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm transition hover:bg-muted ${
+              className={`group hover:bg-muted relative flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm transition ${
                 s.id === activeSessionId ? "bg-muted font-medium" : "text-muted-foreground"
               }`}
             >
@@ -119,11 +116,13 @@ export function SessionSidebarClient({
                 {s.title ? (
                   s.title
                 ) : (
-                  <span className="inline-block h-3.5 w-3/4 animate-pulse rounded bg-muted-foreground/20" />
+                  <span className="bg-muted-foreground/20 inline-block h-3.5 w-3/4 animate-pulse rounded" />
                 )}
               </span>
-              <span className="text-xs text-muted-foreground/60">
-                {mounted ? dayjs(s.updated_at).locale(locale.toLowerCase()).fromNow() : dayjs(s.updated_at).format('YYYY-MM-DD')}
+              <span className="text-muted-foreground/60 text-xs">
+                {mounted
+                  ? dayjs(s.updated_at).locale(locale.toLowerCase()).fromNow()
+                  : dayjs(s.updated_at).format("YYYY-MM-DD")}
               </span>
 
               <span
@@ -139,7 +138,7 @@ export function SessionSidebarClient({
                     onDeleteSession(s);
                   }
                 }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground/40 opacity-0 transition hover:text-destructive group-hover:opacity-100"
+                className="text-muted-foreground/40 hover:text-destructive absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 opacity-0 transition group-hover:opacity-100"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </span>

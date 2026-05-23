@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     volc_ark_api_key: str = ""
     volc_ark_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
     volc_ark_model: str = "doubao-seed-2-0-mini-260215"
+    volc_ark_vision_model: str = "ep-20260430135551-7h2lq"
 
     # --- Volcengine Speech (shared by STT + TTS) ---
     volc_speech_app_id: str = ""

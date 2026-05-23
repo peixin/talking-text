@@ -25,11 +25,15 @@ export default async function HomePage() {
       </div>
       <main className="mx-auto flex max-w-2xl flex-1 flex-col items-center justify-center gap-10 text-center">
         <div className="flex flex-col items-center gap-1">
-          <h1 className="text-5xl font-semibold tracking-wider sm:text-6xl">{tHome("brand_title")}</h1>
+          <h1 className="text-5xl font-semibold tracking-wider sm:text-6xl">
+            {tHome("brand_title")}
+          </h1>
           <p className="text-muted-foreground text-xs tracking-[0.3em] uppercase">Talking Text</p>
         </div>
 
-        <p className="text-primary text-2xl font-medium tracking-widest">{tHome("brand_tagline")}</p>
+        <p className="text-primary text-2xl font-medium tracking-widest">
+          {tHome("brand_tagline")}
+        </p>
 
         <div className="flex flex-wrap justify-center gap-3">
           <Link

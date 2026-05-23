@@ -54,18 +54,18 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
 
   return (
     <div>
-      {error && <div className="mb-4 text-red-500 text-sm">{error}</div>}
-      
+      {error && <div className="mb-4 text-sm text-red-500">{error}</div>}
+
       <form onSubmit={handleCreate} className="mb-8 flex gap-2">
-        <input 
-          type="text" 
-          name="name" 
+        <input
+          type="text"
+          name="name"
           placeholder={t("name_placeholder")}
           className="border-border bg-background rounded border px-3 py-2 text-sm focus:outline-none"
           required
         />
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           disabled={loading}
           className="bg-primary text-primary-foreground rounded px-4 py-2 text-sm disabled:opacity-50"
         >
@@ -78,25 +78,54 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
       ) : (
         <div className="space-y-4">
           {learners.map((l) => (
-            <div key={l.id} className="border-border flex items-center justify-between rounded border p-4">
+            <div
+              key={l.id}
+              className="border-border flex items-center justify-between rounded border p-4"
+            >
               {editingId === l.id ? (
-                <form onSubmit={(e) => handleUpdate(e, l.id)} className="flex flex-1 items-center gap-2">
-                  <input 
-                    type="text" 
-                    name="name" 
-                    defaultValue={l.name} 
+                <form
+                  onSubmit={(e) => handleUpdate(e, l.id)}
+                  className="flex flex-1 items-center gap-2"
+                >
+                  <input
+                    type="text"
+                    name="name"
+                    defaultValue={l.name}
                     className="border-border bg-background flex-1 rounded border px-3 py-1 text-sm focus:outline-none"
                     required
                   />
-                  <button type="submit" disabled={loading} className="text-sm text-green-600 hover:underline">{t("save")}</button>
-                  <button type="button" onClick={() => setEditingId(null)} className="text-muted-foreground text-sm hover:underline">{t("cancel")}</button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="text-sm text-green-600 hover:underline"
+                  >
+                    {t("save")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(null)}
+                    className="text-muted-foreground text-sm hover:underline"
+                  >
+                    {t("cancel")}
+                  </button>
                 </form>
               ) : (
                 <>
                   <span className="font-medium">{l.name}</span>
                   <div className="flex gap-3 text-sm">
-                    <button onClick={() => setEditingId(l.id)} className="text-blue-500 hover:underline">{t("edit")}</button>
-                    <button onClick={() => handleDelete(l.id)} disabled={loading} className="text-red-500 hover:underline disabled:opacity-50">{t("delete")}</button>
+                    <button
+                      onClick={() => setEditingId(l.id)}
+                      className="text-blue-500 hover:underline"
+                    >
+                      {t("edit")}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(l.id)}
+                      disabled={loading}
+                      className="text-red-500 hover:underline disabled:opacity-50"
+                    >
+                      {t("delete")}
+                    </button>
                   </div>
                 </>
               )}

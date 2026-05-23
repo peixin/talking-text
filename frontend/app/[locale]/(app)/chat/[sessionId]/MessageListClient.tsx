@@ -40,21 +40,21 @@ function PlayButton({
     <button
       onClick={() => onPlay(turnId, dir)}
       disabled={isLoading}
-      className="mb-1 shrink-0 text-muted-foreground transition hover:text-foreground disabled:opacity-40"
+      className="text-muted-foreground hover:text-foreground mb-1 shrink-0 transition disabled:opacity-40"
       title={title}
     >
       {isLoading ? (
-        <Loader2 className="h-4 w-4 animate-spin pointer-events-none" />
+        <Loader2 className="pointer-events-none h-4 w-4 animate-spin" />
       ) : isPlaying ? (
-        <Square className="h-4 w-4 fill-current pointer-events-none" />
+        <Square className="pointer-events-none h-4 w-4 fill-current" />
       ) : (
-        <Play className="h-4 w-4 pointer-events-none" />
+        <Play className="pointer-events-none h-4 w-4" />
       )}
     </button>
   );
 }
 
-export function MessageListClient({ messages, sessionId: _sessionId, audioState, onPlay }: Props) {
+export function MessageListClient({ messages, audioState, onPlay }: Props) {
   const t = useTranslations("Chat");
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -77,18 +77,18 @@ export function MessageListClient({ messages, sessionId: _sessionId, audioState,
           key={i}
           className={
             m.role === "user"
-              ? "self-end flex max-w-[75%] items-end gap-2"
-              : "self-start flex max-w-[75%] items-end gap-2"
+              ? "flex max-w-[75%] items-end gap-2 self-end"
+              : "flex max-w-[75%] items-end gap-2 self-start"
           }
         >
           {m.role === "assistant" ? (
             <>
-              <div className="rounded-2xl bg-muted px-4 py-2 min-w-[2rem]">
+              <div className="bg-muted min-w-[2rem] rounded-2xl px-4 py-2">
                 {m.streaming && !m.text ? (
                   <span className="flex items-center gap-1 py-0.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+                    <span className="bg-muted-foreground h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:0ms]" />
+                    <span className="bg-muted-foreground h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:150ms]" />
+                    <span className="bg-muted-foreground h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:300ms]" />
                   </span>
                 ) : (
                   <>
@@ -121,10 +121,10 @@ export function MessageListClient({ messages, sessionId: _sessionId, audioState,
                   title={t("play_audio")}
                 />
               )}
-              <div className="rounded-2xl bg-primary px-4 py-2 text-primary-foreground">
+              <div className="bg-primary text-primary-foreground rounded-2xl px-4 py-2">
                 {m.pending ? (
                   <span className="flex items-center gap-1.5 opacity-70">
-                    <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                    <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
                     {t("transcribing")}
                   </span>
                 ) : (

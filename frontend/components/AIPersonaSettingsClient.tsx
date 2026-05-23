@@ -7,11 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { LearnerOut, SyncPersonaBody } from "@/lib/backend";
 
 interface Props {
@@ -83,10 +79,7 @@ export function AIPersonaSettingsClient({ initial, onSync }: Props) {
             {(["female", "male", "neutral"] as const).map((g) => (
               <div key={g} className="flex items-center gap-1.5">
                 <RadioGroupItem value={g} id={`gender-${g}`} />
-                <Label
-                  htmlFor={`gender-${g}`}
-                  className="cursor-pointer font-normal capitalize"
-                >
+                <Label htmlFor={`gender-${g}`} className="cursor-pointer font-normal capitalize">
                   {g}
                 </Label>
               </div>
@@ -108,7 +101,7 @@ export function AIPersonaSettingsClient({ initial, onSync }: Props) {
           </p>
         </div>
 
-        <div className="pt-2 flex justify-end">
+        <div className="flex justify-end pt-2">
           <Button onClick={handleSave} disabled={isPending} size="sm">
             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isPending ? "Saving…" : "Save Settings"}

@@ -49,8 +49,7 @@ export async function createApi() {
         c((h) => backend.learners.syncPersona(id, body, h)),
     },
     groups: {
-      list: (includeArchived?: boolean) =>
-        c((h) => backend.groups.list(includeArchived, h)),
+      list: (includeArchived?: boolean) => c((h) => backend.groups.list(includeArchived, h)),
       create: (body: GroupCreateBody) => c((h) => backend.groups.create(body, h)),
       update: (
         id: string,

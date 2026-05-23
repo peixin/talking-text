@@ -23,7 +23,7 @@ context_window = 262144               # 256K tokens
 [adapter.vision.volc_ark]
 # Doubao 1.5 Vision Lite endpoint — used by /ingest/extract for OCR +
 # structured language-item extraction from textbook photos.
-model = "ep-20260430135551-7h2lq"
+model = ""
 
 [session]
 # UX soft limit: show "start a new topic?" prompt when turn count reaches this value.

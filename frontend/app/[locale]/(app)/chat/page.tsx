@@ -10,7 +10,6 @@ import type { GroupKind, GroupOut, SessionOut } from "@/lib/backend";
 // /onboarding/learner so the surrounding "no_learners_*" strings stay in
 // /onboarding instead.
 
-
 const KIND_EMOJI: Record<GroupKind, string> = {
   textbook_book: "📕",
   textbook_unit: "📕",
@@ -72,9 +71,7 @@ export default async function ChatHomePage() {
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-6">
       <header className="mb-6 flex items-baseline justify-between">
-        <h1 className="text-xl font-medium">
-          {t("home_title", { name: activeLearner.name })}
-        </h1>
+        <h1 className="text-xl font-medium">{t("home_title", { name: activeLearner.name })}</h1>
         <Link
           href="/parent/learners"
           className="text-muted-foreground hover:text-primary text-xs transition"
@@ -102,7 +99,7 @@ export default async function ChatHomePage() {
               <SessionCard
                 key={s.id}
                 session={s}
-                group={s.group_id ? groupById.get(s.group_id) ?? null : null}
+                group={s.group_id ? (groupById.get(s.group_id) ?? null) : null}
                 relative={fmtRelative(s.updated_at, locale)}
                 fallback_title={t("session_title_pending")}
                 free_practice_label={t("scope_free_practice_short")}
@@ -148,10 +145,8 @@ function SessionCard({
         <span aria-hidden className="text-lg">
           {emoji}
         </span>
-        <div className="flex-1 min-w-0">
-          <div className="truncate text-sm font-medium">
-            {session.title ?? fallback_title}
-          </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">{session.title ?? fallback_title}</div>
           <div className="text-muted-foreground truncate text-xs">{scopeLabel}</div>
         </div>
         <span className="text-muted-foreground text-xs">{relative}</span>

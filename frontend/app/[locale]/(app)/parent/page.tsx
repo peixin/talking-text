@@ -6,10 +6,7 @@ export default async function ParentDashboard() {
   const t = await getTranslations("Parent");
 
   const api = await createApi();
-  const [account, learners] = await Promise.all([
-    api.auth.me(),
-    api.learners.list(),
-  ]);
+  const [account, learners] = await Promise.all([api.auth.me(), api.learners.list()]);
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -25,7 +22,7 @@ export default async function ParentDashboard() {
             {t("manage_add")}
           </Link>
         </div>
-        
+
         {learners.length === 0 ? (
           <div className="border-border rounded-lg border border-dashed p-6 text-center">
             <p className="text-muted-foreground mb-4 text-sm">{t("no_children")}</p>
@@ -79,7 +76,9 @@ export default async function ParentDashboard() {
 
           <div className="border-border flex flex-col items-start rounded-lg border p-5 opacity-50">
             <span className="font-medium">{t("learning_progress")}</span>
-            <span className="text-muted-foreground mt-1 text-sm">{t("learning_progress_desc")}</span>
+            <span className="text-muted-foreground mt-1 text-sm">
+              {t("learning_progress_desc")}
+            </span>
           </div>
         </div>
       </div>
