@@ -99,6 +99,10 @@
     "session_soft_limit_text": "今天练了不少了，换个话题继续练习？",
     "session_soft_limit_dismiss": "继续聊",
     "session_hard_limit_text": "这次对话已达到最大长度，请开始新对话继续练习。",
+    "onboarding_welcome": "Hi {name}，我是你的 AI 英语外教 Tina。今天我们一起来做英语口语练习吧！你可以点击这里智能拍照/录音录入课本，或者选择已有教材。如果不选择，我们就会开始自由模式练习哦！",
+    "onboarding_ingest_btn": "📸 智能拍照录入教材",
+    "onboarding_select_btn": "📚 选择已有教材",
+    "onboarding_free_practice_hint": "直接在下方发语音或打字开始自由模式练习 ✨",
     "errors": {
       "CHAT_AUDIO_EMPTY": "没有录到声音，请再试一次",
       "CHAT_INPUT_EMPTY": "内容不能为空",
@@ -116,6 +120,8 @@
     "title": "学习素材",
     "subtitle": "账号下所有学习素材。归档后从切换器隐藏，但保留学习记录；删除则永久移除。",
     "back_to_parent": "家长中心",
+    "back_to_list": "返回列表",
+    "detail_subtitle": "精细化管理和编辑该学习素材的学习点及层级关联",
     "empty_state": "还没有素材 — 进 chat 点拍照添加。",
     "active_section": "正在用",
     "no_active": "暂无正在使用的素材。",
@@ -134,6 +140,17 @@
     "kind_personal_collection": "生词本",
     "kind_quick_practice": "随手练习",
     "kind_review_set": "复习集"
+  },
+  "MaterialPickers": {
+    "kind_label": "素材类型（可自由输入）",
+    "kind_placeholder": "例如：教材、单元、夏令营听力…",
+    "parent_label": "所属父级素材",
+    "parent_hint": "AI 会从已有素材里挑一个最匹配的当父级；可以搜索切换，也可以新建。",
+    "parent_none": "（无父级，作为根目录）",
+    "parent_clear": "清空父级",
+    "parent_search_placeholder": "搜索现有素材或输入新名字…",
+    "parent_no_groups_yet": "还没有素材。直接输入名字可新建一个作为父级。",
+    "parent_create_as": "+ 新建『{name}』作为父级"
   },
   "Onboarding": {
     "title": "添加第一个孩子",
@@ -157,6 +174,7 @@
     "free_practice_hint": "不限词表，自由聊",
     "no_groups_yet": "还没有素材 — 点拍照图标添加一个",
     "items_count": "{count} 个学习点",
+    "ingest_new_material": "📸 智能录入新教材",
     "close": "关闭"
   },
   "Ingest": {
@@ -171,7 +189,7 @@
     "error_audio_empty": "没有录到声音，请再试一次。",
     "error_transcribe_failed": "识别失败，请重试或手动输入描述。",
     "description_label": "描述要学什么（可选）",
-    "description_placeholder": "例如：今天学了颜色和衣物。",
+    "description_placeholder": "例如：今天学了颜色和衣物。（支持直接截图或复制图片在此粘贴 Cmd+V）",
     "extract": "提取 →",
     "extracting": "识别中…",
     "looks_like": "看起来是",
@@ -204,7 +222,9 @@
     "trigger_camera": "拍照",
     "trigger_voice": "语音描述",
     "trigger_voice_coming_soon": "语音录入 — 敬请期待",
-    "trigger_file": "添加文件"
+    "trigger_file": "添加文件",
+    "warning_limit_reached": "每次最多支持上传 5 张照片哦",
+    "warning_size_reached": "单张或累计图片大小不能超过 10MB 哦"
   },
   "Home": {
     "brand_title": "字有天地",

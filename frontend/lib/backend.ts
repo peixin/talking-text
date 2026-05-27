@@ -120,13 +120,11 @@ export type TurnOut = {
   created_at: string;
 };
 
-export type GroupKind =
-  | "textbook_book"
-  | "textbook_unit"
-  | "textbook_lesson"
-  | "personal_collection"
-  | "quick_practice"
-  | "review_set";
+// Free-form label. A few known values (textbook_book / textbook_unit /
+// textbook_lesson / personal_collection / quick_practice / review_set) still
+// carry localized labels and icons, but any string the parent or LLM picks is
+// accepted by the backend.
+export type GroupKind = string;
 
 export type GroupOut = {
   id: string;
@@ -164,7 +162,11 @@ export type ExtractedMetadata = {
   unit: string | null;
   lesson: string | null;
   page: string | null;
+  kind_label: string | null;
+  parent_id: string | null;
+  cefr_level: CefrLevel | null;
   confidence: Confidence;
+  levels?: string[] | null;
 };
 
 export type IngestionResult = {
@@ -187,6 +189,27 @@ export type GroupCreateBody = {
     cefr_level?: string | null;
     pos?: string | null;
   }>;
+  levels?: string[] | null;
+};
+
+export type LanguageItemOut = {
+  id: string;
+  type: ItemType;
+  text: string;
+  anchor: string;
+  cefr_level: string | null;
+  pos: string | null;
+};
+
+export type GroupDetailOut = {
+  id: string;
+  name: string;
+  kind: GroupKind;
+  parent_id: string | null;
+  archived: boolean;
+  source_book_hint: string | null;
+  prompt_notes: string | null;
+  items: LanguageItemOut[];
 };
 
 export const backend = {
@@ -237,6 +260,8 @@ export const backend = {
   groups: {
     list: (includeArchived?: boolean, headers?: HeadersInit) =>
       request<GroupOut[]>(`/groups${includeArchived ? "?include_archived=true" : ""}`, { headers }),
+    get: (id: string, headers?: HeadersInit) =>
+      request<GroupDetailOut>(`/groups/${id}`, { headers }),
     create: (body: GroupCreateBody, headers?: HeadersInit) =>
       request<GroupOut>("/groups", {
         method: "POST",
@@ -245,7 +270,22 @@ export const backend = {
       }),
     update: (
       id: string,
-      body: { name?: string; archived?: boolean; prompt_notes?: string | null },
+      body: {
+        name?: string;
+        archived?: boolean;
+        parent_id?: string | null;
+        kind?: string;
+        source_book_hint?: string | null;
+        prompt_notes?: string | null;
+        items?: Array<{
+          text: string;
+          type: ItemType;
+          anchor?: string | null;
+          cefr_level?: string | null;
+          pos?: string | null;
+        }> | null;
+        levels?: string[] | null;
+      },
       headers?: HeadersInit,
     ) =>
       request<GroupOut>(`/groups/${id}`, {

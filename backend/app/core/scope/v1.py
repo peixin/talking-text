@@ -6,7 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.scope.protocol import PatternItem, ScopeResult
-from app.storage.models.content import ItemGroup, ItemGroupMember, LanguageItem
+from app.storage.models.content import (
+    ItemGroup,
+    ItemGroupMember,
+    LanguageItem,
+    get_descendant_group_ids,
+)
 from app.storage.models.learner import Learner
 
 
@@ -36,10 +41,11 @@ class V1ScopeComputer:
                 # free / calibration mode rather than failing the turn.
                 return self._scope_without_group(cefr_level)
 
+            descendant_ids = await get_descendant_group_ids(db, group_id)
             items_row = await db.execute(
                 select(LanguageItem)
                 .join(ItemGroupMember, ItemGroupMember.item_id == LanguageItem.id)
-                .where(ItemGroupMember.group_id == group_id)
+                .where(ItemGroupMember.group_id.in_(descendant_ids))
                 .order_by(LanguageItem.type, LanguageItem.text)
             )
             items = list(items_row.scalars().all())

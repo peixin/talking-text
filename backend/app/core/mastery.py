@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters import factory
 from app.adapters.llm.protocol import LLMMessage
 from app.storage.db import _SessionFactory
-from app.storage.models.content import ItemGroupMember, LanguageItem
+from app.storage.models.content import ItemGroupMember, LanguageItem, get_descendant_group_ids
 from app.storage.models.learning import LearnerItemStats
 from app.storage.models.session import Session
 from app.storage.models.turn import Turn
@@ -188,10 +188,11 @@ async def analyze_session(learner_id: uuid.UUID, session_id: uuid.UUID) -> None:
 
 
 async def _scope_items(db: AsyncSession, group_id: uuid.UUID) -> list[LanguageItem]:
+    descendant_ids = await get_descendant_group_ids(db, group_id)
     rows = await db.execute(
         select(LanguageItem)
         .join(ItemGroupMember, ItemGroupMember.item_id == LanguageItem.id)
-        .where(ItemGroupMember.group_id == group_id)
+        .where(ItemGroupMember.group_id.in_(descendant_ids))
     )
     return list(rows.scalars().all())
 

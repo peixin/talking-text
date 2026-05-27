@@ -15,12 +15,16 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters import factory
 from app.adapters.stt.protocol import STTRequest
 from app.api.auth import get_current_account
 from app.audio_codec import webm_opus_to_ogg
+from app.storage.db import get_db
 from app.storage.models.account import Account
+from app.storage.models.content import ItemGroup
 
 log = logging.getLogger(__name__)
 
@@ -29,9 +33,9 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 _MAX_IMAGES = 5
 _MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB after frontend resize; safety cap
 
-_EXTRACTION_PROMPT = """You are an English learning content analyst. Extract \
-structured learning items from images and/or text that a parent provides for \
-their child's English practice.
+_EXTRACTION_PROMPT = """You are a highly intelligent English learning content analyst. \
+Your job is to extract structured learning items (words, phrase collocations, and sentence \
+patterns) from images and/or text descriptions provided by parents.
 
 Output STRICTLY valid JSON matching this schema:
 
@@ -43,14 +47,18 @@ Output STRICTLY valid JSON matching this schema:
     "unit": string | null,
     "lesson": string | null,
     "page": string | null,
-    "confidence": "high" | "medium" | "low"
+    "kind_label": string | null,
+    "parent_id": string | null,
+    "cefr_level": "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | null,
+    "confidence": "high" | "medium" | "low",
+    "levels": [string] | null
   },
   "items": [
     {
       "text": string,
       "type": "word" | "phrase" | "pattern",
       "anchor": string | null,
-      "cefr": "A1".."C2" | null,
+      "cefr": "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | null,
       "pos": one of "noun" "verb" "adj" "adv" "prep" "conj"
              "pron" "interj" "phrase" | null,
       "confidence": "high" | "medium" | "low",
@@ -60,22 +68,48 @@ Output STRICTLY valid JSON matching this schema:
   "warnings": [string]
 }
 
-Rules:
-1. ONLY English items. Skip Chinese translations even if present alongside.
-2. word     = a single English word, e.g. "apple"
-   phrase   = a fixed multi-word expression, e.g. "by the way"
-   pattern  = a sentence template with blanks, e.g. "I like ___ and ___."
-              For patterns, set anchor = lowercase fixed part (e.g. "i like").
-3. Skip page numbers, copyright lines, publisher names, navigation text.
-4. If part of the image is unreadable, add a warning; do NOT guess content.
-5. CEFR rough guide: A1 = elementary K1-K3 vocabulary, A2 = K4-K6,
-   B1 = middle school, B2 = high school, C1+ = advanced.
-6. Confidence per item: high = clearly visible and unambiguous;
-   medium = visible but you are inferring (e.g. CEFR estimate);
-   low = guessing because text is unclear.
-7. If image is not English language material, return source_type "other"
-   and empty items array.
-8. Return ONLY the JSON object. No prose, no markdown fences."""
+Extraction Rules:
+1. ONLY English items. Ignore or filter out non-English translations/explanations.
+2. Item Types:
+   - "word": A single English word, e.g. "apple", "beautiful".
+   - "phrase": A multi-word fixed collocation, idiom, or lexical chunk, \
+e.g. "by the way", "look after".
+   - "pattern": A sentence pattern or grammar structure template with \
+blanks, e.g. "I like ___ and ___.", "Can you help me ___?".
+                For patterns, set `anchor` to the lowercase fixed part of \
+the pattern (e.g. "i like" or "can you help me").
+3. Metadata Identification & CEFR Difficulty:
+   - Identify the source book name, unit/chapter, lesson/section, and \
+page number if visible or described.
+   - Estimate the overall CEFR difficulty level (`metadata.cefr_level`) \
+of the entire material (A1 = elementary/K1-K3, A2 = high elementary/K4-K6, \
+B1 = middle school, B2 = high school, C1+ = advanced).
+4. Kind Label (`metadata.kind_label`):
+   - A short free-form label (2-10 characters, Chinese or English) describing what \
+this material *is* — e.g. "教材", "单元", "课次", "复习集", "Textbook", "Unit", \
+"Lesson", "Worksheet", "夏令营听力". Pick what reads naturally for a parent in the \
+target locale; do not invent a category that doesn't apply.
+   - Reuse the EXACT label already used by the closest existing material (see the \
+database list below) whenever possible — consistency matters more than novelty.
+   - If the source is clearly a one-off worksheet or screenshot with no obvious \
+hierarchy, "练习" / "Practice" is fine.
+5. Local Database Reference Mapping (parent_id inference):
+   - You are provided with a list of the parent's existing learning materials below.
+   - Cross-reference the extracted book/unit names with this list. If the extracted \
+content belongs to one of these materials:
+     a) Use the EXACT spelling of the matched book under `metadata.book_name`.
+     b) If the extracted material is a sub-section that fits under an existing \
+material in the list, output that material's ID as `metadata.parent_id`.
+     c) If there is no logical parent match in the list, set `metadata.parent_id` \
+to null.
+6. Levels Inferences (`metadata.levels`): An array of strings representing the \
+hierarchical levels inferred from the material, ordered from top-level to finest leaf. \
+For example: `["Oxford English", "Book 3A", "Unit 2", "Lesson 1"]` or `["Kids Corner", "Colors"]`. \
+Do not include generic placeholders. If the material is a simple one-off list with \
+no clear levels, output `["General Practice"]` or similar single item.
+7. Skip page numbers, copyright blocks, publisher names, and system instructions.
+8. Return ONLY the JSON object. Do not include any markdown fences \
+or explanation before/after the JSON."""
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -94,7 +128,11 @@ class ExtractedMetadata(BaseModel):
     unit: str | None = None
     lesson: str | None = None
     page: str | None = None
+    kind_label: str | None = None
+    parent_id: str | None = None
+    cefr_level: CEFRLevel | None = None
     confidence: ConfidenceLevel = "low"
+    levels: list[str] | None = None
 
 
 class ExtractedItem(BaseModel):
@@ -159,6 +197,18 @@ def _parse_extraction(raw_text: str) -> IngestionResult:
     data = json.loads(text)
     result = IngestionResult.model_validate(data)
     result.items = _dedupe_items(result.items)
+
+    # Fallback to build levels if AI omitted it
+    if not result.metadata.levels:
+        fallback_levels = []
+        if result.metadata.book_name:
+            fallback_levels.append(result.metadata.book_name.strip())
+        if result.metadata.unit:
+            fallback_levels.append(result.metadata.unit.strip())
+        if result.metadata.lesson:
+            fallback_levels.append(result.metadata.lesson.strip())
+        result.metadata.levels = fallback_levels if fallback_levels else ["未分类教材"]
+
     return result
 
 
@@ -168,6 +218,7 @@ def _parse_extraction(raw_text: str) -> IngestionResult:
 @router.post("/extract", response_model=IngestionResult)
 async def extract_content(
     _account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
     description: Annotated[str | None, Form()] = None,
     images: Annotated[list[UploadFile] | None, File()] = None,
 ) -> IngestionResult:
@@ -204,12 +255,48 @@ async def extract_content(
         if img.content_type and img.content_type.startswith("image/"):
             image_mime = img.content_type
 
-    user_block = f'User provided this context (may be empty): "{description}"\n\n' + (
-        f"Extract items from the attached image(s) ({len(image_bytes)})."
-        if image_bytes
-        else "Extract items from the description above."
+    # Fetch existing materials (groups) for cross-referencing and parent_id inference
+    stmt = select(ItemGroup).where(
+        ItemGroup.owner_account_id == _account.id,
+        ItemGroup.archived.is_(False),
     )
-    full_prompt = f"{_EXTRACTION_PROMPT}\n\n---\n{user_block}"
+    existing_groups = list((await db.execute(stmt)).scalars().all())
+
+    existing_materials_context_str = ""
+    if existing_groups:
+        existing_materials_context_str = "\n".join(
+            [
+                f"- Material ID: '{g.id}' | Name: '{g.name}' | "
+                f"Kind: '{g.kind}' | "
+                f"Source Book Hint: '{g.source_book_hint or 'None'}' | "
+                f"Parent ID: '{g.parent_id or 'None'}'"
+                for g in existing_groups
+            ]
+        )
+    else:
+        existing_materials_context_str = "(No existing learning materials in the database yet.)"
+
+    user_block = (
+        f"Parent provided the following text description/context "
+        f"(which may be a manual input and/or transcribed voice):\n"
+        f'"{description}"\n\n'
+    )
+    if image_bytes:
+        user_block += (
+            f"Please extract structured content from the attached "
+            f"{len(image_bytes)} image(s), taking the parent's text "
+            f"context above into account."
+        )
+    else:
+        user_block += "Please extract structured content from the parent's text " "context above."
+
+    full_prompt = (
+        f"{_EXTRACTION_PROMPT}\n\n"
+        f"--- USER'S EXISTING LEARNING MATERIALS (FROM DATABASE) ---\n"
+        f"{existing_materials_context_str}\n\n"
+        f"--- CURRENT UPLOAD CONTEXT ---\n"
+        f"{user_block}"
+    )
 
     response_format: dict[str, Any] = {"type": "json_object"}
 

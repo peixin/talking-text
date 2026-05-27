@@ -11,7 +11,7 @@ import { Message, createSession, deleteSession, getAudio, renameSession } from "
 import { SessionSidebarClient } from "./SessionSidebarClient";
 import { MessageListClient, AudioState } from "./MessageListClient";
 import { RecordButtonClient, Mode } from "./RecordButtonClient";
-import { IngestDrawerClient, IngestToolbarClient, IngestTrigger } from "./IngestDrawerClient";
+import { IngestDrawerClient, IngestTrigger } from "./IngestDrawerClient";
 import { ScopeSwitcherClient } from "./ScopeSwitcherClient";
 
 function pickMimeType(): string {
@@ -79,6 +79,21 @@ export function ChatClient({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTrigger, setDrawerTrigger] = useState<IngestTrigger>("camera");
   const [scopeSwitchOpen, setScopeSwitchOpen] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+
+  useEffect(() => {
+    const dismissed =
+      localStorage.getItem(`talking-text-onboarding-dismissed-${activeSession.id}`) === "true";
+    const timer = setTimeout(() => {
+      setOnboardingDismissed(dismissed);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [activeSession.id]);
+
+  function handleDismissOnboarding() {
+    localStorage.setItem(`talking-text-onboarding-dismissed-${activeSession.id}`, "true");
+    setOnboardingDismissed(true);
+  }
 
   function openDrawer(trigger: IngestTrigger) {
     setDrawerTrigger(trigger);
@@ -576,6 +591,12 @@ export function ChatClient({
           sessionId={activeSession.id}
           audioState={audioState}
           onPlay={handlePlay}
+          activeLearnerName={activeLearner.name}
+          currentGroupId={currentGroup?.id ?? null}
+          onOpenIngest={openDrawer}
+          onOpenScopeSwitcher={() => setScopeSwitchOpen(true)}
+          onboardingDismissed={onboardingDismissed}
+          onDismissOnboarding={handleDismissOnboarding}
         />
 
         {/* Soft-limit banner */}
@@ -616,9 +637,8 @@ export function ChatClient({
             </div>
           ) : (
             <>
-              {/* Ingest toolbar + mode toggle */}
-              <div className="flex items-center justify-between px-2 pt-2">
-                <IngestToolbarClient onOpen={openDrawer} />
+              {/* Mode toggle */}
+              <div className="flex items-center justify-end px-2 pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -700,6 +720,7 @@ export function ChatClient({
         initialTrigger={drawerTrigger}
         onOpenChange={setDrawerOpen}
         onGroupApplied={handleGroupApplied}
+        groups={groups}
       />
 
       <ScopeSwitcherClient
@@ -709,6 +730,7 @@ export function ChatClient({
         open={scopeSwitchOpen}
         onOpenChange={setScopeSwitchOpen}
         onApplied={handleGroupApplied}
+        onOpenIngest={openDrawer}
       />
     </div>
   );

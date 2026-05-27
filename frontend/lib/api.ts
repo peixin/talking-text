@@ -50,10 +50,26 @@ export async function createApi() {
     },
     groups: {
       list: (includeArchived?: boolean) => c((h) => backend.groups.list(includeArchived, h)),
+      get: (id: string) => c((h) => backend.groups.get(id, h)),
       create: (body: GroupCreateBody) => c((h) => backend.groups.create(body, h)),
       update: (
         id: string,
-        body: { name?: string; archived?: boolean; prompt_notes?: string | null },
+        body: {
+          name?: string;
+          archived?: boolean;
+          parent_id?: string | null;
+          kind?: string;
+          source_book_hint?: string | null;
+          prompt_notes?: string | null;
+          items?: Array<{
+            text: string;
+            type: import("./backend").ItemType;
+            anchor?: string | null;
+            cefr_level?: string | null;
+            pos?: string | null;
+          }> | null;
+          levels?: string[] | null;
+        },
       ) => c((h) => backend.groups.update(id, body, h)),
       delete: (id: string) => c((h) => backend.groups.delete(id, h)),
     },

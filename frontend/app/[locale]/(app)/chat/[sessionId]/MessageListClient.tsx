@@ -2,7 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Play, Square } from "lucide-react";
+import { Camera, BookOpen, Loader2, Play, Sparkles, Square, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { IngestTrigger } from "./IngestDrawerClient";
 
 import { Message } from "./actions";
 
@@ -17,6 +19,12 @@ interface Props {
   sessionId: string;
   audioState: AudioState;
   onPlay: (turnId: string, dir: "in" | "out") => void;
+  activeLearnerName?: string;
+  currentGroupId?: string | null;
+  onOpenIngest?: (trigger: IngestTrigger) => void;
+  onOpenScopeSwitcher?: () => void;
+  onboardingDismissed?: boolean;
+  onDismissOnboarding?: () => void;
 }
 
 function PlayButton({
@@ -54,7 +62,17 @@ function PlayButton({
   );
 }
 
-export function MessageListClient({ messages, audioState, onPlay }: Props) {
+export function MessageListClient({
+  messages,
+  audioState,
+  onPlay,
+  activeLearnerName,
+  currentGroupId,
+  onOpenIngest,
+  onOpenScopeSwitcher,
+  onboardingDismissed,
+  onDismissOnboarding,
+}: Props) {
   const t = useTranslations("Chat");
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -62,10 +80,79 @@ export function MessageListClient({ messages, audioState, onPlay }: Props) {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  if (messages.length === 0) {
+  const showOnboarding = messages.length === 0 && currentGroupId === null && !onboardingDismissed;
+
+  if (messages.length === 0 && !showOnboarding) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <p className="text-muted-foreground text-center text-sm">{t("no_chat")}</p>
+      </div>
+    );
+  }
+
+  if (showOnboarding) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto p-6">
+        <div className="bg-card/60 relative w-full max-w-lg overflow-hidden rounded-2xl border border-indigo-500/10 p-6 shadow-xl backdrop-blur-md transition-all duration-500 hover:shadow-indigo-500/5">
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={onDismissOnboarding}
+            className="text-muted-foreground/60 hover:text-foreground hover:bg-muted absolute top-4 right-4 rounded-full p-1 transition"
+            aria-label={t("close")}
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          {/* Assistant Header / Logo */}
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 animate-pulse items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/20">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold tracking-tight">Tina</h3>
+              <p className="text-muted-foreground text-xs font-medium">AI English Coach</p>
+            </div>
+          </div>
+
+          {/* Welcome Text */}
+          <p className="text-foreground/90 mb-6 text-sm leading-relaxed font-medium">
+            {t("onboarding_welcome", { name: activeLearnerName || "" })}
+          </p>
+
+          {/* Action Row / Grid */}
+          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => onOpenIngest?.("camera")}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-semibold",
+                "border border-indigo-500/20 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 text-indigo-600 hover:from-indigo-500/20 hover:to-purple-500/20 dark:text-indigo-400",
+                "shadow-sm transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]",
+              )}
+            >
+              <Camera className="h-4 w-4" />
+              <span>{t("onboarding_ingest_btn")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onOpenScopeSwitcher}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-semibold",
+                "bg-muted hover:bg-muted/80 text-foreground border-border border",
+                "shadow-sm transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]",
+              )}
+            >
+              <BookOpen className="h-4 w-4" />
+              <span>{t("onboarding_select_btn")}</span>
+            </button>
+          </div>
+
+          {/* Small hint at the bottom */}
+          <p className="text-muted-foreground text-center text-[10px] sm:text-xs">
+            {t("onboarding_free_practice_hint")}
+          </p>
+        </div>
       </div>
     );
   }

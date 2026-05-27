@@ -35,17 +35,11 @@ interface Props {
   initialTrigger: IngestTrigger;
   onOpenChange: (open: boolean) => void;
   onGroupApplied: (group: GroupOut) => void;
+  groups?: GroupOut[];
 }
 
 const CEFR_OPTIONS: (CefrLevel | "")[] = ["", "A1", "A2", "B1", "B2", "C1", "C2"];
 const ITEM_TYPES: ItemType[] = ["word", "phrase", "pattern"];
-
-function joinBookName(meta: IngestionResult["metadata"]): string {
-  const parts = [meta.book_name, meta.unit, meta.lesson]
-    .map((s) => s?.trim())
-    .filter((s): s is string => !!s);
-  return parts.join(" / ");
-}
 
 function buildItemsBody(items: ExtractedItem[]) {
   return items
@@ -88,6 +82,7 @@ export function IngestDrawerClient({
   initialTrigger,
   onOpenChange,
   onGroupApplied,
+  groups = [],
 }: Props) {
   const t = useTranslations("Ingest");
   const [step, setStep] = useState<Step>({ kind: "input" });
@@ -96,7 +91,12 @@ export function IngestDrawerClient({
 
   // Owned by the drawer; refreshed when extraction completes.
   const [items, setItems] = useState<ExtractedItem[]>([]);
-  const [groupName, setGroupName] = useState("");
+  const [levels, setLevels] = useState<string[]>([]);
+  const [inferredCefr, setInferredCefr] = useState<string | null>(null);
+
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const warningTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Voice ingestion (independent of the chat record button).
   const [recordMode, setRecordMode] = useState<"idle" | "recording" | "transcribing">("idle");
@@ -117,15 +117,25 @@ export function IngestDrawerClient({
         setFiles([]);
         setDescription("");
         setItems([]);
-        setGroupName("");
+        setLevels([]);
+        setInferredCefr(null);
         setRecordMode("idle");
         setRecordError(null);
+        setWarningMessage(null);
+        setPreviewImageUrl(null);
+        if (warningTimeoutRef.current) {
+          clearTimeout(warningTimeoutRef.current);
+          warningTimeoutRef.current = null;
+        }
       }, 0);
     } else {
       stopRecorderStream();
     }
     return () => {
       if (timer) clearTimeout(timer);
+      if (warningTimeoutRef.current) {
+        clearTimeout(warningTimeoutRef.current);
+      }
     };
   }, [open]);
 
@@ -232,15 +242,75 @@ export function IngestDrawerClient({
     return () => previews.forEach((p) => URL.revokeObjectURL(p.url));
   }, [previews]);
 
-  function addFiles(selected: FileList | null) {
-    if (!selected || selected.length === 0) return;
+  const triggerWarning = (msg: string) => {
+    setWarningMessage(msg);
+    if (warningTimeoutRef.current) {
+      clearTimeout(warningTimeoutRef.current);
+    }
+    warningTimeoutRef.current = setTimeout(() => {
+      setWarningMessage(null);
+    }, 5000);
+  };
+
+  function addFiles(selected: FileList | File[] | null) {
+    if (!selected) return;
+    const arr = Array.from(selected);
+    if (arr.length === 0) return;
+
+    let limitWarning = false;
+    let sizeWarning = false;
     const next = [...files];
-    for (const f of Array.from(selected)) {
-      if (next.length >= 5) break;
+    let currentTotalSize = next.reduce((sum, file) => sum + file.size, 0);
+
+    for (const f of arr) {
+      if (next.length >= 5) {
+        limitWarning = true;
+        break;
+      }
+      if (f.size > 10 * 1024 * 1024) {
+        sizeWarning = true;
+        continue;
+      }
+      if (currentTotalSize + f.size > 10 * 1024 * 1024) {
+        sizeWarning = true;
+        continue;
+      }
       next.push(f);
+      currentTotalSize += f.size;
     }
     setFiles(next);
+
+    if (limitWarning) {
+      triggerWarning(t("warning_limit_reached"));
+    } else if (sizeWarning) {
+      triggerWarning(t("warning_size_reached"));
+    }
   }
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const pastedFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.indexOf("image") !== -1) {
+        const file = item.getAsFile();
+        if (file) {
+          const extension = file.type.split("/")[1] || "png";
+          const fileName =
+            file.name === "image.png" ? `paste-${Date.now()}.${extension}` : file.name;
+          const customFile = new File([file], fileName, { type: file.type });
+          pastedFiles.push(customFile);
+        }
+      }
+    }
+
+    if (pastedFiles.length > 0) {
+      e.preventDefault();
+      addFiles(pastedFiles);
+    }
+  };
 
   async function handleExtract() {
     if (files.length === 0 && !description.trim()) {
@@ -261,8 +331,14 @@ export function IngestDrawerClient({
       setStep({ kind: "error", message: t("error_no_items") });
       return;
     }
+    const meta = result.result.metadata;
+    const inferredLvl = (meta.levels || [meta.book_name, meta.unit, meta.lesson]).filter(
+      (lvl): lvl is string => !!lvl,
+    );
+    const finalLvl = inferredLvl.length > 0 ? inferredLvl : ["未分类教材"];
+    setLevels(finalLvl);
+    setInferredCefr(meta.cefr_level || "");
     setItems(sortForEdit(result.result.items));
-    setGroupName(joinBookName(result.result.metadata) || t("default_group_name"));
     setStep({ kind: "preview", mode: "summary", result: result.result });
   }
 
@@ -276,10 +352,11 @@ export function IngestDrawerClient({
     setStep({ kind: "saving", result: step.result });
 
     const createRes = await createGroup({
-      name: groupName.trim() || t("default_group_name"),
+      name: (levels[levels.length - 1] || "").trim() || t("default_group_name"),
       kind: "quick_practice",
       items: body,
-      source_book_hint: step.result.metadata.book_name ?? null,
+      source_book_hint: (levels[0] || "").trim() || null,
+      levels: levels.map((lvl) => lvl.trim()).filter(Boolean),
     });
     if (!createRes.ok) {
       setStep({ kind: "error", message: createRes.error || t("error_save_failed") });
@@ -292,7 +369,41 @@ export function IngestDrawerClient({
       return;
     }
     onGroupApplied(createRes.group);
-    onOpenChange(false);
+  }
+
+  function getAutocompleteOptions(idx: number): string[] {
+    if (!groups) return [];
+    if (idx === 0) {
+      return Array.from(
+        new Set(groups.filter((g) => !g.parent_id && !g.archived).map((g) => g.name)),
+      );
+    }
+    let currentGroupNodes = groups.filter((g) => !g.parent_id && !g.archived);
+    for (let i = 0; i < idx; i++) {
+      const parentName = levels[i]?.trim().toLowerCase();
+      if (!parentName) return [];
+      const matchedNode = currentGroupNodes.find((g) => g.name.trim().toLowerCase() === parentName);
+      if (!matchedNode) return [];
+      currentGroupNodes = groups.filter((g) => g.parent_id === matchedNode.id && !g.archived);
+    }
+    return Array.from(new Set(currentGroupNodes.map((g) => g.name)));
+  }
+
+  function getMatchedGroupNode(idx: number): GroupOut | null {
+    if (!groups) return null;
+    let currentGroupNodes = groups.filter((g) => !g.parent_id && !g.archived);
+    let matched: GroupOut | null = null;
+    for (let i = 0; i <= idx; i++) {
+      const currentName = levels[i]?.trim().toLowerCase();
+      if (!currentName) return null;
+      const matchedNode = currentGroupNodes.find(
+        (g) => g.name.trim().toLowerCase() === currentName,
+      );
+      if (!matchedNode) return null;
+      matched = matchedNode;
+      currentGroupNodes = groups.filter((g) => g.parent_id === matchedNode.id && !g.archived);
+    }
+    return matched;
   }
 
   function updateItem(idx: number, patch: Partial<ExtractedItem>) {
@@ -361,7 +472,7 @@ export function IngestDrawerClient({
 
           <div className="flex-1 overflow-y-auto px-4 py-4">
             {step.kind === "input" && (
-              <div className="space-y-4">
+              <div className="space-y-4" onPaste={handlePaste}>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
@@ -400,6 +511,20 @@ export function IngestDrawerClient({
                   </Button>
                 </div>
                 {recordError && <p className="text-destructive text-xs">{recordError}</p>}
+
+                {warningMessage && (
+                  <div className="animate-in fade-in slide-in-from-top-1 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 shadow-sm duration-200 dark:border-amber-500/20 dark:bg-amber-500/5 dark:text-amber-300">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span className="flex-1 font-medium">{warningMessage}</span>
+                    <button
+                      type="button"
+                      onClick={() => setWarningMessage(null)}
+                      className="text-amber-800/60 hover:text-amber-800 dark:text-amber-300/60 dark:hover:text-amber-300"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
                 <input
                   ref={cameraInputRef}
                   type="file"
@@ -426,11 +551,16 @@ export function IngestDrawerClient({
                         className="group bg-muted relative h-20 w-20 overflow-hidden rounded-md border"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
+                        <img
+                          src={p.url}
+                          alt={p.name}
+                          onClick={() => setPreviewImageUrl(p.url)}
+                          className="h-full w-full cursor-zoom-in object-cover transition-transform duration-200 hover:scale-105"
+                        />
                         <button
                           type="button"
                           onClick={() => setFiles(files.filter((_, idx) => idx !== i))}
-                          className="absolute top-1 right-1 rounded-full bg-black/60 p-0.5 text-white opacity-0 transition group-hover:opacity-100"
+                          className="animate-in fade-in absolute top-1 right-1 rounded-full bg-black/60 p-0.5 text-white opacity-0 transition duration-150 group-hover:opacity-100"
                           aria-label={t("remove_image")}
                         >
                           <X className="h-3 w-3" />
@@ -464,24 +594,120 @@ export function IngestDrawerClient({
 
             {(step.kind === "preview" || step.kind === "saving") && (
               <div className="space-y-4">
-                {joinBookName(step.result.metadata) && (
-                  <div className="bg-muted/40 rounded-md border px-3 py-2 text-sm">
-                    <div className="text-muted-foreground text-xs">{t("looks_like")}</div>
-                    <div className="font-medium">{joinBookName(step.result.metadata)}</div>
-                  </div>
-                )}
+                {/* Dynamic levels card list */}
+                <div className="space-y-3 rounded-xl border border-indigo-500/10 bg-indigo-500/5 p-4">
+                  <label className="block text-[10px] font-bold tracking-wider text-indigo-800 uppercase">
+                    教材层级深度关联（由上至下）
+                  </label>
 
-                <label className="block">
-                  <span className="text-muted-foreground mb-1 block text-xs">
-                    {t("group_name_label")}
-                  </span>
-                  <input
-                    value={groupName}
-                    onChange={(e) => setGroupName(e.target.value)}
+                  <div className="space-y-2">
+                    {levels.map((lvl, idx) => {
+                      const matchedNode = getMatchedGroupNode(idx);
+                      return (
+                        <div
+                          key={idx}
+                          className="w-full min-w-0 space-y-1.5 rounded-xl border border-slate-100/80 bg-white/40 p-2.5 shadow-sm dark:border-slate-800/40 dark:bg-slate-950/20"
+                        >
+                          <div className="flex w-full min-w-0 items-center gap-2">
+                            {/* Level badge label */}
+                            <span className="shrink-0 rounded border border-indigo-100 bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 dark:border-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-400">
+                              Level {idx + 1}
+                            </span>
+
+                            {/* Input with autocomplete datalist */}
+                            <input
+                              type="text"
+                              value={lvl}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setLevels((prev) => prev.map((x, i) => (i === idx ? val : x)));
+                              }}
+                              disabled={step.kind === "saving"}
+                              list={`datalist-level-${idx}`}
+                              placeholder={`输入级别名称，如 Book 1 / Unit 2...`}
+                              className="bg-background border-border min-w-0 flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                            />
+
+                            {/* Autocomplete datalist */}
+                            <datalist id={`datalist-level-${idx}`}>
+                              {getAutocompleteOptions(idx).map((opt) => (
+                                <option key={opt} value={opt} />
+                              ))}
+                            </datalist>
+
+                            {/* Delete action button */}
+                            {levels.length > 1 && step.kind !== "saving" && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={() => {
+                                  setLevels((prev) => prev.filter((_, i) => i !== idx));
+                                }}
+                                className="text-muted-foreground hover:text-destructive shrink-0"
+                                title="删除此级别"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Match Status Badge */}
+                          {lvl.trim() && (
+                            <div className="flex items-center pl-14">
+                              {matchedNode ? (
+                                <span className="animate-in fade-in slide-in-from-left-1 inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 backdrop-blur-sm duration-200 dark:border-emerald-500/30 dark:bg-emerald-500/5 dark:text-emerald-400">
+                                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                                  ✓ 已匹配已有 &quot;{matchedNode.name}&quot;
+                                </span>
+                              ) : (
+                                <span className="animate-in fade-in slide-in-from-left-1 inline-flex items-center gap-1 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-700 backdrop-blur-sm duration-200 dark:border-indigo-500/30 dark:bg-indigo-500/5 dark:text-indigo-400">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 dark:bg-indigo-500" />
+                                  + 将在此树下新建节点
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {step.kind !== "saving" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setLevels((prev) => [...prev, ""]);
+                      }}
+                      className="mt-2 border-dashed border-indigo-200 text-xs text-indigo-600 hover:bg-indigo-50"
+                    >
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      追加子级别 (Add Level)
+                    </Button>
+                  )}
+                </div>
+
+                {/* CEFR Level Selection */}
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold tracking-wider text-indigo-800 uppercase">
+                    推算难度等级 (CEFR)
+                  </label>
+                  <select
+                    value={inferredCefr || ""}
+                    onChange={(e) => setInferredCefr(e.target.value || null)}
                     disabled={step.kind === "saving"}
-                    className="border-border bg-background focus:ring-ring w-full rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:opacity-50"
-                  />
-                </label>
+                    className="border-border bg-background focus:ring-ring w-full rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 disabled:opacity-50"
+                  >
+                    <option value="">(由AI自适应)</option>
+                    {CEFR_OPTIONS.filter(Boolean).map((lvl) => (
+                      <option key={lvl} value={lvl}>
+                        {lvl} (标准 {lvl} 级)
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 {step.kind === "preview" && step.mode === "summary" && (
                   <SummaryView
@@ -562,6 +788,36 @@ export function IngestDrawerClient({
             )}
           </footer>
         </DialogPrimitive.Popup>
+
+        {previewImageUrl && (
+          <div
+            className="animate-in fade-in fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md duration-200"
+            onClick={() => setPreviewImageUrl(null)}
+          >
+            {/* Close button with premium blur and gold hover accent */}
+            <button
+              type="button"
+              onClick={() => setPreviewImageUrl(null)}
+              className="absolute top-4 right-4 z-[70] rounded-full border border-yellow-500/30 bg-black/40 p-2 text-yellow-500/80 backdrop-blur-md transition-all hover:scale-105 hover:border-yellow-500/60 hover:text-yellow-400"
+              aria-label="关闭预览"
+            >
+              <X className="h-6 w-6" />
+            </button>
+
+            {/* Main image container */}
+            <div
+              className="animate-in zoom-in-95 relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-lg border border-yellow-500/10 shadow-2xl duration-300"
+              onClick={(e) => e.stopPropagation()} // prevent closing when clicking the image
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewImageUrl}
+                alt="教材预览"
+                className="max-h-[85vh] max-w-[85vw] rounded-md object-contain"
+              />
+            </div>
+          </div>
+        )}
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
   );

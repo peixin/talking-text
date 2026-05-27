@@ -99,6 +99,10 @@
     "session_soft_limit_text": "Great practice today! Want to start a new topic?",
     "session_soft_limit_dismiss": "Keep going",
     "session_hard_limit_text": "This conversation has reached its maximum length. Please start a new one to continue.",
+    "onboarding_welcome": "Hi {name}! I'm Tina, your AI English coach. Let's practice English together today! You can capture/record to import a textbook, or select an existing one. Otherwise, we can start in free practice mode!",
+    "onboarding_ingest_btn": "📸 Smart Ingest Textbook",
+    "onboarding_select_btn": "📚 Choose Existing Material",
+    "onboarding_free_practice_hint": "Type or speak in the box below to start practicing freely ✨",
     "errors": {
       "CHAT_AUDIO_EMPTY": "No audio captured. Please try again.",
       "CHAT_INPUT_EMPTY": "Input cannot be empty.",
@@ -116,6 +120,8 @@
     "title": "Materials",
     "subtitle": "All learning materials added to this account. Archive to hide from the scope picker without losing mastery history; delete to remove permanently.",
     "back_to_parent": "Parent dashboard",
+    "back_to_list": "Back to List",
+    "detail_subtitle": "Manage and edit language items and parent-child hierarchy for this material.",
     "empty_state": "No materials yet — open chat and tap the camera to add one.",
     "active_section": "Active",
     "no_active": "No active materials.",
@@ -134,6 +140,17 @@
     "kind_personal_collection": "Collection",
     "kind_quick_practice": "Quick practice",
     "kind_review_set": "Review set"
+  },
+  "MaterialPickers": {
+    "kind_label": "Type (type your own)",
+    "kind_placeholder": "e.g. Textbook, Unit, Summer camp listening…",
+    "parent_label": "Parent material",
+    "parent_hint": "AI auto-picks the closest existing material as parent; you can search to change it, or create a new one inline.",
+    "parent_none": "(No parent — root level)",
+    "parent_clear": "Clear parent",
+    "parent_search_placeholder": "Search existing or type a new name…",
+    "parent_no_groups_yet": "No materials yet. Type a name to create one as the parent.",
+    "parent_create_as": "+ Create \"{name}\" as parent"
   },
   "Onboarding": {
     "title": "Add your first child",
@@ -157,6 +174,7 @@
     "free_practice_hint": "Chat without a fixed vocab list",
     "no_groups_yet": "No materials yet — tap the camera to add one",
     "items_count": "{count} items",
+    "ingest_new_material": "📸 Smart Ingest New Textbook",
     "close": "Close"
   },
   "Ingest": {
@@ -171,7 +189,7 @@
     "error_audio_empty": "No audio captured. Please try again.",
     "error_transcribe_failed": "Couldn't transcribe. Try again or type the description.",
     "description_label": "Describe what to learn (optional)",
-    "description_placeholder": "e.g. Today we learned the colors and clothing words.",
+    "description_placeholder": "e.g. Today we learned the colors and clothing words. (Supports Cmd+V to paste copied images directly)",
     "extract": "Extract →",
     "extracting": "Reading…",
     "looks_like": "Looks like",
@@ -204,7 +222,9 @@
     "trigger_camera": "Take a photo",
     "trigger_voice": "Voice description",
     "trigger_voice_coming_soon": "Voice ingestion — coming soon",
-    "trigger_file": "Attach file"
+    "trigger_file": "Attach file",
+    "warning_limit_reached": "You can upload up to 5 photos at a time.",
+    "warning_size_reached": "The single or cumulative image size cannot exceed 10MB."
   },
   "Home": {
     "brand_title": "Talking Text",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.storage.base import Base, TimestampMixin
@@ -64,3 +65,25 @@ class ItemGroupMember(Base, TimestampMixin):
     item_id: Mapped[uuid.UUID] = mapped_column(
         sa.ForeignKey("language_item.id", ondelete="CASCADE"), primary_key=True
     )
+
+
+async def get_descendant_group_ids(db: AsyncSession, root_group_id: uuid.UUID) -> list[uuid.UUID]:
+    """Recursively collect root_group_id and all its active descendant group ids."""
+
+    stmt = sa.select(ItemGroup.id, ItemGroup.parent_id).where(ItemGroup.archived.is_(False))
+    rows = await db.execute(stmt)
+    all_groups = rows.all()
+
+    parent_to_children = {}
+    for gid, parent_id in all_groups:
+        if parent_id is not None:
+            parent_to_children.setdefault(parent_id, []).append(gid)
+
+    result = []
+    queue = [root_group_id]
+    while queue:
+        current = queue.pop(0)
+        result.append(current)
+        if current in parent_to_children:
+            queue.extend(parent_to_children[current])
+    return result

@@ -2,13 +2,14 @@
 
 import { useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { BookOpen, Bookmark, Check, Sparkles, Zap } from "lucide-react";
+import { BookOpen, Bookmark, Check, Plus, Sparkles, Zap } from "lucide-react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { GroupKind, GroupOut } from "@/lib/backend";
 import { setSessionGroup } from "./actions";
+import type { IngestTrigger } from "./IngestDrawerClient";
 
 interface Props {
   sessionId: string;
@@ -17,6 +18,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApplied: (group: GroupOut | null) => void;
+  onOpenIngest?: (trigger: IngestTrigger) => void;
 }
 
 const KIND_ICON: Record<GroupKind, typeof BookOpen> = {
@@ -35,6 +37,7 @@ export function ScopeSwitcherClient({
   open,
   onOpenChange,
   onApplied,
+  onOpenIngest,
 }: Props) {
   const t = useTranslations("Scope");
   const [isPending, startTransition] = useTransition();
@@ -77,6 +80,23 @@ export function ScopeSwitcherClient({
           </header>
 
           <ul className="max-h-[60vh] divide-y overflow-y-auto">
+            <li className="bg-muted/20 border-b p-3">
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenIngest?.("camera");
+                  onOpenChange(false);
+                }}
+                className={cn(
+                  "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5",
+                  "border border-indigo-500/20 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 text-indigo-600 hover:from-indigo-500/20 hover:to-purple-500/20 dark:text-indigo-400",
+                  "text-xs font-semibold tracking-wide shadow-sm transition-all duration-300 hover:scale-[1.01] active:scale-[0.99]",
+                )}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>{t("ingest_new_material")}</span>
+              </button>
+            </li>
             <ScopeRow
               icon={<Sparkles className="text-muted-foreground h-4 w-4" />}
               label={t("free_practice")}
