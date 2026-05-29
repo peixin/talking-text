@@ -450,7 +450,7 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
             三位一体智能录入
           </h2>
           <p className="max-w-md text-xs text-slate-300">
-            支持同时通过图片拍照、录音语音转文字以及手动输入，大模型结合本地数据库智能分类单词、句型和自动关联目录。
+            拍照、语音或手动输入，AI 识别出单词、短语和句型；之后在「整理素材」里一键归位成教材。
           </p>
         </div>
 
@@ -1037,12 +1037,12 @@ function TreeViewNode({
       {/* Container card */}
       <div
         className={cn(
-          "group flex items-center justify-between rounded-xl border p-4 transition-all duration-200",
+          "group flex flex-col gap-3 rounded-xl border p-4 transition-all duration-200 sm:flex-row sm:items-center sm:justify-between",
           depth === 0
             ? "bg-card border-slate-200/80 shadow-sm hover:border-slate-300"
             : depth === 1
-              ? "bg-card/75 relative ml-6 border-slate-100 hover:border-indigo-100 hover:bg-indigo-50/10"
-              : "bg-card/40 relative ml-12 border-dashed border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/20",
+              ? "bg-card/75 relative ml-3 border-slate-100 hover:border-indigo-100 hover:bg-indigo-50/10 sm:ml-6"
+              : "bg-card/40 relative ml-6 border-dashed border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/20 sm:ml-12",
           isBusy ? "pointer-events-none opacity-50" : "",
         )}
       >
@@ -1108,7 +1108,7 @@ function TreeViewNode({
         </div>
 
         {/* Action button triggers */}
-        <div className="ml-4 flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 flex-wrap items-center gap-1 sm:ml-4">
           <Button
             variant="outline"
             size="sm"
