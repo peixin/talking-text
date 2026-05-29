@@ -68,7 +68,7 @@ export async function createApi() {
             cefr_level?: string | null;
             pos?: string | null;
           }> | null;
-          levels?: string[] | null;
+          tag_path?: string[] | null;
         },
       ) => c((h) => backend.groups.update(id, body, h)),
       delete: (id: string) => c((h) => backend.groups.delete(id, h)),

@@ -182,7 +182,9 @@ export function GroupDetailClient({ group, allGroups, learnerCount }: Props) {
       name: groupName.trim(),
       source_book_hint: sourceBookHint.trim() || null,
       prompt_notes: promptNotes.trim() || null,
-      levels: levels.map((lvl) => lvl.trim()).filter(Boolean),
+      // The full path of exact tags (root → leaf); the backend nests/merges them
+      // deterministically. See docs/content-lifecycle.md §4.4.
+      tag_path: levels.map((lvl) => lvl.trim()).filter(Boolean),
     });
 
     setSaving(false);
@@ -363,15 +365,16 @@ export function GroupDetailClient({ group, allGroups, learnerCount }: Props) {
           {/* Section: Textbook Hierarchy Path Levels */}
           <div className="border-border/80 bg-card space-y-4 rounded-xl border p-6 shadow-sm">
             <div className="border-b pb-2">
-              <h3 className="text-foreground text-sm font-bold">教材归属层级关联 (Levels Path)</h3>
+              <h3 className="text-foreground text-sm font-bold">教材归属路径 (Tag Path)</h3>
               <p className="text-muted-foreground mt-0.5 text-[11px]">
-                指定当前内容在整个教材库中的层级归属。宽度经过拓宽，长书名一览无余。
+                用一串标签指定当前内容在教材库中的归属，由根部到叶子，如 Tot Talk › Book 1 › Unit
+                1。
               </p>
             </div>
 
             <div className="space-y-3 rounded-xl border border-indigo-500/10 bg-indigo-500/5 p-4">
               <label className="block pl-1 text-[10px] font-bold tracking-wider text-indigo-800 uppercase">
-                层级深度序列（由根部至叶子）
+                标签路径（由根部到叶子）
               </label>
 
               <div className="space-y-2.5">
@@ -383,9 +386,9 @@ export function GroupDetailClient({ group, allGroups, learnerCount }: Props) {
                       className="w-full min-w-0 space-y-1.5 rounded-xl border border-slate-100/80 bg-white/60 p-3 shadow-sm dark:border-slate-800/40 dark:bg-slate-950/20"
                     >
                       <div className="flex w-full min-w-0 items-center gap-2">
-                        {/* Level badge label */}
+                        {/* Tag position in the path */}
                         <span className="shrink-0 rounded border border-indigo-100 bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 dark:border-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-400">
-                          Level {idx + 1}
+                          #{idx + 1}
                         </span>
 
                         {/* Autocomplete Input leveraging shadcn Popover */}

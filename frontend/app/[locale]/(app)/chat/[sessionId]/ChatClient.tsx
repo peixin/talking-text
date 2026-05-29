@@ -720,7 +720,6 @@ export function ChatClient({
         initialTrigger={drawerTrigger}
         onOpenChange={setDrawerOpen}
         onGroupApplied={handleGroupApplied}
-        groups={groups}
       />
 
       <ScopeSwitcherClient

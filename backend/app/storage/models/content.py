@@ -82,9 +82,7 @@ class ItemGroup(Base, TimestampMixin):
     #: Populated when this group was created via Clone-mode adoption.
     #: Points to the source group; NULL for groups created from scratch.
     cloned_from_group_id: Mapped[uuid.UUID | None] = mapped_column(
-        sa.ForeignKey(
-            "item_group.id", ondelete="SET NULL", name="fk_item_group_cloned_from"
-        ),
+        sa.ForeignKey("item_group.id", ondelete="SET NULL", name="fk_item_group_cloned_from"),
         nullable=True,
     )
 
@@ -161,7 +159,7 @@ async def get_descendant_group_ids(db: AsyncSession, root_group_id: uuid.UUID) -
     rows = await db.execute(stmt)
     all_groups = rows.all()
 
-    parent_to_children = {}
+    parent_to_children: dict[uuid.UUID, list[uuid.UUID]] = {}
     for gid, parent_id in all_groups:
         if parent_id is not None:
             parent_to_children.setdefault(parent_id, []).append(gid)

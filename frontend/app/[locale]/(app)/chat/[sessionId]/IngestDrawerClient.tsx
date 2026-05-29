@@ -35,7 +35,6 @@ interface Props {
   initialTrigger: IngestTrigger;
   onOpenChange: (open: boolean) => void;
   onGroupApplied: (group: GroupOut) => void;
-  groups?: GroupOut[];
 }
 
 const CEFR_OPTIONS: (CefrLevel | "")[] = ["", "A1", "A2", "B1", "B2", "C1", "C2"];
@@ -82,7 +81,6 @@ export function IngestDrawerClient({
   initialTrigger,
   onOpenChange,
   onGroupApplied,
-  groups = [],
 }: Props) {
   const t = useTranslations("Ingest");
   const [step, setStep] = useState<Step>({ kind: "input" });
@@ -91,7 +89,9 @@ export function IngestDrawerClient({
 
   // Owned by the drawer; refreshed when extraction completes.
   const [items, setItems] = useState<ExtractedItem[]>([]);
-  const [levels, setLevels] = useState<string[]>([]);
+  // Capture is a flat bag: just a name, no hierarchy. Structuring happens later
+  // in the organize workbench. See docs/content-lifecycle.md §3, §4.
+  const [name, setName] = useState<string>("");
   const [inferredCefr, setInferredCefr] = useState<string | null>(null);
 
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
@@ -117,7 +117,7 @@ export function IngestDrawerClient({
         setFiles([]);
         setDescription("");
         setItems([]);
-        setLevels([]);
+        setName("");
         setInferredCefr(null);
         setRecordMode("idle");
         setRecordError(null);
@@ -332,11 +332,7 @@ export function IngestDrawerClient({
       return;
     }
     const meta = result.result.metadata;
-    const inferredLvl = (meta.levels || [meta.book_name, meta.unit, meta.lesson]).filter(
-      (lvl): lvl is string => !!lvl,
-    );
-    const finalLvl = inferredLvl.length > 0 ? inferredLvl : ["未分类教材"];
-    setLevels(finalLvl);
+    setName((meta.suggested_name || "").trim());
     setInferredCefr(meta.cefr_level || "");
     setItems(sortForEdit(result.result.items));
     setStep({ kind: "preview", mode: "summary", result: result.result });
@@ -352,11 +348,9 @@ export function IngestDrawerClient({
     setStep({ kind: "saving", result: step.result });
 
     const createRes = await createGroup({
-      name: (levels[levels.length - 1] || "").trim() || t("default_group_name"),
+      name: name.trim() || t("default_group_name"),
       kind: "quick_practice",
       items: body,
-      source_book_hint: (levels[0] || "").trim() || null,
-      levels: levels.map((lvl) => lvl.trim()).filter(Boolean),
     });
     if (!createRes.ok) {
       setStep({ kind: "error", message: createRes.error || t("error_save_failed") });
@@ -369,41 +363,6 @@ export function IngestDrawerClient({
       return;
     }
     onGroupApplied(createRes.group);
-  }
-
-  function getAutocompleteOptions(idx: number): string[] {
-    if (!groups) return [];
-    if (idx === 0) {
-      return Array.from(
-        new Set(groups.filter((g) => !g.parent_id && !g.archived).map((g) => g.name)),
-      );
-    }
-    let currentGroupNodes = groups.filter((g) => !g.parent_id && !g.archived);
-    for (let i = 0; i < idx; i++) {
-      const parentName = levels[i]?.trim().toLowerCase();
-      if (!parentName) return [];
-      const matchedNode = currentGroupNodes.find((g) => g.name.trim().toLowerCase() === parentName);
-      if (!matchedNode) return [];
-      currentGroupNodes = groups.filter((g) => g.parent_id === matchedNode.id && !g.archived);
-    }
-    return Array.from(new Set(currentGroupNodes.map((g) => g.name)));
-  }
-
-  function getMatchedGroupNode(idx: number): GroupOut | null {
-    if (!groups) return null;
-    let currentGroupNodes = groups.filter((g) => !g.parent_id && !g.archived);
-    let matched: GroupOut | null = null;
-    for (let i = 0; i <= idx; i++) {
-      const currentName = levels[i]?.trim().toLowerCase();
-      if (!currentName) return null;
-      const matchedNode = currentGroupNodes.find(
-        (g) => g.name.trim().toLowerCase() === currentName,
-      );
-      if (!matchedNode) return null;
-      matched = matchedNode;
-      currentGroupNodes = groups.filter((g) => g.parent_id === matchedNode.id && !g.archived);
-    }
-    return matched;
   }
 
   function updateItem(idx: number, patch: Partial<ExtractedItem>) {
@@ -594,99 +553,20 @@ export function IngestDrawerClient({
 
             {(step.kind === "preview" || step.kind === "saving") && (
               <div className="space-y-4">
-                {/* Dynamic levels card list */}
-                <div className="space-y-3 rounded-xl border border-indigo-500/10 bg-indigo-500/5 p-4">
+                {/* Capture name — a flat bag. Organizing into a textbook tree is a
+                    separate step in the organize workbench. */}
+                <div className="space-y-2 rounded-xl border border-indigo-500/10 bg-indigo-500/5 p-4">
                   <label className="block text-[10px] font-bold tracking-wider text-indigo-800 uppercase">
-                    教材层级深度关联（由上至下）
+                    {t("capture_name_label")}
                   </label>
-
-                  <div className="space-y-2">
-                    {levels.map((lvl, idx) => {
-                      const matchedNode = getMatchedGroupNode(idx);
-                      return (
-                        <div
-                          key={idx}
-                          className="w-full min-w-0 space-y-1.5 rounded-xl border border-slate-100/80 bg-white/40 p-2.5 shadow-sm dark:border-slate-800/40 dark:bg-slate-950/20"
-                        >
-                          <div className="flex w-full min-w-0 items-center gap-2">
-                            {/* Level badge label */}
-                            <span className="shrink-0 rounded border border-indigo-100 bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 dark:border-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-400">
-                              Level {idx + 1}
-                            </span>
-
-                            {/* Input with autocomplete datalist */}
-                            <input
-                              type="text"
-                              value={lvl}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setLevels((prev) => prev.map((x, i) => (i === idx ? val : x)));
-                              }}
-                              disabled={step.kind === "saving"}
-                              list={`datalist-level-${idx}`}
-                              placeholder={`输入级别名称，如 Book 1 / Unit 2...`}
-                              className="bg-background border-border min-w-0 flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-                            />
-
-                            {/* Autocomplete datalist */}
-                            <datalist id={`datalist-level-${idx}`}>
-                              {getAutocompleteOptions(idx).map((opt) => (
-                                <option key={opt} value={opt} />
-                              ))}
-                            </datalist>
-
-                            {/* Delete action button */}
-                            {levels.length > 1 && step.kind !== "saving" && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                onClick={() => {
-                                  setLevels((prev) => prev.filter((_, i) => i !== idx));
-                                }}
-                                className="text-muted-foreground hover:text-destructive shrink-0"
-                                title="删除此级别"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-
-                          {/* Match Status Badge */}
-                          {lvl.trim() && (
-                            <div className="flex items-center pl-14">
-                              {matchedNode ? (
-                                <span className="animate-in fade-in slide-in-from-left-1 inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 backdrop-blur-sm duration-200 dark:border-emerald-500/30 dark:bg-emerald-500/5 dark:text-emerald-400">
-                                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                                  ✓ 已匹配已有 &quot;{matchedNode.name}&quot;
-                                </span>
-                              ) : (
-                                <span className="animate-in fade-in slide-in-from-left-1 inline-flex items-center gap-1 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-700 backdrop-blur-sm duration-200 dark:border-indigo-500/30 dark:bg-indigo-500/5 dark:text-indigo-400">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 dark:bg-indigo-500" />
-                                  + 将在此树下新建节点
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {step.kind !== "saving" && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setLevels((prev) => [...prev, ""]);
-                      }}
-                      className="mt-2 border-dashed border-indigo-200 text-xs text-indigo-600 hover:bg-indigo-50"
-                    >
-                      <Plus className="mr-1 h-3.5 w-3.5" />
-                      追加子级别 (Add Level)
-                    </Button>
-                  )}
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    disabled={step.kind === "saving"}
+                    placeholder={t("capture_name_placeholder")}
+                    className="bg-background border-border w-full rounded-lg border px-3 py-1.5 text-sm font-medium outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                  />
                 </div>
 
                 {/* CEFR Level Selection */}

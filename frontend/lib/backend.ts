@@ -157,16 +157,13 @@ export type ExtractedItem = {
   note: string | null;
 };
 
+// Extraction is not a librarian: it suggests a name + CEFR only, never hierarchy
+// placement. Structuring happens later in the organize workbench.
+// See docs/content-lifecycle.md §4, §8.
 export type ExtractedMetadata = {
-  book_name: string | null;
-  unit: string | null;
-  lesson: string | null;
-  page: string | null;
-  kind_label: string | null;
-  parent_id: string | null;
+  suggested_name: string | null;
   cefr_level: CefrLevel | null;
   confidence: Confidence;
-  levels?: string[] | null;
 };
 
 export type IngestionResult = {
@@ -189,7 +186,8 @@ export type GroupCreateBody = {
     cefr_level?: string | null;
     pos?: string | null;
   }>;
-  levels?: string[] | null;
+  // Organize-time tree assembly from human-confirmed exact tags (root → leaf).
+  tag_path?: string[] | null;
 };
 
 export type LanguageItemOut = {
@@ -284,7 +282,7 @@ export const backend = {
           cefr_level?: string | null;
           pos?: string | null;
         }> | null;
-        levels?: string[] | null;
+        tag_path?: string[] | null;
       },
       headers?: HeadersInit,
     ) =>

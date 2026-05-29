@@ -196,6 +196,8 @@
     "looks_like": "Looks like",
     "group_name_label": "Name",
     "default_group_name": "Quick practice",
+    "capture_name_label": "Name this set",
+    "capture_name_placeholder": "e.g. Unit 3 words, Animals",
     "section_word": "Words",
     "section_phrase": "Phrases",
     "section_pattern": "Patterns",

@@ -184,6 +184,8 @@
     "looks_like": "看起來是",
     "group_name_label": "名稱",
     "default_group_name": "隨手練習",
+    "capture_name_label": "給這一組起個名",
+    "capture_name_placeholder": "如：Unit 3 單字、動物",
     "section_word": "單字",
     "section_phrase": "短語",
     "section_pattern": "句型",

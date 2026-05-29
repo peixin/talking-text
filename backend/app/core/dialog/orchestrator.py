@@ -48,7 +48,7 @@ _background_tasks: set[asyncio.Task[None]] = set()
 
 
 def _spawn_background(coro: object) -> None:
-    task = asyncio.create_task(coro)  # type: ignore[arg-type]
+    task: asyncio.Task[None] = asyncio.create_task(coro)  # type: ignore[arg-type]
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
 

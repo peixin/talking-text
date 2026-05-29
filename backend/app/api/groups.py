@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import CursorResult, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,8 +24,8 @@ from app.storage.models.content import (
     ItemGroup,
     ItemGroupLearner,
     ItemGroupMember,
-    LanguageItem,
     ItemGroupSubscription,
+    LanguageItem,
 )
 from app.storage.models.learner import Learner
 
@@ -54,7 +54,10 @@ class GroupCreate(BaseModel):
     items: list[ItemIn] = Field(default_factory=list)
     prompt_notes: str | None = None
     source_book_hint: str | None = Field(default=None, max_length=200)
-    levels: list[str] | None = None
+    #: Ordered list of exact tag names (root → leaf) to nest into a single-parent
+    #: tree. Used by the organize workbench; supplied by a human, not inferred at
+    #: capture time. See docs/content-lifecycle.md §4.4.
+    tag_path: list[str] | None = None
 
 
 class GroupUpdate(BaseModel):
@@ -65,7 +68,9 @@ class GroupUpdate(BaseModel):
     source_book_hint: str | None = Field(default=None, max_length=200)
     prompt_notes: str | None = None
     items: list[ItemIn] | None = None
-    levels: list[str] | None = None
+    #: See ``GroupCreate.tag_path``. On update, the last element renames this group
+    #: and the preceding elements (re)build its ancestor chain.
+    tag_path: list[str] | None = None
 
 
 class LanguageItemOut(BaseModel):
@@ -206,7 +211,7 @@ async def _verify_write_permission(
     # 2. If locked, only owner (parent) can edit
     is_parent = x_role == "parent"
     if not is_parent and account.last_active_learner_id is not None:
-        curr = group
+        curr: ItemGroup | None = group
         while curr is not None:
             if curr.locked:
                 raise HTTPException(
@@ -231,6 +236,59 @@ async def _check_cycle(db: AsyncSession, group_id: uuid.UUID, parent_id: uuid.UU
         row = await db.execute(select(ItemGroup.parent_id).where(ItemGroup.id == curr_parent))
         curr_parent = row.scalar_one_or_none()
     return False
+
+
+async def _assemble_tag_path(
+    db: AsyncSession,
+    account: Account,
+    tag_path: list[str],
+    active_learner_id: uuid.UUID | None,
+    exclude_id: uuid.UUID | None = None,
+) -> tuple[ItemGroup, ItemGroup]:
+    """Nest an ordered list of exact tag names into a single-parent tree.
+
+    Walks ``tag_path`` root → leaf. For each name, an existing child under the
+    current parent is matched case-insensitively (reuse) or a new node is created.
+    Nodes are untyped tags (``kind = "tag"``) — no kind is deduced from depth.
+    Returns ``(root, leaf)``. See docs/content-lifecycle.md §4.1, §4.4.
+
+    This is the deterministic, organize-time assembler. It is NOT run at capture
+    time and the names come from a human, not from AI inference.
+    """
+    clean = [t.strip() for t in tag_path if t and t.strip()]
+    if not clean:
+        raise HTTPException(status_code=400, detail="tag_path cannot be empty")
+
+    curr_parent_id: uuid.UUID | None = None
+    root: ItemGroup | None = None
+    node: ItemGroup | None = None
+    for name in clean:
+        stmt = select(ItemGroup).where(
+            ItemGroup.owner_account_id == account.id,
+            ItemGroup.parent_id == curr_parent_id,
+            func.lower(func.trim(ItemGroup.name)) == name.lower(),
+            ItemGroup.archived.is_(False),
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(ItemGroup.id != exclude_id)
+        node = (await db.execute(stmt)).scalar_one_or_none()
+        if node is None:
+            node = ItemGroup(
+                name=name,
+                kind="tag",
+                parent_id=curr_parent_id,
+                owner_account_id=account.id,
+                created_by_learner_id=active_learner_id,
+                last_edited_by_learner_id=active_learner_id,
+            )
+            db.add(node)
+            await db.flush()
+        curr_parent_id = node.id
+        if root is None:
+            root = node
+
+    assert root is not None and node is not None  # clean is non-empty
+    return root, node
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -284,58 +342,15 @@ async def create_group(
 ) -> GroupOut:
     x_role = request.headers.get("x-role")
     active_learner_id = account.last_active_learner_id
-    if body.levels:
-        valid_levels = [lvl.strip() for lvl in body.levels if lvl and lvl.strip()]
-        if not valid_levels:
-            raise HTTPException(status_code=400, detail="Levels list cannot be empty")
 
-        curr_parent_id: uuid.UUID | None = None
-        group: ItemGroup | None = None
-
-        for idx, lvl_name in enumerate(valid_levels):
-            # Find matching existing child node with case-insensitive and trimmed name comparison
-            stmt = select(ItemGroup).where(
-                ItemGroup.owner_account_id == account.id,
-                ItemGroup.parent_id == curr_parent_id,
-                func.lower(func.trim(ItemGroup.name)) == lvl_name.strip().lower(),
-                ItemGroup.archived.is_(False),
-            )
-            res = await db.execute(stmt)
-            existing = res.scalar_one_or_none()
-
-            if existing:
-                group = existing
-                curr_parent_id = existing.id
-                # Auto-normalize spelling to match the database standard
-                valid_levels[idx] = existing.name
-            else:
-                # Deduce kind for this depth
-                total = len(valid_levels)
-                if idx == total - 1:
-                    curr_kind = "textbook_lesson"
-                elif total >= 3 and idx == total - 2:
-                    curr_kind = "textbook_unit"
-                else:
-                    curr_kind = "textbook_book"
-
-                group = ItemGroup(
-                    name=lvl_name,
-                    kind=curr_kind,
-                    parent_id=curr_parent_id,
-                    owner_account_id=account.id,
-                    created_by_learner_id=active_learner_id,
-                    last_edited_by_learner_id=active_learner_id,
-                )
-                db.add(group)
-                await db.flush()
-                curr_parent_id = group.id
-
-        # Bind final attributes to the leaf node
-        if group:
-            if body.prompt_notes:
-                group.prompt_notes = body.prompt_notes
-            if body.source_book_hint:
-                group.source_book_hint = body.source_book_hint
+    if body.tag_path:
+        # Organize-time tree assembly from human-confirmed exact tags (§4.4).
+        root, group = await _assemble_tag_path(db, account, body.tag_path, active_learner_id)
+        # Bind optional attributes to the leaf node.
+        if body.prompt_notes:
+            group.prompt_notes = body.prompt_notes
+        if body.source_book_hint:
+            group.source_book_hint = body.source_book_hint
     else:
         if body.parent_id is not None:
             parent = await _get_accessible_group(body.parent_id, account, db)
@@ -353,11 +368,16 @@ async def create_group(
         )
         db.add(group)
         await db.flush()
+        root = group
 
-    # Automatically assign root group to the active learner
-    if group.parent_id is None and active_learner_id is not None:
-        assignment = ItemGroupLearner(group_id=group.id, learner_id=active_learner_id)
-        db.add(assignment)
+    # Auto-assign the ROOT of this tree to the active learner. Idempotent: a
+    # tag_path may reuse an existing root that is already assigned.
+    if root.parent_id is None and active_learner_id is not None:
+        await db.execute(
+            pg_insert(ItemGroupLearner)
+            .values(group_id=root.id, learner_id=active_learner_id)
+            .on_conflict_do_nothing(index_elements=["group_id", "learner_id"])
+        )
 
     item_ids = await _upsert_language_items(db, body.items)
     if item_ids:
@@ -431,50 +451,22 @@ async def update_group(
 
     update_data = body.model_dump(exclude_unset=True)
 
-    if "levels" in update_data and update_data["levels"] is not None:
-        valid_levels = [lvl.strip() for lvl in update_data["levels"] if lvl.strip()]
-        if not valid_levels:
-            raise HTTPException(status_code=400, detail="levels cannot be empty if specified")
+    if "tag_path" in update_data and update_data["tag_path"] is not None:
+        clean = [t.strip() for t in update_data["tag_path"] if t.strip()]
+        if not clean:
+            raise HTTPException(status_code=400, detail="tag_path cannot be empty if specified")
 
-        leaf_name = valid_levels[-1]
-        parent_levels = valid_levels[:-1]
-
-        curr_parent_id = None
-        for idx, lvl_name in enumerate(parent_levels):
-            stmt = select(ItemGroup).where(
-                ItemGroup.owner_account_id == account.id,
-                ItemGroup.parent_id == curr_parent_id,
-                func.lower(func.trim(ItemGroup.name)) == lvl_name.lower(),
-                ItemGroup.archived.is_(False),
-                ItemGroup.id != group.id,
+        # Last element renames this group; preceding elements (re)build its
+        # ancestor chain via the shared assembler (excluding this group itself).
+        if len(clean) > 1:
+            _, parent_leaf = await _assemble_tag_path(
+                db, account, clean[:-1], account.last_active_learner_id, exclude_id=group.id
             )
-            res = await db.execute(stmt)
-            existing = res.scalar_one_or_none()
-
-            if existing:
-                curr_parent_id = existing.id
-            else:
-                total = len(valid_levels)
-                curr_kind = "textbook_unit" if idx == total - 2 else "textbook_book"
-
-                new_parent = ItemGroup(
-                    name=lvl_name,
-                    kind=curr_kind,
-                    parent_id=curr_parent_id,
-                    owner_account_id=account.id,
-                )
-                db.add(new_parent)
-                await db.flush()
-                curr_parent_id = new_parent.id
-
-        group.name = leaf_name
-        group.parent_id = curr_parent_id
-        if len(valid_levels) >= 3:
-            group.kind = "textbook_lesson"
-        elif len(valid_levels) == 2:
-            group.kind = "textbook_unit"
+            group.parent_id = parent_leaf.id
         else:
-            group.kind = "textbook_book"
+            group.parent_id = None
+        group.name = clean[-1]
+        group.kind = "tag"
     else:
         if "name" in update_data:
             group.name = update_data["name"].strip()
@@ -667,6 +659,6 @@ async def unassign_learner(
             ItemGroupLearner.learner_id == learner_id,
         )
     )
-    if result.rowcount == 0:
+    if cast("CursorResult[Any]", result).rowcount == 0:
         raise HTTPException(status_code=404, detail="Assignment not found.")
     await db.commit()

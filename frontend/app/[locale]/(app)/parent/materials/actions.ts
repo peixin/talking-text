@@ -75,7 +75,7 @@ export async function updateGroup(
       cefr_level?: string | null;
       pos?: string | null;
     }> | null;
-    levels?: string[] | null;
+    tag_path?: string[] | null;
   },
 ): Promise<GroupActionResult> {
   const api = await createApi();

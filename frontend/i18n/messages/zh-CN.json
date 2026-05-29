@@ -196,6 +196,8 @@
     "looks_like": "看起来是",
     "group_name_label": "名称",
     "default_group_name": "随手练习",
+    "capture_name_label": "给这一组起个名",
+    "capture_name_placeholder": "如：Unit 3 单词、动物",
     "section_word": "单词",
     "section_phrase": "短语",
     "section_pattern": "句型",
