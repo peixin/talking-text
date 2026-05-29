@@ -118,11 +118,11 @@ STT / LLM / TTS 一定会换。**所有外部 SDK 调用必须写在 `backend/ap
 
 详细接口见 `docs/architecture.cn.md` 第五节。
 
-### 3. 事件日志 V1 写，V2 读
+### 3. 词汇掌握度：从 Turn 文本派生，不建独立事件表
 
-每一轮对话都写 `vocab_event`（哪个词被 AI 说了 / 被孩子用了 / 被孩子询问了）。
+`vocab_event` 已删除（2026-04-30）。词频数据随时可由 `turn.text_user` / `turn.text_ai` 经分词派生——它不是独立的真相来源。
 
-**V1 不读这些数据，但必须每轮写。** 原因：V2 做 mastery 时，这是唯一训练数据来源。
+**V2 掌握度追踪计划：** 新增 `learner_word_stats (learner_id, word)`，每轮增量 upsert；功能上线时从历史 turn 文本回填。不要重新引入"每词每轮一行"的事件表。
 
 ### 4. 语音管道 V1 串行，架构为流式设计
 
@@ -188,13 +188,13 @@ STT / LLM / TTS 一定会换。**所有外部 SDK 调用必须写在 `backend/ap
 ```
 孩子按录音 →
   前端 MediaRecorder 采集（整段）→
-  POST /conversation/turn (audio blob) →
+  POST /sessions/{session_id}/turns (audio blob) →
   火山 STT (整段) → 文字 →
   Scope Computer → 本轮词表 →
   Prompt Assembler → 完整 prompt →
   豆包 LLM (整段) → 回复文字 →
   越界校验（超出词表则重试一次）→
-  写 Turn + VocabEvent 到 DB →
+  写 Turn 到 DB（词频数据从 turn 文本派生 — 见规则 #3，不建事件表）→
   火山 TTS (整段) → 音频 URL →
   返回 {text, audio_url} →
   前端显示文字 + 播放音频
@@ -360,9 +360,8 @@ just db-history
    - HTTP 路由 → `api/`
    - DB 模型 + 操作 → `storage/`
 4. **改 DB schema 之后**：`just migrate "描述"` 生成迁移，审阅 `alembic/versions/` 下的新文件，再 `just db-up`
-5. **事件日志**：任何涉及 vocab 的动作都要考虑是否要写 `vocab_event`
-6. **提交前**：`just check` 一次过
-7. **别提前优化**：先正确，再性能
+5. **提交前**：`just check` 一次过
+6. **别提前优化**：先正确，再性能
 
 ---
 
@@ -382,11 +381,33 @@ just db-history
 - ✅ justfile 完整 recipe
 - ✅ PostgreSQL 16 + Redis 本地就绪
 
+**已完成（语音管道 — 2026-04-30）：**
+- ✅ 火山 STT / LLM(方舟·豆包) / TTS 三个 adapter；`audio_codec.py` webm→ogg 重封装
+- ✅ `POST /sessions/{session_id}/turns`（multipart 音频，base64 音频响应）
+- ✅ Chat UI 录音/上传/播放；`Turn` 模型 + 迁移（计费字段逐轮持久化）
+- ✅ 失效 session 优雅重定向登录
+
+**已完成（会话与音频改进）：**
+- ✅ `Turn.sequence` 显式排序；后端托管对话历史
+- ✅ 音频按 session 存储；带鉴权的音频读取端点；逐气泡 play/stop
+
+**已完成（Adapter 工厂）：**
+- ✅ `config.toml [adapter]` 选择器 + `app/adapters/factory.py` 单例
+
+**已完成（Scope Computer V1 + Prompt 拼装）：**
+- ✅ `core/scope/v1.py` 三模式（group / calibration / free）
+- ✅ `core/prompt/assembler.py` 纯函数（Tina 人设 + 词表 + 句型 + nudge），有测试
+
+**已完成（教材录入 + 内容生命周期 — 2026-05-30）：**
+- ✅ 录入 MVP（图/文/语音 → LLM 结构化），家长审阅抽屉，事务存盘
+- ✅ **采集/成书拆分**（`docs/content-lifecycle.cn.md`）：抽取不再推断层级；采集产出扁平词袋；建树是刻意的 `tag_path` 动作。详见 `docs/2026-05-30-dev-log.md`
+- ✅ `_assemble_tag_path` 确定性整理时建树（节点为无类型 `kind="tag"`）；`tests/test_ingest_extraction.py` 锁定抽取契约
+
 **下一步 TODO（按优先级）：**
-- [ ] 火山方舟 LLM adapter（先把 `invoke()` 整段跑通）
-- [ ] 教材录入 MVP（粘贴文本 → LLM 提取 → 人工审阅 → 入库）
-- [ ] Scope Computer V1 空壳 + Prompt 拼装 + 越界校验
-- [ ] 对话 API（POST /conversation/turn）
-- [ ] 前端 chat 页 MVP（按住录音 → HTTP → 播放音频）
-- [ ] 火山 STT / TTS adapter
-- [ ] 内置首批教材（Tot Talk 等，由用户提供素材）
+- [ ] **验证核心循环**：用手工书（1–2 节）+ 一个真实孩子（见 `docs/content-lifecycle.cn.md` §9）
+- [ ] 整理工作台：收件箱（采集 + 练习派生候选）→ tag 树，拖拽归位（`content-lifecycle.cn.md` §4.2/§4.3）
+- [ ] 内置首批教材（Tot Talk 系列 — 给库下种，冷启动）
+- [ ] `_assemble_tag_path` / scope V1 的 DB 集成测试（需 Postgres 测试夹具）
+- [ ] `learner_word_stats` 掌握度表（V2）
+
+> 截至 2026-05-30：`just check` 全绿 — 后端 `ruff` + `mypy`（0 错，已删死代码 `conversation.py`），前端 `eslint` + `prettier` + `tsc`。

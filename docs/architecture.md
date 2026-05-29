@@ -192,7 +192,7 @@ sequenceDiagram
         NextProxy-->>Client: 12. 浏览器边接收、边渲染文本、边顺序播放音频
     end
     
-    Server->>Server: 13. 本轮对话结束，在后台线程写入 Turn 记录与 VocabEvent
+    Server->>Server: 13. 本轮对话结束，在后台线程写入 Turn 记录（词频/掌握度后续从 turn 文本派生，不另建事件表）
 ```
 
 ### 2. DeepSeek CoT (思维链) 深度性能调优决策

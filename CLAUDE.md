@@ -189,13 +189,13 @@ When something doesn't match your mental model of Next.js, read `frontend/node_m
 ```
 Child presses record →
   Frontend MediaRecorder captures (batch) →
-  POST /conversation/turn (audio blob) →
+  POST /sessions/{session_id}/turns (audio blob) →
   Volcengine STT (batch) → text →
   Scope Computer → allowed vocab for this turn →
   Prompt Assembler → full prompt →
   Doubao LLM (batch) → reply text →
   Boundary check (out-of-scope → retry once) →
-  Write Turn + VocabEvent to DB →
+  Write Turn to DB (word data derived from turn text — see Rule #3, no event table) →
   Volcengine TTS (batch) → audio URL →
   Return {text, audio_url} →
   Frontend shows text + plays audio
@@ -416,4 +416,5 @@ Rules:
 - [ ] First-party textbook data (Tot Talk series — seed the library, cold-start)
 - [ ] DB-backed tests for `_assemble_tag_path` / scope V1 (needs a Postgres test fixture)
 - [ ] `learner_word_stats` mastery table (V2, when mastery tracker is needed)
-- [ ] Pre-existing mypy debt: `adapters/llm/volc.py` (OpenAI TypedDicts), `api/conversation.py` (`b64encode(bytes|None)` — possible real bug)
+
+> As of 2026-05-30: `just check` is fully green — backend `ruff` + `mypy` (0 errors, dead `conversation.py` removed), frontend `eslint` + `prettier` + `tsc`.
