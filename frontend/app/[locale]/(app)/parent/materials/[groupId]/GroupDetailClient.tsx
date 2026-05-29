@@ -14,6 +14,7 @@ import {
   Save,
   Sparkles,
   Trash2,
+  Users,
   X,
   Zap,
 } from "lucide-react";
@@ -35,6 +36,7 @@ import {
 interface Props {
   group: GroupDetailOut;
   allGroups: GroupOut[];
+  learnerCount: number;
 }
 
 const KIND_ICON: Record<string, typeof BookOpen> = {
@@ -67,7 +69,7 @@ function computePathLevels(currentGroupId: string, groups: GroupOut[]): string[]
   return path;
 }
 
-export function GroupDetailClient({ group, allGroups }: Props) {
+export function GroupDetailClient({ group, allGroups, learnerCount }: Props) {
   const router = useRouter();
 
   // Core visual states
@@ -102,6 +104,20 @@ export function GroupDetailClient({ group, allGroups }: Props) {
   const children = useMemo(() => {
     return groupsLocalState.filter((g) => g.parent_id === group.id && !g.archived);
   }, [groupsLocalState, group.id]);
+
+  // Find the root parent group in the hierarchy tree to determine where learners are assigned
+  const rootGroup = useMemo(() => {
+    const curr = groupsLocalState.find((g) => g.id === group.id);
+    if (!curr) return null;
+    let root: GroupOut = curr;
+    while (root.parent_id) {
+      const pid = root.parent_id;
+      const parent = groupsLocalState.find((g) => g.id === pid);
+      if (!parent) break;
+      root = parent;
+    }
+    return root;
+  }, [group.id, groupsLocalState]);
 
   // Autocomplete selections based on matching database directories
   function getAutocompleteOptions(idx: number): string[] {
@@ -716,6 +732,40 @@ export function GroupDetailClient({ group, allGroups }: Props) {
               </Button>
             </Link>
           </div>
+
+          {/* Learner Assignment Card */}
+          {learnerCount > 1 && (
+            <div className="border-border/80 bg-card space-y-3 rounded-xl border p-5 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-950/40">
+                  <Users className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-bold">学习者分配</p>
+                  <p className="text-muted-foreground text-[11px]">
+                    {rootGroup && rootGroup.id !== group.id
+                      ? `此章节继承父级教材「${rootGroup.name}」的分配`
+                      : "管理哪些孩子能看到此教材"}
+                  </p>
+                </div>
+              </div>
+              <Link
+                href={`/parent/materials/${rootGroup ? rootGroup.id : group.id}/learners`}
+                className="block w-full"
+              >
+                <Button
+                  variant="outline"
+                  className="w-full justify-center gap-1.5 border-violet-200 text-xs font-semibold text-violet-700 hover:bg-violet-50 hover:text-violet-800 dark:border-violet-800 dark:text-violet-400"
+                  size="sm"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  {rootGroup && rootGroup.id !== group.id
+                    ? "管理父级教材分配 →"
+                    : "管理 Learner 分配 →"}
+                </Button>
+              </Link>
+            </div>
+          )}
 
           {/* AI Prompts & Hints metadata Card */}
           <div className="border-border/80 bg-card space-y-4 rounded-xl border p-5 shadow-sm">

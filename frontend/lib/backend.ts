@@ -295,6 +295,21 @@ export const backend = {
       }),
     delete: (id: string, headers?: HeadersInit) =>
       request<void>(`/groups/${id}`, { method: "DELETE", headers }),
+    listLearners: (groupId: string, headers?: HeadersInit) =>
+      request<{ learner_id: string; assigned_at: string }[]>(`/groups/${groupId}/learners`, {
+        headers,
+      }),
+    assignLearner: (groupId: string, learnerId: string, headers?: HeadersInit) =>
+      request<void>(`/groups/${groupId}/learners`, {
+        method: "POST",
+        body: { learner_id: learnerId },
+        headers,
+      }),
+    unassignLearner: (groupId: string, learnerId: string, headers?: HeadersInit) =>
+      request<void>(`/groups/${groupId}/learners/${learnerId}`, {
+        method: "DELETE",
+        headers,
+      }),
   },
   ingest: {
     extract: (formData: FormData, headers?: HeadersInit) =>

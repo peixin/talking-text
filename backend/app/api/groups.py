@@ -11,7 +11,7 @@ import re
 import uuid
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -20,7 +20,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import get_current_account
 from app.storage.db import get_db
 from app.storage.models.account import Account
-from app.storage.models.content import ItemGroup, ItemGroupMember, LanguageItem
+from app.storage.models.content import (
+    ItemGroup,
+    ItemGroupLearner,
+    ItemGroupMember,
+    LanguageItem,
+    ItemGroupSubscription,
+)
+from app.storage.models.learner import Learner
 
 router = APIRouter(tags=["groups"])
 
@@ -97,6 +104,13 @@ class GroupOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class LearnerAssignmentOut(BaseModel):
+    learner_id: uuid.UUID
+    assigned_at: str  # ISO-8601
+
+    model_config = {"from_attributes": True}
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -143,16 +157,68 @@ async def _upsert_language_items(db: AsyncSession, items: list[ItemIn]) -> list[
     return [by_key[(t, txt)] for t, txt in keys]
 
 
-async def _require_owned_group(
+async def _get_accessible_group(
     group_id: uuid.UUID, account: Account, db: AsyncSession
 ) -> ItemGroup:
-    row = await db.execute(
-        select(ItemGroup).where(ItemGroup.id == group_id, ItemGroup.owner_account_id == account.id)
-    )
+    stmt = select(ItemGroup).where(ItemGroup.id == group_id)
+    row = await db.execute(stmt)
     group = row.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
+
+    # Access is allowed if caller owns it OR has active subscription
+    if group.owner_account_id == account.id:
+        return group
+
+    sub_stmt = select(ItemGroupSubscription).where(
+        ItemGroupSubscription.subscriber_account_id == account.id,
+        ItemGroupSubscription.source_group_id == group_id,
+    )
+    sub_row = await db.execute(sub_stmt)
+    if sub_row.scalar_one_or_none() is not None:
+        return group
+
+    raise HTTPException(status_code=404, detail="Group not found")
+
+
+async def _require_owned_group(
+    group_id: uuid.UUID, account: Account, db: AsyncSession
+) -> ItemGroup:
+    group = await _get_accessible_group(group_id, account, db)
+    if group.owner_account_id != account.id:
+        raise HTTPException(status_code=403, detail="CANNOT_EDIT_SUBSCRIBED_GROUP")
     return group
+
+
+async def _verify_write_permission(
+    group: ItemGroup,
+    account: Account,
+    db: AsyncSession,
+    x_role: str | None = None,
+) -> None:
+    # 1. Subscribed groups are fully read-only
+    if group.owner_account_id != account.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CANNOT_EDIT_SUBSCRIBED_GROUP",
+        )
+
+    # 2. If locked, only owner (parent) can edit
+    is_parent = x_role == "parent"
+    if not is_parent and account.last_active_learner_id is not None:
+        curr = group
+        while curr is not None:
+            if curr.locked:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="GROUP_LOCKED",
+                )
+            if curr.parent_id is not None:
+                stmt = select(ItemGroup).where(ItemGroup.id == curr.parent_id)
+                res = await db.execute(stmt)
+                curr = res.scalar_one_or_none()
+            else:
+                curr = None
 
 
 async def _check_cycle(db: AsyncSession, group_id: uuid.UUID, parent_id: uuid.UUID) -> bool:
@@ -214,7 +280,10 @@ async def create_group(
     body: GroupCreate,
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> GroupOut:
+    x_role = request.headers.get("x-role")
+    active_learner_id = account.last_active_learner_id
     if body.levels:
         valid_levels = [lvl.strip() for lvl in body.levels if lvl and lvl.strip()]
         if not valid_levels:
@@ -254,6 +323,8 @@ async def create_group(
                     kind=curr_kind,
                     parent_id=curr_parent_id,
                     owner_account_id=account.id,
+                    created_by_learner_id=active_learner_id,
+                    last_edited_by_learner_id=active_learner_id,
                 )
                 db.add(group)
                 await db.flush()
@@ -267,7 +338,8 @@ async def create_group(
                 group.source_book_hint = body.source_book_hint
     else:
         if body.parent_id is not None:
-            await _require_owned_group(body.parent_id, account, db)
+            parent = await _get_accessible_group(body.parent_id, account, db)
+            await _verify_write_permission(parent, account, db, x_role=x_role)
 
         group = ItemGroup(
             name=body.name.strip(),
@@ -276,9 +348,16 @@ async def create_group(
             owner_account_id=account.id,
             prompt_notes=(body.prompt_notes or None),
             source_book_hint=(body.source_book_hint or None),
+            created_by_learner_id=active_learner_id,
+            last_edited_by_learner_id=active_learner_id,
         )
         db.add(group)
         await db.flush()
+
+    # Automatically assign root group to the active learner
+    if group.parent_id is None and active_learner_id is not None:
+        assignment = ItemGroupLearner(group_id=group.id, learner_id=active_learner_id)
+        db.add(assignment)
 
     item_ids = await _upsert_language_items(db, body.items)
     if item_ids:
@@ -307,7 +386,7 @@ async def get_group(
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> GroupDetailOut:
-    group = await _require_owned_group(group_id, account, db)
+    group = await _get_accessible_group(group_id, account, db)
 
     stmt = (
         select(LanguageItem)
@@ -344,8 +423,11 @@ async def update_group(
     body: GroupUpdate,
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> GroupOut:
-    group = await _require_owned_group(group_id, account, db)
+    group = await _get_accessible_group(group_id, account, db)
+    x_role = request.headers.get("x-role")
+    await _verify_write_permission(group, account, db, x_role=x_role)
 
     update_data = body.model_dump(exclude_unset=True)
 
@@ -406,7 +488,8 @@ async def update_group(
                         status_code=400,
                         detail="A group cannot be its own parent",
                     )
-                await _require_owned_group(p_id, account, db)
+                parent = await _get_accessible_group(p_id, account, db)
+                await _verify_write_permission(parent, account, db, x_role=x_role)
                 if await _check_cycle(db, group.id, p_id):
                     raise HTTPException(
                         status_code=400,
@@ -430,6 +513,9 @@ async def update_group(
                 .values([{"group_id": group.id, "item_id": iid} for iid in set(item_ids)])
                 .on_conflict_do_nothing(index_elements=["group_id", "item_id"])
             )
+
+    if account.last_active_learner_id is not None:
+        group.last_edited_by_learner_id = account.last_active_learner_id
 
     await db.commit()
     await db.refresh(group)
@@ -455,7 +541,132 @@ async def delete_group(
     group_id: uuid.UUID,
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> None:
-    group = await _require_owned_group(group_id, account, db)
+    group = await _get_accessible_group(group_id, account, db)
+    x_role = request.headers.get("x-role")
+    await _verify_write_permission(group, account, db, x_role=x_role)
     await db.delete(group)
+    await db.commit()
+
+
+# ── Learner assignment endpoints ────────────────────────────────────────────────────
+#
+# Design doc: docs/learner-content-scope.md §8.3
+# These endpoints manage item_group_learner rows — which learners can see a root group.
+# The group MUST be a root group (parent_id IS NULL); sub-groups inherit from the root.
+
+
+@router.get("/groups/{group_id}/learners", response_model=list[LearnerAssignmentOut])
+async def list_group_learners(
+    group_id: uuid.UUID,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[LearnerAssignmentOut]:
+    """List all learners currently assigned to this group."""
+    group = await _get_accessible_group(group_id, account, db)
+
+    rows = list(
+        (await db.execute(select(ItemGroupLearner).where(ItemGroupLearner.group_id == group.id)))
+        .scalars()
+        .all()
+    )
+    return [
+        LearnerAssignmentOut(
+            learner_id=row.learner_id,
+            assigned_at=row.assigned_at.isoformat(),
+        )
+        for row in rows
+    ]
+
+
+class AssignLearnerBody(BaseModel):
+    learner_id: uuid.UUID
+
+
+@router.post(
+    "/groups/{group_id}/learners",
+    response_model=LearnerAssignmentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def assign_learner(
+    group_id: uuid.UUID,
+    body: AssignLearnerBody,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> LearnerAssignmentOut:
+    """Assign a learner to a root group."""
+    group = await _get_accessible_group(group_id, account, db)
+
+    # Only root groups can be assigned
+    if group.parent_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Only root groups (parent_id IS NULL) support learner assignment.",
+        )
+
+    # Validate learner belongs to the same account
+    learner_row = await db.execute(
+        select(Learner).where(
+            Learner.id == body.learner_id,
+            Learner.account_id == account.id,
+        )
+    )
+    learner = learner_row.scalar_one_or_none()
+    if not learner:
+        raise HTTPException(status_code=404, detail="Learner not found in this account.")
+
+    # Upsert: ignore if already assigned (PK conflict)
+    stmt = (
+        pg_insert(ItemGroupLearner)
+        .values(group_id=group.id, learner_id=learner.id)
+        .on_conflict_do_nothing(index_elements=["group_id", "learner_id"])
+        .returning(ItemGroupLearner.learner_id, ItemGroupLearner.assigned_at)
+    )
+    result = await db.execute(stmt)
+    row = result.one_or_none()
+    await db.commit()
+
+    if row:
+        return LearnerAssignmentOut(
+            learner_id=row.learner_id,
+            assigned_at=row.assigned_at.isoformat(),
+        )
+    # Already existed — fetch and return the existing row
+    existing = (
+        await db.execute(
+            select(ItemGroupLearner).where(
+                ItemGroupLearner.group_id == group.id,
+                ItemGroupLearner.learner_id == learner.id,
+            )
+        )
+    ).scalar_one()
+    return LearnerAssignmentOut(
+        learner_id=existing.learner_id,
+        assigned_at=existing.assigned_at.isoformat(),
+    )
+
+
+@router.delete(
+    "/groups/{group_id}/learners/{learner_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
+async def unassign_learner(
+    group_id: uuid.UUID,
+    learner_id: uuid.UUID,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    """Remove a learner from a root group's assignment list."""
+    group = await _get_accessible_group(group_id, account, db)
+
+    result = await db.execute(
+        delete(ItemGroupLearner).where(
+            ItemGroupLearner.group_id == group.id,
+            ItemGroupLearner.learner_id == learner_id,
+        )
+    )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Assignment not found.")
     await db.commit()

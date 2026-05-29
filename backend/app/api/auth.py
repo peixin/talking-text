@@ -192,3 +192,42 @@ async def me(
     return AccountOut(
         id=account.id, name=account.name, last_active_learner_id=account.last_active_learner_id
     )
+
+
+class ActiveLearnerOut(BaseModel):
+    learner_id: uuid.UUID | None = None
+
+
+class SetActiveLearnerBody(BaseModel):
+    learner_id: uuid.UUID
+
+
+@router.get("/me/active-learner", response_model=ActiveLearnerOut)
+async def get_active_learner(
+    account: Annotated[Account, Depends(get_current_account)],
+) -> ActiveLearnerOut:
+    return ActiveLearnerOut(learner_id=account.last_active_learner_id)
+
+
+@router.post("/me/active-learner", status_code=status.HTTP_204_NO_CONTENT)
+async def set_active_learner_state(
+    body: SetActiveLearnerBody,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    from app.storage.models.learner import Learner
+    result = await db.execute(
+        select(Learner).where(
+            Learner.id == body.learner_id,
+            Learner.account_id == account.id,
+        )
+    )
+    learner = result.scalar_one_or_none()
+    if learner is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Learner not found in this account",
+        )
+
+    account.last_active_learner_id = body.learner_id
+    await db.commit()

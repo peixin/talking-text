@@ -121,6 +121,7 @@
     "subtitle": "账号下所有学习素材。归档后从切换器隐藏，但保留学习记录；删除则永久移除。",
     "back_to_parent": "家长中心",
     "back_to_list": "返回列表",
+    "back_to_detail": "返回教材信息",
     "detail_subtitle": "精细化管理和编辑该学习素材的学习点及层级关联",
     "empty_state": "还没有素材 — 进 chat 点拍照添加。",
     "active_section": "正在用",

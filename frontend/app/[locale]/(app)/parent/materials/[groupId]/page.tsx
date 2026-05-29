@@ -15,10 +15,26 @@ export default async function GroupDetailPage({ params }: Props) {
   const t = await getTranslations("Materials");
   const api = await createApi();
 
-  // Fetch details of the current material group
-  const group = await api.groups.get(groupId);
-  // Fetch all groups so we can offer them in the parent selection dropdown
-  const allGroups = await api.groups.list(true);
+  // Fetch details, all groups, and learners in parallel
+  const [group, allGroups, allLearners] = await Promise.all([
+    api.groups.get(groupId),
+    api.groups.list(true),
+    api.learners.list().catch(() => []),
+  ]);
+
+  // If there is exactly one learner and this is a root group, ensure it's assigned by default
+  const isSingleLearner = allLearners.length === 1;
+  if (isSingleLearner && !group.parent_id) {
+    try {
+      const assignments = await api.groups.listLearners(groupId);
+      const isAssigned = assignments.some((a) => a.learner_id === allLearners[0].id);
+      if (!isAssigned) {
+        await api.groups.assignLearner(groupId, allLearners[0].id);
+      }
+    } catch (e) {
+      console.error("Auto-assign failed:", e);
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6">
@@ -37,7 +53,7 @@ export default async function GroupDetailPage({ params }: Props) {
         </p>
       </div>
 
-      <GroupDetailClient group={group} allGroups={allGroups} />
+      <GroupDetailClient group={group} allGroups={allGroups} learnerCount={allLearners.length} />
     </div>
   );
 }

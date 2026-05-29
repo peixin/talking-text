@@ -72,6 +72,11 @@ export async function createApi() {
         },
       ) => c((h) => backend.groups.update(id, body, h)),
       delete: (id: string) => c((h) => backend.groups.delete(id, h)),
+      listLearners: (groupId: string) => c((h) => backend.groups.listLearners(groupId, h)),
+      assignLearner: (groupId: string, learnerId: string) =>
+        c((h) => backend.groups.assignLearner(groupId, learnerId, h)),
+      unassignLearner: (groupId: string, learnerId: string) =>
+        c((h) => backend.groups.unassignLearner(groupId, learnerId, h)),
     },
     ingest: {
       extract: (formData: FormData) => c((h) => backend.ingest.extract(formData, h)),

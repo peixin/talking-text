@@ -121,6 +121,7 @@
     "subtitle": "All learning materials added to this account. Archive to hide from the scope picker without losing mastery history; delete to remove permanently.",
     "back_to_parent": "Parent dashboard",
     "back_to_list": "Back to List",
+    "back_to_detail": "Back to Details",
     "detail_subtitle": "Manage and edit language items and parent-child hierarchy for this material.",
     "empty_state": "No materials yet — open chat and tap the camera to add one.",
     "active_section": "Active",
