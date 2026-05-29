@@ -198,27 +198,27 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
               )}
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-2">
               <label className="text-muted-foreground flex items-center gap-1 text-[11px] font-medium">
                 <Wand2 className="h-3 w-3 text-indigo-500" />
-                归位到（AI 预判，可改 · 用 › 或 / 分隔）
+                归位到（AI 预判，可改 · 用 / 分隔层级）
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   value={paths[bag.group_id] ?? ""}
                   onChange={(e) => setPaths((p) => ({ ...p, [bag.group_id]: e.target.value }))}
                   disabled={isBusy}
                   placeholder={isSuggesting ? "AI 预判中…" : bag.name}
                   className={cn(
-                    "bg-background border-border min-w-0 flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50",
+                    "bg-background border-border min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm font-medium outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50",
                     isSuggesting && "animate-pulse",
                   )}
                 />
                 <Button
                   type="button"
-                  size="sm"
                   onClick={() => doFileBag(bag)}
                   disabled={isBusy || isSuggesting}
+                  className="w-full shrink-0 sm:w-auto"
                 >
                   {isBusy ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -228,6 +228,22 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                   整袋归位
                 </Button>
               </div>
+              {/* Tap to reuse an existing path — avoids typing on mobile. */}
+              {existingPaths.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-muted-foreground text-[11px]">复用：</span>
+                  {existingPaths.slice(0, 6).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPaths((prev) => ({ ...prev, [bag.group_id]: p }))}
+                      className="border-border bg-background text-muted-foreground rounded-full border px-2.5 py-1 text-[11px] transition hover:border-indigo-300 hover:text-indigo-600"
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
         );
@@ -257,20 +273,20 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
               <span className="text-muted-foreground px-1 text-xs">+{candidates.length - 30}</span>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
               value={candPath}
               onChange={(e) => setCandPath(e.target.value)}
               disabled={busy === "candidates"}
               placeholder="全部归位到，如 生词本 / 口语新词"
-              className="bg-background border-border min-w-0 flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-50"
+              className="bg-background border-border min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-50"
             />
             <Button
               type="button"
-              size="sm"
               variant="outline"
               onClick={fileAllCandidates}
               disabled={busy === "candidates" || !candPath.trim()}
+              className="w-full shrink-0 sm:w-auto"
             >
               {busy === "candidates" ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

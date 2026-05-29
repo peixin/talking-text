@@ -10,7 +10,7 @@ export default async function OrganizePage() {
   const [inbox, groups] = await Promise.all([api.organize.inbox(), api.groups.list(false)]);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6">
+    <div className="mx-auto w-full max-w-2xl px-4 py-6">
       <header className="mb-2 flex items-center gap-4">
         <Link
           href="/parent/materials"
