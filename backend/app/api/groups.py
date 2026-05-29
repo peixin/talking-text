@@ -28,6 +28,7 @@ from app.storage.models.content import (
     LanguageItem,
 )
 from app.storage.models.learner import Learner
+from app.storage.models.turn import Turn
 
 router = APIRouter(tags=["groups"])
 
@@ -661,4 +662,303 @@ async def unassign_learner(
     )
     if cast("CursorResult[Any]", result).rowcount == 0:
         raise HTTPException(status_code=404, detail="Assignment not found.")
+    await db.commit()
+
+
+# ── Organize workbench (docs/content-lifecycle.md §4) ────────────────────────
+#
+# The inbox of the ACTIVE learner has two sources of loose items:
+#   1. capture bags  — kind="quick_practice" groups assigned to the learner.
+#   2. practice-derived candidates — words the child said in turns (turn.text_user)
+#      that are not yet represented anywhere in the account's content (§4.3).
+# Filing MOVES a word into a canonical tag node (add member to target, remove from
+# the source capture bag). Practice candidates are not LanguageItems yet — filing
+# one lazily creates it. Nothing here writes a new table; word data stays derived
+# from turn text (Rule #3).
+
+_CAPTURE_KIND = "quick_practice"
+
+#: Ultra-common function words are noise as "words worth filing"; filtered out of
+#: practice-derived candidates. Deliberately small and conservative.
+_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "but",
+        "so",
+        "if",
+        "of",
+        "to",
+        "in",
+        "on",
+        "at",
+        "by",
+        "for",
+        "with",
+        "from",
+        "as",
+        "is",
+        "am",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "do",
+        "does",
+        "did",
+        "have",
+        "has",
+        "had",
+        "i",
+        "you",
+        "he",
+        "she",
+        "it",
+        "we",
+        "they",
+        "me",
+        "him",
+        "her",
+        "us",
+        "them",
+        "my",
+        "your",
+        "his",
+        "its",
+        "our",
+        "their",
+        "this",
+        "that",
+        "these",
+        "those",
+        "what",
+        "who",
+        "how",
+        "why",
+        "when",
+        "where",
+        "yes",
+        "no",
+        "not",
+        "can",
+        "will",
+        "would",
+        "ok",
+        "okay",
+        "hi",
+        "hello",
+        "oh",
+        "um",
+        "uh",
+    }
+)
+
+_WORD_RE = re.compile(r"[a-z]+(?:'[a-z]+)?")
+
+#: Cap the candidate payload; the long tail of one-off words is rarely worth filing.
+_MAX_CANDIDATES = 200
+
+
+def _tokenize_words(text: str) -> list[str]:
+    """Lowercase alphabetic word tokens (contractions kept). Pure."""
+    return _WORD_RE.findall(text.lower())
+
+
+class InboxCaptureItem(BaseModel):
+    group_id: uuid.UUID  # the capture bag this loose item currently sits in
+    group_name: str
+    item: LanguageItemOut
+
+
+class InboxCandidate(BaseModel):
+    text: str
+    count: int  # times the child said it across their turns
+
+
+class InboxOut(BaseModel):
+    learner_id: uuid.UUID | None
+    capture_items: list[InboxCaptureItem]
+    practice_candidates: list[InboxCandidate]
+
+
+@router.get("/organize/inbox", response_model=InboxOut)
+async def organize_inbox(
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> InboxOut:
+    """Loose items awaiting organizing, for the account's active learner."""
+    learner_id = account.last_active_learner_id
+    if learner_id is None:
+        return InboxOut(learner_id=None, capture_items=[], practice_candidates=[])
+
+    # 1. Capture bags assigned to the active learner, and their items.
+    bags = list(
+        (
+            await db.execute(
+                select(ItemGroup)
+                .join(ItemGroupLearner, ItemGroupLearner.group_id == ItemGroup.id)
+                .where(
+                    ItemGroup.owner_account_id == account.id,
+                    ItemGroup.kind == _CAPTURE_KIND,
+                    ItemGroup.archived.is_(False),
+                    ItemGroupLearner.learner_id == learner_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    bag_by_id = {b.id: b for b in bags}
+
+    capture_items: list[InboxCaptureItem] = []
+    if bag_by_id:
+        rows = (
+            await db.execute(
+                select(ItemGroupMember.group_id, LanguageItem)
+                .join(LanguageItem, LanguageItem.id == ItemGroupMember.item_id)
+                .where(ItemGroupMember.group_id.in_(list(bag_by_id.keys())))
+                .order_by(LanguageItem.type, LanguageItem.text)
+            )
+        ).all()
+        for gid, item in rows:
+            capture_items.append(
+                InboxCaptureItem(
+                    group_id=gid,
+                    group_name=bag_by_id[gid].name,
+                    item=LanguageItemOut(
+                        id=item.id,
+                        type=item.type,
+                        text=item.text,
+                        anchor=item.anchor,
+                        cefr_level=item.cefr_level,
+                        pos=item.pos,
+                    ),
+                )
+            )
+
+    # 2. Practice-derived candidates: words the child said, not yet anywhere in
+    #    the account's content. Derived from turn text — no separate event table.
+    existing_texts = {
+        t.lower()
+        for (t,) in (
+            await db.execute(
+                select(LanguageItem.text)
+                .join(ItemGroupMember, ItemGroupMember.item_id == LanguageItem.id)
+                .join(ItemGroup, ItemGroup.id == ItemGroupMember.group_id)
+                .where(ItemGroup.owner_account_id == account.id)
+            )
+        ).all()
+    }
+
+    counts: dict[str, int] = {}
+    user_texts = (
+        await db.execute(select(Turn.text_user).where(Turn.learner_id == learner_id))
+    ).all()
+    for (text_user,) in user_texts:
+        for word in _tokenize_words(text_user or ""):
+            if len(word) < 2 or word in _STOPWORDS or word in existing_texts:
+                continue
+            counts[word] = counts.get(word, 0) + 1
+
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    practice_candidates = [InboxCandidate(text=w, count=c) for w, c in ranked[:_MAX_CANDIDATES]]
+
+    return InboxOut(
+        learner_id=learner_id,
+        capture_items=capture_items,
+        practice_candidates=practice_candidates,
+    )
+
+
+class FileItemBody(BaseModel):
+    target_group_id: uuid.UUID
+    #: Move an existing captured item: supply item_id (+ source_group_id to remove from).
+    item_id: uuid.UUID | None = None
+    source_group_id: uuid.UUID | None = None
+    #: Or file a practice candidate: supply the new item to lazily create.
+    new_item: ItemIn | None = None
+
+
+@router.post("/organize/file", response_model=LanguageItemOut)
+async def organize_file(
+    body: FileItemBody,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
+) -> LanguageItemOut:
+    """File one loose word into a target tag node (MOVE semantics).
+
+    Adds the item to the target (idempotent); if ``source_group_id`` is given, also
+    removes it from that capture bag so the inbox shrinks as you organize.
+    """
+    x_role = request.headers.get("x-role")
+    target = await _get_accessible_group(body.target_group_id, account, db)
+    await _verify_write_permission(target, account, db, x_role=x_role)
+
+    if body.new_item is not None:
+        item_id = (await _upsert_language_items(db, [body.new_item]))[0]
+    elif body.item_id is not None:
+        item_id = body.item_id
+    else:
+        raise HTTPException(status_code=400, detail="Provide item_id or new_item.")
+
+    await db.execute(
+        pg_insert(ItemGroupMember)
+        .values(group_id=target.id, item_id=item_id)
+        .on_conflict_do_nothing(index_elements=["group_id", "item_id"])
+    )
+
+    if body.source_group_id is not None and body.source_group_id != target.id:
+        source = await _get_accessible_group(body.source_group_id, account, db)
+        await _verify_write_permission(source, account, db, x_role=x_role)
+        await db.execute(
+            delete(ItemGroupMember).where(
+                ItemGroupMember.group_id == source.id,
+                ItemGroupMember.item_id == item_id,
+            )
+        )
+
+    if account.last_active_learner_id is not None:
+        target.last_edited_by_learner_id = account.last_active_learner_id
+
+    await db.commit()
+
+    item = (await db.execute(select(LanguageItem).where(LanguageItem.id == item_id))).scalar_one()
+    return LanguageItemOut(
+        id=item.id,
+        type=item.type,
+        text=item.text,
+        anchor=item.anchor,
+        cefr_level=item.cefr_level,
+        pos=item.pos,
+    )
+
+
+class DismissItemBody(BaseModel):
+    group_id: uuid.UUID
+    item_id: uuid.UUID
+
+
+@router.post("/organize/dismiss", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def organize_dismiss(
+    body: DismissItemBody,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
+) -> None:
+    """Drop a captured item from its bag (it leaves the inbox; the LanguageItem row
+    stays — it may be referenced elsewhere)."""
+    group = await _get_accessible_group(body.group_id, account, db)
+    await _verify_write_permission(group, account, db, x_role=request.headers.get("x-role"))
+    await db.execute(
+        delete(ItemGroupMember).where(
+            ItemGroupMember.group_id == group.id,
+            ItemGroupMember.item_id == body.item_id,
+        )
+    )
     await db.commit()
