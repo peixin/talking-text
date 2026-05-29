@@ -158,12 +158,8 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["subscriber_account_id"], ["account.id"], ondelete="CASCADE"
-        ),
-        sa.ForeignKeyConstraint(
-            ["source_group_id"], ["item_group.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["subscriber_account_id"], ["account.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["source_group_id"], ["item_group.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "subscriber_account_id", "source_group_id", name="uq_subscriber_source_group"
@@ -205,12 +201,8 @@ def downgrade() -> None:
     op.drop_index("ix_item_group_last_edited_by_learner_id", table_name="item_group")
 
     op.drop_constraint("fk_item_group_cloned_from", "item_group", type_="foreignkey")
-    op.drop_constraint(
-        "fk_item_group_last_edited_by_learner", "item_group", type_="foreignkey"
-    )
-    op.drop_constraint(
-        "fk_item_group_created_by_learner", "item_group", type_="foreignkey"
-    )
+    op.drop_constraint("fk_item_group_last_edited_by_learner", "item_group", type_="foreignkey")
+    op.drop_constraint("fk_item_group_created_by_learner", "item_group", type_="foreignkey")
 
     op.drop_column("item_group", "cloned_from_group_id")
     op.drop_column("item_group", "locked")

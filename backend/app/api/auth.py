@@ -216,6 +216,7 @@ async def set_active_learner_state(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     from app.storage.models.learner import Learner
+
     result = await db.execute(
         select(Learner).where(
             Learner.id == body.learner_id,
