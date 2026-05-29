@@ -140,7 +140,8 @@
     "kind_textbook_lesson": "Lesson",
     "kind_personal_collection": "Collection",
     "kind_quick_practice": "Quick practice",
-    "kind_review_set": "Review set"
+    "kind_review_set": "Review set",
+    "kind_tag": "Tag"
   },
   "MaterialPickers": {
     "kind_label": "Type (type your own)",

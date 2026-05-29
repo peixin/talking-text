@@ -140,7 +140,8 @@
     "kind_textbook_lesson": "课次",
     "kind_personal_collection": "生词本",
     "kind_quick_practice": "随手练习",
-    "kind_review_set": "复习集"
+    "kind_review_set": "复习集",
+    "kind_tag": "标签"
   },
   "MaterialPickers": {
     "kind_label": "素材类型（可自由输入）",

@@ -128,7 +128,8 @@
     "kind_textbook_lesson": "課次",
     "kind_personal_collection": "生詞本",
     "kind_quick_practice": "隨手練習",
-    "kind_review_set": "複習集"
+    "kind_review_set": "複習集",
+    "kind_tag": "標籤"
   },
   "MaterialPickers": {
     "kind_label": "素材類型（可自由輸入）",

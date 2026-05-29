@@ -37,6 +37,9 @@ export function useKindLabel() {
         return t("kind_quick_practice");
       case "review_set":
         return t("kind_review_set");
+      case "tag":
+      case "generic":
+        return t("kind_tag");
       default:
         return kind;
     }

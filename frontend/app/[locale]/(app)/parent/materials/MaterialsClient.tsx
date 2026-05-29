@@ -15,6 +15,7 @@ import {
   ChevronRight,
   HelpCircle,
   Image as ImageIcon,
+  Inbox,
   Loader2,
   MessageSquare,
   Mic,
@@ -131,6 +132,17 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
 
     return roots;
   }, [groups]);
+
+  // Canonical textbook trees vs. un-organized capture bags (the latter go to the
+  // organize workbench). Splitting them makes the tag tree actually visible.
+  const canonicalRoots = useMemo(
+    () => activeTree.filter((n) => n.group.kind !== "quick_practice"),
+    [activeTree],
+  );
+  const captureRoots = useMemo(
+    () => activeTree.filter((n) => n.group.kind === "quick_practice"),
+    [activeTree],
+  );
 
   const archivedGroups = useMemo(() => {
     return groups.filter((g) => g.archived);
@@ -454,29 +466,56 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
         </Button>
       </div>
 
-      {/* Materials List */}
+      {/* Un-organized capture bags → go to the organize workbench */}
+      {captureRoots.length > 0 && (
+        <section className="space-y-3 rounded-2xl border border-amber-300/60 bg-amber-50/40 p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-1.5 text-sm font-bold text-amber-700">
+              <Inbox className="h-4 w-4" />
+              待整理采集（{captureRoots.length} 袋）
+            </h3>
+            <Link
+              href="/parent/organize"
+              className="text-sm font-medium text-amber-700 transition hover:text-amber-900"
+            >
+              去整理 →
+            </Link>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {captureRoots.map((n) => (
+              <span
+                key={n.group.id}
+                className="border-border bg-background inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs"
+              >
+                {n.group.name}
+                <span className="text-muted-foreground">{n.group.item_count} 词</span>
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Canonical textbook tag tree */}
       <section className="space-y-3">
         <div className="flex items-center justify-between border-b pb-2">
           <h3 className="text-foreground flex items-center gap-1.5 text-sm font-bold">
             <BookOpen className="h-4 w-4 text-slate-500" />
-            教材层级结构
+            教材结构
           </h3>
-          <span className="text-muted-foreground text-xs">
-            共 {groups.filter((g) => !g.archived).length} 个正在使用的素材
-          </span>
+          <span className="text-muted-foreground text-xs">{canonicalRoots.length} 本教材</span>
         </div>
 
-        {activeTree.length === 0 ? (
+        {canonicalRoots.length === 0 ? (
           <div className="text-muted-foreground bg-card/20 rounded-2xl border border-dashed p-10 text-center text-sm shadow-inner">
-            <Bookmark className="mx-auto mb-2 h-8 w-8 animate-bounce text-slate-300" />
-            <p className="font-semibold text-slate-400">目前暂无教材目录</p>
+            <Bookmark className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+            <p className="font-semibold text-slate-400">还没有成形的教材</p>
             <p className="mt-1 text-xs text-slate-400">
-              点击上方 “智能录入新教材” 开启多源高保真录入吧！
+              先「智能录入」采集素材，再去「整理素材」把它们归位成教材标签树。
             </p>
           </div>
         ) : (
           <div className="space-y-4">
-            {activeTree.map((node) => (
+            {canonicalRoots.map((node) => (
               <TreeViewNode
                 key={node.group.id}
                 node={node}
