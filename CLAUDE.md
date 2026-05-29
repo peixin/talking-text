@@ -401,8 +401,19 @@ Rules:
 - ✅ `app/adapters/factory.py` — reads config, creates shared singleton adapters + orchestrator
 - ✅ `session.py` / `conversation.py` import from factory; no direct vendor instantiation
 
+**Done (Scope Computer V1 + Prompt assembler):**
+- ✅ `core/scope/v1.py` — three modes (group / calibration / free); group mode pulls items from the session's group + descendants
+- ✅ `core/prompt/assembler.py` — pure function assembling Tina persona + calibration / level hint / vocab scope / patterns / nudges (covered by `tests/test_prompt_assembler.py`)
+
+**Done (Curriculum ingestion + Content lifecycle — 2026-05-30):**
+- ✅ Ingestion MVP — `POST /ingest/extract` (image/text/voice → LLM structured items), parent review drawer, transactional save
+- ✅ **Capture/Canonical split** (`docs/content-lifecycle.md`): extraction no longer infers hierarchy; capture produces a flat bag; structuring is a deliberate `tag_path` action. See `docs/2026-05-30-dev-log.md`
+- ✅ `_assemble_tag_path` — deterministic, organize-time tree assembly (nodes are untyped `kind="tag"`); `tests/test_ingest_extraction.py` locks the extraction contract
+
 **Next TODO (priority order):**
-- [ ] Scope Computer V1 stub + Prompt assembler (wire Tina persona + vocab scope into system prompt)
-- [ ] Curriculum ingestion MVP (paste text → LLM extract → human review → DB)
-- [ ] First-party textbook data (Tot Talk series — user to provide materials)
+- [ ] **Validate the core loop** with a hand-made book — 1–2 lessons + 1 real child (see `docs/content-lifecycle.md` §9)
+- [ ] Organize workbench — inbox (capture + practice-derived candidates) → tag tree, drag-to-file (`content-lifecycle.md` §4.2/§4.3)
+- [ ] First-party textbook data (Tot Talk series — seed the library, cold-start)
+- [ ] DB-backed tests for `_assemble_tag_path` / scope V1 (needs a Postgres test fixture)
 - [ ] `learner_word_stats` mastery table (V2, when mastery tracker is needed)
+- [ ] Pre-existing mypy debt: `adapters/llm/volc.py` (OpenAI TypedDicts), `api/conversation.py` (`b64encode(bytes|None)` — possible real bug)

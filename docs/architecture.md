@@ -222,12 +222,20 @@ sequenceDiagram
 
 ## 八、教材录入管道 (Curriculum Pipeline)
 
-为了将纷繁复杂的线下英语教材快速收拢至 `LanguageItem` 与 `ItemGroup` 两个数据底层中，V1 提供了一条精简高效的“AI 结构化提取”大纲通道：
+> **已于 2026-05-30 修订** — 录入被拆成「采集」与「整理」两段，抽取不再推断层级归属。
+> 完整设计见 [`content-lifecycle.md`](content-lifecycle.md)（§4 整理工作台、§8 改动清单）。下文反映修订后的管道。
 
-1. **手动复制/大纲黏贴**：家长或录入人员在“家长后台”中，选择已有教材，或输入全新教材名称、单元名，并将该单元的英文课文、单词表、语法目标粘贴进文本框。
-2. **LLM 结构化提取**：后端调用大模型，使用精细的 Prompt 指令迫使其严格输出符合 Pydantic 规范的 JSON 结构数据，杜绝幻觉捏造。
-3. **前端交互确认**：家长在界面上直观审查 AI 提取出的单词、词性、中文释义和重点句型，并可进行微调与手工查缺补漏。
-4. **事务存盘**：点击“存盘”后，系统在单个数据库事务内完成 `ItemGroup` 的创建、原子 `LanguageItem` 的去重写入、以及多对多关系表 `ItemGroupMember` 的关联构建。同时为该学习者更新其可计算词库。
+为了将纷繁复杂的线下英语教材收拢至 `LanguageItem` 与 `ItemGroup` 两个数据底层，V1 把流程拆成两段，分别服务不同时刻：
+
+**采集（Capture，扁平、低摩擦）：**
+1. **拍照 / 文字 / 语音**：家长或孩子在界面里上传，可附一句文字描述。
+2. **LLM 结构化提取**：后端调用大模型，严格输出符合 Pydantic 规范的 JSON——**仅含 items + 一个建议名 (`suggested_name`) + CEFR 估计**。它**不**推断 `parent_id`/层级/书名单元（不再把素材库塞进 prompt）。
+3. **前端交互确认**：家长审查、增删、改正提取出的词条。
+4. **事务存盘为一个扁平词袋**：单事务内创建 `ItemGroup`（`kind="quick_practice"`）、去重写入 `LanguageItem`、关联 `ItemGroupMember`，并把根 group 分配给当前 learner。
+
+**整理（Organize，刻意、由少数人/运营者完成）：**
+5. **`tag_path` 确定性建树**：在整理工作台里，由人确认一串精确标签（root→leaf，如 `["Tot Talk","Book 1","Unit 1"]`），后端 `_assemble_tag_path` 精确同名合并已有节点 / 新建缺失节点。节点是无类型 tag（`kind="tag"`），不再按位置猜 `kind`。
+6. **提升即零拷贝**：因 `LanguageItem` 全局去重，把采集到的词归进 canonical 节点只是新增 `ItemGroupMember` 行。
 
 ---
 
