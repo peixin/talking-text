@@ -12,14 +12,22 @@ import asyncio
 import base64
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, AsyncStream
+from openai.types.chat import ChatCompletionChunk, ChatCompletionMessageParam
 
 from app.adapters.llm.protocol import LLMMessage, LLMResponse
 from app.config import settings
 
 log = logging.getLogger(__name__)
+
+
+def _to_openai_messages(messages: list[LLMMessage]) -> list[ChatCompletionMessageParam]:
+    """Adapt our role/content pairs to the OpenAI message-param union (type-only)."""
+    return [
+        cast(ChatCompletionMessageParam, {"role": m.role, "content": m.content}) for m in messages
+    ]
 
 
 class VolcLLMAdapter:
@@ -47,7 +55,7 @@ class VolcLLMAdapter:
     ) -> LLMResponse:
         completion = await self._client.chat.completions.create(
             model=self._model,
-            messages=[{"role": m.role, "content": m.content} for m in messages],
+            messages=_to_openai_messages(messages),
             temperature=temperature,
             max_tokens=max_tokens,
         )
@@ -123,12 +131,13 @@ class VolcLLMAdapter:
     ) -> AsyncIterator[str]:
         response = await self._client.chat.completions.create(
             model=self._model,
-            messages=[{"role": m.role, "content": m.content} for m in messages],
+            messages=_to_openai_messages(messages),
             temperature=temperature,
             max_tokens=max_tokens,
             stream=True,
         )
-        async for chunk in response:
+        stream = cast(AsyncStream[ChatCompletionChunk], response)
+        async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
 
