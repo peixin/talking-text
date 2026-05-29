@@ -18,6 +18,12 @@ export default async function MaterialsPage() {
         >
           ← {t("back_to_parent")}
         </Link>
+        <Link
+          href="/parent/organize"
+          className="ml-auto text-sm text-indigo-600 transition hover:text-indigo-700"
+        >
+          整理素材 →
+        </Link>
       </header>
       <h1 className="mb-1 text-xl font-medium">{t("title")}</h1>
       <p className="text-muted-foreground mb-6 text-sm">{t("subtitle")}</p>

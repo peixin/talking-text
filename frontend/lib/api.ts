@@ -81,6 +81,12 @@ export async function createApi() {
     ingest: {
       extract: (formData: FormData) => c((h) => backend.ingest.extract(formData, h)),
     },
+    organize: {
+      inbox: () => c((h) => backend.organize.inbox(h)),
+      file: (body: import("./backend").FileItemBody) => c((h) => backend.organize.file(body, h)),
+      dismiss: (groupId: string, itemId: string) =>
+        c((h) => backend.organize.dismiss(groupId, itemId, h)),
+    },
     sessions: {
       list: (learnerId: string) => c((h) => backend.sessions.list(learnerId, h)),
       create: (learnerId: string, groupId?: string | null) =>

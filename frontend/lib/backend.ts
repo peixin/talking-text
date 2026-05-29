@@ -210,6 +210,37 @@ export type GroupDetailOut = {
   items: LanguageItemOut[];
 };
 
+// ── Organize workbench (docs/content-lifecycle.md §4) ────────────────────────
+
+export type InboxCaptureItem = {
+  group_id: string; // the capture bag this loose item currently sits in
+  group_name: string;
+  item: LanguageItemOut;
+};
+
+export type InboxCandidate = { text: string; count: number };
+
+export type InboxOut = {
+  learner_id: string | null;
+  capture_items: InboxCaptureItem[];
+  practice_candidates: InboxCandidate[];
+};
+
+export type FileItemBody = {
+  target_group_id: string;
+  // Move an existing captured item:
+  item_id?: string | null;
+  source_group_id?: string | null;
+  // Or file a practice candidate (lazily created):
+  new_item?: {
+    text: string;
+    type: ItemType;
+    anchor?: string | null;
+    cefr_level?: string | null;
+    pos?: string | null;
+  } | null;
+};
+
 export const backend = {
   health: () => request<{ status: string }>("/health"),
   auth: {
@@ -320,6 +351,21 @@ export const backend = {
       request<{ text: string }>("/ingest/transcribe", {
         method: "POST",
         body: formData,
+        headers,
+      }),
+  },
+  organize: {
+    inbox: (headers?: HeadersInit) => request<InboxOut>("/organize/inbox", { headers }),
+    file: (body: FileItemBody, headers?: HeadersInit) =>
+      request<LanguageItemOut>("/organize/file", {
+        method: "POST",
+        body: body as unknown as Record<string, unknown>,
+        headers,
+      }),
+    dismiss: (groupId: string, itemId: string, headers?: HeadersInit) =>
+      request<void>("/organize/dismiss", {
+        method: "POST",
+        body: { group_id: groupId, item_id: itemId },
         headers,
       }),
   },
