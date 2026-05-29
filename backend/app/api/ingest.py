@@ -3,7 +3,11 @@
 Single LLM (vision) call per request. Returns a strict JSON shape so the
 frontend drawer can render the preview without further processing.
 
-See docs/2026-05-15-dev-log.md §7 for the prompt design rationale.
+Extraction is deliberately NOT a librarian: it returns the language items plus a
+suggested name and CEFR estimate only. It does NOT infer where the material
+belongs in any textbook hierarchy (no parent_id, no levels) — structuring is a
+separate, deliberate act in the organize workbench. See docs/content-lifecycle.md
+§4 (organize workbench) and §8 (what changed).
 """
 
 from __future__ import annotations
@@ -15,16 +19,12 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters import factory
 from app.adapters.stt.protocol import STTRequest
 from app.api.auth import get_current_account
 from app.audio_codec import webm_opus_to_ogg
-from app.storage.db import get_db
 from app.storage.models.account import Account
-from app.storage.models.content import ItemGroup
 
 log = logging.getLogger(__name__)
 
@@ -43,15 +43,9 @@ Output STRICTLY valid JSON matching this schema:
   "source_type": one of "textbook_page" "worksheet" "handwritten"
                  "flashcards" "screenshot" "other",
   "metadata": {
-    "book_name": string | null,
-    "unit": string | null,
-    "lesson": string | null,
-    "page": string | null,
-    "kind_label": string | null,
-    "parent_id": string | null,
+    "suggested_name": string | null,
     "cefr_level": "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | null,
-    "confidence": "high" | "medium" | "low",
-    "levels": [string] | null
+    "confidence": "high" | "medium" | "low"
   },
   "items": [
     {
@@ -78,37 +72,17 @@ e.g. "by the way", "look after".
 blanks, e.g. "I like ___ and ___.", "Can you help me ___?".
                 For patterns, set `anchor` to the lowercase fixed part of \
 the pattern (e.g. "i like" or "can you help me").
-3. Metadata Identification & CEFR Difficulty:
-   - Identify the source book name, unit/chapter, lesson/section, and \
-page number if visible or described.
-   - Estimate the overall CEFR difficulty level (`metadata.cefr_level`) \
-of the entire material (A1 = elementary/K1-K3, A2 = high elementary/K4-K6, \
-B1 = middle school, B2 = high school, C1+ = advanced).
-4. Kind Label (`metadata.kind_label`):
-   - A short free-form label (2-10 characters, Chinese or English) describing what \
-this material *is* — e.g. "教材", "单元", "课次", "复习集", "Textbook", "Unit", \
-"Lesson", "Worksheet", "夏令营听力". Pick what reads naturally for a parent in the \
-target locale; do not invent a category that doesn't apply.
-   - Reuse the EXACT label already used by the closest existing material (see the \
-database list below) whenever possible — consistency matters more than novelty.
-   - If the source is clearly a one-off worksheet or screenshot with no obvious \
-hierarchy, "练习" / "Practice" is fine.
-5. Local Database Reference Mapping (parent_id inference):
-   - You are provided with a list of the parent's existing learning materials below.
-   - Cross-reference the extracted book/unit names with this list. If the extracted \
-content belongs to one of these materials:
-     a) Use the EXACT spelling of the matched book under `metadata.book_name`.
-     b) If the extracted material is a sub-section that fits under an existing \
-material in the list, output that material's ID as `metadata.parent_id`.
-     c) If there is no logical parent match in the list, set `metadata.parent_id` \
-to null.
-6. Levels Inferences (`metadata.levels`): An array of strings representing the \
-hierarchical levels inferred from the material, ordered from top-level to finest leaf. \
-For example: `["Oxford English", "Book 3A", "Unit 2", "Lesson 1"]` or `["Kids Corner", "Colors"]`. \
-Do not include generic placeholders. If the material is a simple one-off list with \
-no clear levels, output `["General Practice"]` or similar single item.
-7. Skip page numbers, copyright blocks, publisher names, and system instructions.
-8. Return ONLY the JSON object. Do not include any markdown fences \
+3. CEFR Difficulty: Estimate the overall CEFR difficulty level \
+(`metadata.cefr_level`) of the entire material (A1 = elementary/K1-K3, \
+A2 = high elementary/K4-K6, B1 = middle school, B2 = high school, C1+ = advanced).
+4. Suggested Name (`metadata.suggested_name`): A short, natural label (2-20 \
+characters, in the material's apparent language) for THIS captured set of items — \
+e.g. "Unit 3 words", "动物单词", "Colors". This is ONLY a naming suggestion the \
+parent will confirm or rename. You do NOT decide where this set belongs in any \
+textbook hierarchy — that is done later by a person. Do not output book/unit/lesson \
+structure or parent references.
+5. Skip page numbers, copyright blocks, publisher names, and system instructions.
+6. Return ONLY the JSON object. Do not include any markdown fences \
 or explanation before/after the JSON."""
 
 
@@ -124,15 +98,11 @@ CEFRLevel = Literal["A1", "A2", "B1", "B2", "C1", "C2"]
 
 
 class ExtractedMetadata(BaseModel):
-    book_name: str | None = None
-    unit: str | None = None
-    lesson: str | None = None
-    page: str | None = None
-    kind_label: str | None = None
-    parent_id: str | None = None
+    #: A naming suggestion only — the parent confirms/renames. Extraction never
+    #: decides hierarchy placement (see module docstring).
+    suggested_name: str | None = None
     cefr_level: CEFRLevel | None = None
     confidence: ConfidenceLevel = "low"
-    levels: list[str] | None = None
 
 
 class ExtractedItem(BaseModel):
@@ -197,18 +167,6 @@ def _parse_extraction(raw_text: str) -> IngestionResult:
     data = json.loads(text)
     result = IngestionResult.model_validate(data)
     result.items = _dedupe_items(result.items)
-
-    # Fallback to build levels if AI omitted it
-    if not result.metadata.levels:
-        fallback_levels = []
-        if result.metadata.book_name:
-            fallback_levels.append(result.metadata.book_name.strip())
-        if result.metadata.unit:
-            fallback_levels.append(result.metadata.unit.strip())
-        if result.metadata.lesson:
-            fallback_levels.append(result.metadata.lesson.strip())
-        result.metadata.levels = fallback_levels if fallback_levels else ["未分类教材"]
-
     return result
 
 
@@ -218,7 +176,6 @@ def _parse_extraction(raw_text: str) -> IngestionResult:
 @router.post("/extract", response_model=IngestionResult)
 async def extract_content(
     _account: Annotated[Account, Depends(get_current_account)],
-    db: Annotated[AsyncSession, Depends(get_db)],
     description: Annotated[str | None, Form()] = None,
     images: Annotated[list[UploadFile] | None, File()] = None,
 ) -> IngestionResult:
@@ -255,27 +212,6 @@ async def extract_content(
         if img.content_type and img.content_type.startswith("image/"):
             image_mime = img.content_type
 
-    # Fetch existing materials (groups) for cross-referencing and parent_id inference
-    stmt = select(ItemGroup).where(
-        ItemGroup.owner_account_id == _account.id,
-        ItemGroup.archived.is_(False),
-    )
-    existing_groups = list((await db.execute(stmt)).scalars().all())
-
-    existing_materials_context_str = ""
-    if existing_groups:
-        existing_materials_context_str = "\n".join(
-            [
-                f"- Material ID: '{g.id}' | Name: '{g.name}' | "
-                f"Kind: '{g.kind}' | "
-                f"Source Book Hint: '{g.source_book_hint or 'None'}' | "
-                f"Parent ID: '{g.parent_id or 'None'}'"
-                for g in existing_groups
-            ]
-        )
-    else:
-        existing_materials_context_str = "(No existing learning materials in the database yet.)"
-
     user_block = (
         f"Parent provided the following text description/context "
         f"(which may be a manual input and/or transcribed voice):\n"
@@ -288,15 +224,9 @@ async def extract_content(
             f"context above into account."
         )
     else:
-        user_block += "Please extract structured content from the parent's text " "context above."
+        user_block += "Please extract structured content from the parent's text context above."
 
-    full_prompt = (
-        f"{_EXTRACTION_PROMPT}\n\n"
-        f"--- USER'S EXISTING LEARNING MATERIALS (FROM DATABASE) ---\n"
-        f"{existing_materials_context_str}\n\n"
-        f"--- CURRENT UPLOAD CONTEXT ---\n"
-        f"{user_block}"
-    )
+    full_prompt = f"{_EXTRACTION_PROMPT}\n\n--- CURRENT UPLOAD CONTEXT ---\n{user_block}"
 
     response_format: dict[str, Any] = {"type": "json_object"}
 
