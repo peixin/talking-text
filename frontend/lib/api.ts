@@ -86,6 +86,9 @@ export async function createApi() {
       file: (body: import("./backend").FileItemBody) => c((h) => backend.organize.file(body, h)),
       dismiss: (groupId: string, itemId: string) =>
         c((h) => backend.organize.dismiss(groupId, itemId, h)),
+      suggestBag: (groupId: string) => c((h) => backend.organize.suggestBag(groupId, h)),
+      fileBag: (sourceGroupId: string, tagPath: string[]) =>
+        c((h) => backend.organize.fileBag(sourceGroupId, tagPath, h)),
     },
     sessions: {
       list: (learnerId: string) => c((h) => backend.sessions.list(learnerId, h)),

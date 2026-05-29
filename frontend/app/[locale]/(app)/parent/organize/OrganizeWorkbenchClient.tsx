@@ -1,23 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CornerDownRight, Inbox, Loader2, Plus, Sparkles, Tag, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { FolderInput, Loader2, Sparkles, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { FileItemBody, GroupOut, InboxOut, LanguageItemOut } from "@/lib/backend";
+import type { GroupOut, InboxBag, InboxCandidate, InboxOut } from "@/lib/backend";
 import { createGroup } from "../materials/actions";
-import { dismissItem, fileItem, reloadWorkbench } from "./actions";
+import { fileBag, reloadWorkbench, suggestBag } from "./actions";
 
+const SEP = " › ";
 const CAPTURE_KIND = "quick_practice";
 
-// The loose item the user has picked and is about to file into a tag node.
-type Selected =
-  | { kind: "capture"; groupId: string; item: LanguageItemOut }
-  | { kind: "candidate"; text: string }
-  | null;
-
-type TreeNode = { group: GroupOut; children: TreeNode[] };
+function splitPath(s: string): string[] {
+  return s
+    .split(/›|\/|>/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
 
 interface Props {
   initialInbox: InboxOut;
@@ -25,137 +25,109 @@ interface Props {
 }
 
 export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }: Props) {
-  const [inbox, setInbox] = useState<InboxOut>(initialInbox);
+  const [bags, setBags] = useState<InboxBag[]>(initialInbox.capture_bags);
+  const [candidates, setCandidates] = useState<InboxCandidate[]>(initialInbox.practice_candidates);
   const [groups, setGroups] = useState<GroupOut[]>(initialGroups);
-  const [selected, setSelected] = useState<Selected>(null);
-  const [newPath, setNewPath] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [paths, setPaths] = useState<Record<string, string>>({}); // bag id → editable path
+  const [suggesting, setSuggesting] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState<string | null>(null); // bag id, or "candidates"
+  const [candPath, setCandPath] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Canonical tag tree = everything except capture bags (those ARE the inbox).
-  const tree = useMemo(() => {
-    const canonical = groups.filter((g) => g.kind !== CAPTURE_KIND && !g.archived);
-    const map = new Map<string, TreeNode>();
-    canonical.forEach((g) => map.set(g.id, { group: g, children: [] }));
-    const roots: TreeNode[] = [];
-    canonical.forEach((g) => {
-      const node = map.get(g.id)!;
-      if (g.parent_id && map.has(g.parent_id)) map.get(g.parent_id)!.children.push(node);
-      else roots.push(node);
-    });
-    return roots;
+  // AI pre-predicts a path for every bag on mount (default = bag name; AI refines
+  // to reuse existing structure). The human just tweaks — ~80% done automatically.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (const bag of initialInbox.capture_bags) {
+        setSuggesting((s) => ({ ...s, [bag.group_id]: true }));
+        const res = await suggestBag(bag.group_id);
+        if (cancelled) return;
+        setPaths((p) => ({
+          ...p,
+          [bag.group_id]: res.ok ? res.tag_path.join(SEP) : bag.name,
+        }));
+        setSuggesting((s) => ({ ...s, [bag.group_id]: false }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+  }, []);
+
+  const existingPaths = useMemo(() => {
+    const canon = groups.filter((g) => g.kind !== CAPTURE_KIND && !g.archived);
+    const byId = new Map(canon.map((g) => [g.id, g]));
+    const pathOf = (g: GroupOut): string => {
+      const names: string[] = [];
+      let cur: GroupOut | undefined = g;
+      const seen = new Set<string>();
+      while (cur && !seen.has(cur.id)) {
+        seen.add(cur.id);
+        names.unshift(cur.name);
+        cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
+      }
+      return names.join(SEP);
+    };
+    return [...new Set(canon.map(pathOf))].sort();
   }, [groups]);
 
-  const bySource = useMemo(() => {
-    const byBag = new Map<string, { name: string; items: LanguageItemOut[] }>();
-    for (const ci of inbox.capture_items) {
-      if (!byBag.has(ci.group_id)) byBag.set(ci.group_id, { name: ci.group_name, items: [] });
-      byBag.get(ci.group_id)!.items.push(ci.item);
+  async function syncFromServer() {
+    const r = await reloadWorkbench();
+    if (r.ok) {
+      setGroups(r.groups);
+      setBags(r.inbox.capture_bags);
+      setCandidates(r.inbox.practice_candidates);
     }
-    return byBag;
-  }, [inbox.capture_items]);
-
-  function removeSelected(prev: InboxOut, sel: NonNullable<Selected>): InboxOut {
-    if (sel.kind === "capture") {
-      return {
-        ...prev,
-        capture_items: prev.capture_items.filter(
-          (ci) => !(ci.group_id === sel.groupId && ci.item.id === sel.item.id),
-        ),
-      };
-    }
-    return {
-      ...prev,
-      practice_candidates: prev.practice_candidates.filter((c) => c.text !== sel.text),
-    };
   }
 
-  function bodyFor(sel: NonNullable<Selected>, targetGroupId: string): FileItemBody {
-    return sel.kind === "capture"
-      ? { target_group_id: targetGroupId, item_id: sel.item.id, source_group_id: sel.groupId }
-      : { target_group_id: targetGroupId, new_item: { text: sel.text, type: "word" } };
-  }
-
-  async function fileInto(targetGroupId: string) {
-    if (!selected || busy) return;
-    const sel = selected;
-    setBusy(true);
+  async function doFileBag(bag: InboxBag) {
+    const parts = splitPath(paths[bag.group_id] ?? bag.name);
+    if (parts.length === 0) {
+      setError("请先填写归位路径");
+      return;
+    }
+    setBusy(bag.group_id);
     setError(null);
-    const res = await fileItem(bodyFor(sel, targetGroupId));
-    setBusy(false);
+    const res = await fileBag(bag.group_id, parts);
     if (!res.ok) {
+      setBusy(null);
       setError(res.error);
       return;
     }
-    setInbox((prev) => removeSelected(prev, sel));
-    setSelected(null);
+    setBags((prev) => prev.filter((b) => b.group_id !== bag.group_id));
+    await syncFromServer();
+    setBusy(null);
   }
 
-  async function dismiss(groupId: string, item: LanguageItemOut) {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    const res = await dismissItem(groupId, item.id);
-    setBusy(false);
-    if (!res.ok) {
-      setError(res.error);
+  async function fileAllCandidates() {
+    const parts = splitPath(candPath);
+    if (parts.length === 0) {
+      setError("请先填写归位路径");
       return;
     }
-    setInbox((prev) => ({
-      ...prev,
-      capture_items: prev.capture_items.filter(
-        (ci) => !(ci.group_id === groupId && ci.item.id === item.id),
-      ),
-    }));
-    if (selected?.kind === "capture" && selected.item.id === item.id) setSelected(null);
-  }
-
-  async function createPathAndMaybeFile() {
-    const parts = newPath
-      .split(/›|\/|>/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (parts.length === 0 || busy) return;
-    setBusy(true);
+    if (candidates.length === 0) return;
+    setBusy("candidates");
     setError(null);
-
-    const created = await createGroup({
+    const res = await createGroup({
       name: parts[parts.length - 1],
       kind: "generic",
-      items: [],
       tag_path: parts,
+      items: candidates.map((c) => ({ text: c.text, type: "word" as const })),
     });
-    if (!created.ok) {
-      setBusy(false);
-      setError(created.error);
+    if (!res.ok) {
+      setBusy(null);
+      setError(res.error);
       return;
     }
-
-    if (selected) {
-      const sel = selected;
-      const filed = await fileItem(bodyFor(sel, created.group.id));
-      if (!filed.ok) {
-        setBusy(false);
-        setError(filed.error);
-        return;
-      }
-      setInbox((prev) => removeSelected(prev, sel));
-      setSelected(null);
-    }
-
-    // Re-sync the tree (tag_path may have created several ancestor nodes) + inbox.
-    const reloaded = await reloadWorkbench();
-    if (reloaded.ok) {
-      setGroups(reloaded.groups);
-      setInbox(reloaded.inbox);
-    }
-    setNewPath("");
-    setBusy(false);
+    setCandidates([]);
+    setCandPath("");
+    await syncFromServer();
+    setBusy(null);
   }
 
-  const looseCount = inbox.capture_items.length + inbox.practice_candidates.length;
-
-  if (inbox.learner_id === null) {
+  if (initialInbox.learner_id === null) {
     return (
       <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
         请先在顶部选择一个正在学习的 learner，再来整理素材。
@@ -163,203 +135,153 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
     );
   }
 
+  const nothingLeft = bags.length === 0 && candidates.length === 0;
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {error && (
         <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
           操作失败：{error}
         </div>
       )}
-      {selected && (
-        <div className="flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
-          {busy ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <CornerDownRight className="h-4 w-4" />
-          )}
-          已选中{" "}
-          <strong>“{selected.kind === "capture" ? selected.item.text : selected.text}”</strong>
-          —— 点击右侧任一标签节点即可归位
-          <button
-            onClick={() => setSelected(null)}
-            className="ml-auto text-indigo-500 hover:text-indigo-700"
-          >
-            取消
-          </button>
-        </div>
+
+      {existingPaths.length > 0 && (
+        <details className="border-border bg-card/40 rounded-lg border px-3 py-2 text-xs">
+          <summary className="text-muted-foreground cursor-pointer select-none">
+            现有教材结构（{existingPaths.length} 条路径，可照抄标签名复用）
+          </summary>
+          <ul className="text-muted-foreground mt-2 space-y-0.5">
+            {existingPaths.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </details>
       )}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {/* ── Left: inbox ─────────────────────────────────────────────── */}
-        <section className="border-border bg-card space-y-4 rounded-xl border p-4">
-          <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <Inbox className="h-4 w-4" /> 收件箱
-            <span className="text-muted-foreground font-normal">({looseCount})</span>
-          </h2>
+      {nothingLeft && (
+        <p className="text-muted-foreground rounded-xl border border-dashed p-10 text-center text-sm">
+          收件箱空了 —— 所有素材都已归位 🎉
+        </p>
+      )}
 
-          {/* Capture bags */}
-          {bySource.size === 0 && inbox.practice_candidates.length === 0 && (
-            <p className="text-muted-foreground py-6 text-center text-sm">
-              收件箱空了 —— 所有散件都已归位 🎉
-            </p>
-          )}
-
-          {[...bySource.entries()].map(([groupId, bag]) => (
-            <div key={groupId} className="space-y-1.5">
-              <div className="text-muted-foreground text-[11px] font-medium">
-                采集袋 · {bag.name}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {bag.items.map((item) => {
-                  const isSel = selected?.kind === "capture" && selected.item.id === item.id;
-                  return (
-                    <span
-                      key={item.id}
-                      className={cn(
-                        "group inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition",
-                        isSel
-                          ? "border-indigo-500 bg-indigo-100 text-indigo-800"
-                          : "border-border bg-background hover:border-indigo-300",
-                      )}
-                    >
-                      <button onClick={() => setSelected({ kind: "capture", groupId, item })}>
-                        {item.text}
-                      </button>
-                      <button
-                        onClick={() => dismiss(groupId, item)}
-                        title="从采集袋移除"
-                        className="text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-red-500"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
+      {/* ── Capture bags — one card per ingest, filed as a whole ─────────── */}
+      {bags.map((bag) => {
+        const isBusy = busy === bag.group_id;
+        const isSuggesting = suggesting[bag.group_id];
+        const preview = bag.items.slice(0, 14);
+        return (
+          <section
+            key={bag.group_id}
+            className="border-border bg-card space-y-3 rounded-xl border p-4"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+                <FolderInput className="h-4 w-4 text-indigo-500" />
+                {bag.name}
+                <span className="text-muted-foreground font-normal">· {bag.items.length} 词</span>
+              </h3>
             </div>
-          ))}
 
-          {/* Practice-derived candidates */}
-          {inbox.practice_candidates.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-muted-foreground flex items-center gap-1 text-[11px] font-medium">
-                <Sparkles className="h-3 w-3" /> 练习里冒出的新词（孩子说过、还没收录）
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {inbox.practice_candidates.map((c) => {
-                  const isSel = selected?.kind === "candidate" && selected.text === c.text;
-                  return (
-                    <button
-                      key={c.text}
-                      onClick={() => setSelected({ kind: "candidate", text: c.text })}
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition",
-                        isSel
-                          ? "border-amber-500 bg-amber-100 text-amber-800"
-                          : "border-border bg-background hover:border-amber-300",
-                      )}
-                    >
-                      {c.text}
-                      <span className="text-muted-foreground text-[10px]">×{c.count}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* ── Right: canonical tag tree ───────────────────────────────── */}
-        <section className="border-border bg-card space-y-3 rounded-xl border p-4">
-          <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <Tag className="h-4 w-4" /> 教材标签树
-          </h2>
-
-          {tree.length === 0 ? (
-            <p className="text-muted-foreground py-2 text-xs">
-              还没有教材结构。用下方输入框新建第一个标签路径。
-            </p>
-          ) : (
-            <div className="space-y-0.5">
-              {tree.map((node) => (
-                <TreeRow
-                  key={node.group.id}
-                  node={node}
-                  depth={0}
-                  canFile={!!selected && !busy}
-                  onFile={fileInto}
-                />
+            <div className="flex flex-wrap gap-1.5">
+              {preview.map((it) => (
+                <span
+                  key={it.id}
+                  className="border-border bg-background inline-flex rounded-full border px-2.5 py-0.5 text-xs"
+                >
+                  {it.text}
+                </span>
               ))}
+              {bag.items.length > preview.length && (
+                <span className="text-muted-foreground px-1 text-xs">
+                  +{bag.items.length - preview.length}
+                </span>
+              )}
             </div>
-          )}
 
-          {/* Create a new tag-path node (and file the selection into it). */}
-          <div className="border-border space-y-1.5 border-t pt-3">
-            <label className="text-muted-foreground text-[11px] font-medium">
-              新建标签路径（用 › 或 / 分隔，如 Tot Talk › Book 1 › Unit 1）
-            </label>
-            <div className="flex gap-2">
-              <input
-                value={newPath}
-                onChange={(e) => setNewPath(e.target.value)}
-                placeholder="Tot Talk › Book 1 › Unit 1"
-                disabled={busy}
-                className="bg-background border-border min-w-0 flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-              />
-              <Button
-                type="button"
-                size="sm"
-                onClick={createPathAndMaybeFile}
-                disabled={busy || !newPath.trim()}
-              >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                {selected ? "新建并归位" : "新建"}
-              </Button>
+            <div className="space-y-1">
+              <label className="text-muted-foreground flex items-center gap-1 text-[11px] font-medium">
+                <Wand2 className="h-3 w-3 text-indigo-500" />
+                归位到（AI 预判，可改 · 用 › 或 / 分隔）
+              </label>
+              <div className="flex gap-2">
+                <input
+                  value={paths[bag.group_id] ?? ""}
+                  onChange={(e) => setPaths((p) => ({ ...p, [bag.group_id]: e.target.value }))}
+                  disabled={isBusy}
+                  placeholder={isSuggesting ? "AI 预判中…" : bag.name}
+                  className={cn(
+                    "bg-background border-border min-w-0 flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50",
+                    isSuggesting && "animate-pulse",
+                  )}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => doFileBag(bag)}
+                  disabled={isBusy || isSuggesting}
+                >
+                  {isBusy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FolderInput className="h-4 w-4" />
+                  )}
+                  整袋归位
+                </Button>
+              </div>
             </div>
+          </section>
+        );
+      })}
+
+      {/* ── Practice-derived candidates — filed in bulk into one path ────── */}
+      {candidates.length > 0 && (
+        <section className="border-border bg-card space-y-3 rounded-xl border border-amber-200/60 p-4">
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            练习里冒出的新词
+            <span className="text-muted-foreground font-normal">
+              · {candidates.length} 词（孩子说过、还没收录）
+            </span>
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
+            {candidates.slice(0, 30).map((c) => (
+              <span
+                key={c.text}
+                className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs text-amber-800"
+              >
+                {c.text}
+                <span className="text-[10px] opacity-60">×{c.count}</span>
+              </span>
+            ))}
+            {candidates.length > 30 && (
+              <span className="text-muted-foreground px-1 text-xs">+{candidates.length - 30}</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={candPath}
+              onChange={(e) => setCandPath(e.target.value)}
+              disabled={busy === "candidates"}
+              placeholder="全部归位到，如 生词本 / 口语新词"
+              className="bg-background border-border min-w-0 flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-50"
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={fileAllCandidates}
+              disabled={busy === "candidates" || !candPath.trim()}
+            >
+              {busy === "candidates" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FolderInput className="h-4 w-4" />
+              )}
+              全部归位
+            </Button>
           </div>
         </section>
-      </div>
+      )}
     </div>
-  );
-}
-
-function TreeRow({
-  node,
-  depth,
-  canFile,
-  onFile,
-}: {
-  node: TreeNode;
-  depth: number;
-  canFile: boolean;
-  onFile: (groupId: string) => void;
-}) {
-  return (
-    <>
-      <button
-        onClick={() => canFile && onFile(node.group.id)}
-        disabled={!canFile}
-        style={{ paddingLeft: `${depth * 16 + 8}px` }}
-        className={cn(
-          "flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-sm transition",
-          canFile ? "cursor-pointer hover:bg-indigo-50 hover:text-indigo-700" : "cursor-default",
-        )}
-      >
-        <span className="text-muted-foreground">{depth > 0 ? "›" : "▸"}</span>
-        <span className="font-medium">{node.group.name}</span>
-        {node.group.item_count > 0 && (
-          <span className="text-muted-foreground text-[10px]">{node.group.item_count} 词</span>
-        )}
-      </button>
-      {node.children.map((child) => (
-        <TreeRow
-          key={child.group.id}
-          node={child}
-          depth={depth + 1}
-          canFile={canFile}
-          onFile={onFile}
-        />
-      ))}
-    </>
   );
 }

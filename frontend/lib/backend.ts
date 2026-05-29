@@ -212,19 +212,23 @@ export type GroupDetailOut = {
 
 // ── Organize workbench (docs/content-lifecycle.md §4) ────────────────────────
 
-export type InboxCaptureItem = {
-  group_id: string; // the capture bag this loose item currently sits in
-  group_name: string;
-  item: LanguageItemOut;
+// A capture bag is the UNIT of organizing — the whole bag is filed at once.
+export type InboxBag = {
+  group_id: string;
+  name: string;
+  items: LanguageItemOut[];
 };
 
 export type InboxCandidate = { text: string; count: number };
 
 export type InboxOut = {
   learner_id: string | null;
-  capture_items: InboxCaptureItem[];
+  capture_bags: InboxBag[];
   practice_candidates: InboxCandidate[];
 };
+
+export type SuggestBagOut = { tag_path: string[]; source: "ai" | "default" };
+export type FileBagOut = { target_group_id: string; moved: number };
 
 export type FileItemBody = {
   target_group_id: string;
@@ -366,6 +370,18 @@ export const backend = {
       request<void>("/organize/dismiss", {
         method: "POST",
         body: { group_id: groupId, item_id: itemId },
+        headers,
+      }),
+    suggestBag: (groupId: string, headers?: HeadersInit) =>
+      request<SuggestBagOut>("/organize/suggest-bag", {
+        method: "POST",
+        body: { group_id: groupId },
+        headers,
+      }),
+    fileBag: (sourceGroupId: string, tagPath: string[], headers?: HeadersInit) =>
+      request<FileBagOut>("/organize/file-bag", {
+        method: "POST",
+        body: { source_group_id: sourceGroupId, tag_path: tagPath },
         headers,
       }),
   },

@@ -21,7 +21,7 @@ export default async function OrganizePage() {
       </header>
       <h1 className="mb-1 text-xl font-medium">整理素材</h1>
       <p className="text-muted-foreground mb-6 text-sm">
-        把左侧的散件（采集袋的词、练习里冒出的新词）归位到右侧的教材标签树。归位即从采集袋移走。
+        每次录入是一袋。AI 已预判它该归到哪个教材标签下 —— 你确认或微调路径，点「整袋归位」即可。
       </p>
 
       <OrganizeWorkbenchClient initialInbox={inbox} groups={groups} />

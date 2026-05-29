@@ -7,6 +7,8 @@ experience distinct. See docs/content-model.md §2.6, §3.2.
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 import uuid
 from typing import Annotated, Any, Literal, cast
@@ -17,6 +19,8 @@ from sqlalchemy import CursorResult, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters import factory
+from app.adapters.llm.protocol import LLMMessage
 from app.api.auth import get_current_account
 from app.storage.db import get_db
 from app.storage.models.account import Account
@@ -29,6 +33,8 @@ from app.storage.models.content import (
 )
 from app.storage.models.learner import Learner
 from app.storage.models.turn import Turn
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["groups"])
 
@@ -769,10 +775,12 @@ def _tokenize_words(text: str) -> list[str]:
     return _WORD_RE.findall(text.lower())
 
 
-class InboxCaptureItem(BaseModel):
-    group_id: uuid.UUID  # the capture bag this loose item currently sits in
-    group_name: str
-    item: LanguageItemOut
+class InboxBag(BaseModel):
+    """A capture bag — the UNIT of organizing. The whole bag is filed at once."""
+
+    group_id: uuid.UUID
+    name: str
+    items: list[LanguageItemOut]
 
 
 class InboxCandidate(BaseModel):
@@ -782,22 +790,16 @@ class InboxCandidate(BaseModel):
 
 class InboxOut(BaseModel):
     learner_id: uuid.UUID | None
-    capture_items: list[InboxCaptureItem]
+    capture_bags: list[InboxBag]
     practice_candidates: list[InboxCandidate]
 
 
-@router.get("/organize/inbox", response_model=InboxOut)
-async def organize_inbox(
-    account: Annotated[Account, Depends(get_current_account)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> InboxOut:
-    """Loose items awaiting organizing, for the account's active learner."""
+async def _active_learner_capture_bags(account: Account, db: AsyncSession) -> list[ItemGroup]:
+    """Non-empty capture bags assigned to the account's active learner."""
     learner_id = account.last_active_learner_id
     if learner_id is None:
-        return InboxOut(learner_id=None, capture_items=[], practice_candidates=[])
-
-    # 1. Capture bags assigned to the active learner, and their items.
-    bags = list(
+        return []
+    return list(
         (
             await db.execute(
                 select(ItemGroup)
@@ -808,38 +810,56 @@ async def organize_inbox(
                     ItemGroup.archived.is_(False),
                     ItemGroupLearner.learner_id == learner_id,
                 )
+                .order_by(ItemGroup.created_at.desc())
             )
         )
         .scalars()
         .all()
     )
-    bag_by_id = {b.id: b for b in bags}
 
-    capture_items: list[InboxCaptureItem] = []
-    if bag_by_id:
+
+@router.get("/organize/inbox", response_model=InboxOut)
+async def organize_inbox(
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> InboxOut:
+    """Loose items awaiting organizing, for the account's active learner.
+
+    The unit is the capture *bag* (one ingest), not the individual word: the whole
+    bag is filed at once (see ``/organize/suggest-bag`` and ``/organize/file-bag``).
+    """
+    learner_id = account.last_active_learner_id
+    if learner_id is None:
+        return InboxOut(learner_id=None, capture_bags=[], practice_candidates=[])
+
+    # 1. Capture bags (grouped) assigned to the active learner.
+    bags = await _active_learner_capture_bags(account, db)
+    items_by_bag: dict[uuid.UUID, list[LanguageItemOut]] = {b.id: [] for b in bags}
+    if bags:
         rows = (
             await db.execute(
                 select(ItemGroupMember.group_id, LanguageItem)
                 .join(LanguageItem, LanguageItem.id == ItemGroupMember.item_id)
-                .where(ItemGroupMember.group_id.in_(list(bag_by_id.keys())))
+                .where(ItemGroupMember.group_id.in_([b.id for b in bags]))
                 .order_by(LanguageItem.type, LanguageItem.text)
             )
         ).all()
         for gid, item in rows:
-            capture_items.append(
-                InboxCaptureItem(
-                    group_id=gid,
-                    group_name=bag_by_id[gid].name,
-                    item=LanguageItemOut(
-                        id=item.id,
-                        type=item.type,
-                        text=item.text,
-                        anchor=item.anchor,
-                        cefr_level=item.cefr_level,
-                        pos=item.pos,
-                    ),
+            items_by_bag[gid].append(
+                LanguageItemOut(
+                    id=item.id,
+                    type=item.type,
+                    text=item.text,
+                    anchor=item.anchor,
+                    cefr_level=item.cefr_level,
+                    pos=item.pos,
                 )
             )
+    capture_bags = [
+        InboxBag(group_id=b.id, name=b.name, items=items_by_bag[b.id])
+        for b in bags
+        if items_by_bag[b.id]  # skip already-emptied bags
+    ]
 
     # 2. Practice-derived candidates: words the child said, not yet anywhere in
     #    the account's content. Derived from turn text — no separate event table.
@@ -870,7 +890,7 @@ async def organize_inbox(
 
     return InboxOut(
         learner_id=learner_id,
-        capture_items=capture_items,
+        capture_bags=capture_bags,
         practice_candidates=practice_candidates,
     )
 
@@ -962,3 +982,155 @@ async def organize_dismiss(
         )
     )
     await db.commit()
+
+
+# ── Bag-level organizing (whole capture bag at once + AI-suggested placement) ──
+#
+# Picking words one by one is tedious; the unit of organizing is the bag. The AI
+# proposes a tag path (default = the bag's name); the human tweaks it and files the
+# whole bag in one move. This is organize-time AI-assisted curation (human confirms),
+# not capture-time inference — see docs/content-lifecycle.md §5/§6.
+
+
+def _path_of(group: ItemGroup, by_id: dict[uuid.UUID, ItemGroup]) -> str:
+    names: list[str] = []
+    cur: ItemGroup | None = group
+    seen: set[uuid.UUID] = set()
+    while cur is not None and cur.id not in seen:
+        seen.add(cur.id)
+        names.append(cur.name)
+        cur = by_id.get(cur.parent_id) if cur.parent_id is not None else None
+    return " › ".join(reversed(names))  # noqa: RUF001 (intentional UI path separator)
+
+
+_SUGGEST_PROMPT = """You organize a child's English learning materials into a tag tree \
+(textbook → book → unit → lesson, variable depth). Given a freshly captured set of words \
+and the family's EXISTING tag paths, return the single best tag path to file this set under.
+
+Rules:
+- Strongly prefer extending an EXISTING path (reuse exact tag names) when the content fits.
+- Otherwise propose a sensible new path (2-4 tags, e.g. ["Tot Talk", "Book 1", "Unit 3"]).
+- Tags are short human-readable names; never invent words not implied by the input.
+- Return ONLY JSON: {"tag_path": ["...", "..."]}. No prose, no fences."""
+
+
+class SuggestBagBody(BaseModel):
+    group_id: uuid.UUID
+
+
+class SuggestBagOut(BaseModel):
+    tag_path: list[str]
+    source: Literal["ai", "default"]
+
+
+@router.post("/organize/suggest-bag", response_model=SuggestBagOut)
+async def organize_suggest_bag(
+    body: SuggestBagBody,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SuggestBagOut:
+    """Predict where a capture bag should be filed. Falls back to the bag's own name."""
+    bag = await _require_owned_group(body.group_id, account, db)
+    default = SuggestBagOut(tag_path=[bag.name.strip() or "未分类"], source="default")
+
+    words = [
+        t
+        for (t,) in (
+            await db.execute(
+                select(LanguageItem.text)
+                .join(ItemGroupMember, ItemGroupMember.item_id == LanguageItem.id)
+                .where(ItemGroupMember.group_id == bag.id)
+                .limit(60)
+            )
+        ).all()
+    ]
+    if not words:
+        return default
+
+    canonical = list(
+        (
+            await db.execute(
+                select(ItemGroup).where(
+                    ItemGroup.owner_account_id == account.id,
+                    ItemGroup.kind != _CAPTURE_KIND,
+                    ItemGroup.archived.is_(False),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_id = {g.id: g for g in canonical}
+    existing_paths = sorted({_path_of(g, by_id) for g in canonical})
+    existing_block = "\n".join(f"- {p}" for p in existing_paths) or "(none yet)"
+
+    prompt = (
+        f"{_SUGGEST_PROMPT}\n\n"
+        f"--- EXISTING TAG PATHS ---\n{existing_block}\n\n"
+        f"--- CAPTURED SET ---\n"
+        f"name: {bag.name}\nwords: {', '.join(words[:60])}\n"
+    )
+    try:
+        resp = await factory.llm.invoke([LLMMessage(role="user", content=prompt)], max_tokens=200)
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", resp.text.strip())
+        data = json.loads(text)
+        tag_path = [str(s).strip() for s in data.get("tag_path", []) if str(s).strip()]
+        if tag_path:
+            return SuggestBagOut(tag_path=tag_path[:6], source="ai")
+    except Exception:
+        log.warning("organize suggest-bag: LLM suggestion failed, using default", exc_info=True)
+    return default
+
+
+class FileBagBody(BaseModel):
+    source_group_id: uuid.UUID
+    tag_path: list[str]
+    archive_emptied: bool = True
+
+
+class FileBagOut(BaseModel):
+    target_group_id: uuid.UUID
+    moved: int
+
+
+@router.post("/organize/file-bag", response_model=FileBagOut)
+async def organize_file_bag(
+    body: FileBagBody,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
+) -> FileBagOut:
+    """Move ALL items of a capture bag into the tag_path leaf, then archive the bag."""
+    x_role = request.headers.get("x-role")
+    source = await _get_accessible_group(body.source_group_id, account, db)
+    await _verify_write_permission(source, account, db, x_role=x_role)
+
+    clean = [t.strip() for t in body.tag_path if t.strip()]
+    if not clean:
+        raise HTTPException(status_code=400, detail="tag_path cannot be empty")
+
+    _, leaf = await _assemble_tag_path(db, account, clean, account.last_active_learner_id)
+
+    item_ids = [
+        i
+        for (i,) in (
+            await db.execute(
+                select(ItemGroupMember.item_id).where(ItemGroupMember.group_id == source.id)
+            )
+        ).all()
+    ]
+    if item_ids:
+        await db.execute(
+            pg_insert(ItemGroupMember)
+            .values([{"group_id": leaf.id, "item_id": iid} for iid in item_ids])
+            .on_conflict_do_nothing(index_elements=["group_id", "item_id"])
+        )
+        await db.execute(delete(ItemGroupMember).where(ItemGroupMember.group_id == source.id))
+
+    if body.archive_emptied:
+        source.archived = True
+    if account.last_active_learner_id is not None:
+        leaf.last_edited_by_learner_id = account.last_active_learner_id
+
+    await db.commit()
+    return FileBagOut(target_group_id=leaf.id, moved=len(item_ids))
