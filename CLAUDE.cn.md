@@ -405,7 +405,7 @@ just db-history
 
 **下一步 TODO（按优先级）：**
 - [ ] **验证核心循环**：用手工书（1–2 节）+ 一个真实孩子（见 `docs/content-lifecycle.cn.md` §9）
-- [ ] 整理工作台：收件箱（采集 + 练习派生候选）→ tag 树，拖拽归位（`content-lifecycle.cn.md` §4.2/§4.3）
+- [x] 整理工作台 V1：收件箱（采集 + 练习派生）→ tag 树，点选归位/移动（`parent/organize`，端点 `/organize/*`）；待办：拖拽、AI 提议成组
 - [ ] 内置首批教材（Tot Talk 系列 — 给库下种，冷启动）
 - [ ] `_assemble_tag_path` / scope V1 的 DB 集成测试（需 Postgres 测试夹具）
 - [ ] `learner_word_stats` 掌握度表（V2）

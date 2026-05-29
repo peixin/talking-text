@@ -412,7 +412,7 @@ Rules:
 
 **Next TODO (priority order):**
 - [ ] **Validate the core loop** with a hand-made book — 1–2 lessons + 1 real child (see `docs/content-lifecycle.md` §9)
-- [ ] Organize workbench — inbox (capture + practice-derived candidates) → tag tree, drag-to-file (`content-lifecycle.md` §4.2/§4.3)
+- [x] Organize workbench V1 — inbox (capture + practice-derived) → tag tree, click-to-file/move (`parent/organize`, endpoints `/organize/*`); remaining: drag UX, AI grouping
 - [ ] First-party textbook data (Tot Talk series — seed the library, cold-start)
 - [ ] DB-backed tests for `_assemble_tag_path` / scope V1 (needs a Postgres test fixture)
 - [ ] `learner_word_stats` mastery table (V2, when mastery tracker is needed)
