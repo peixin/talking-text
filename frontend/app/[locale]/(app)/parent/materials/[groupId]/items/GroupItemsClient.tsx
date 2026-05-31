@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, BookOpen, Loader2, Plus, Save, X } from "lucide-react";
+import { Link } from "@/i18n/routing";
 
 import { Button } from "@/components/ui/button";
 import type { GroupDetailOut, ItemType, LanguageItemOut } from "@/lib/backend";
@@ -10,11 +11,12 @@ import { updateGroup } from "../../actions";
 
 interface Props {
   group: GroupDetailOut;
+  readOnly?: boolean;
 }
 
 const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"];
 
-export function GroupItemsClient({ group }: Props) {
+export function GroupItemsClient({ group, readOnly = false }: Props) {
   const router = useRouter();
 
   // Local state for language items
@@ -130,19 +132,30 @@ export function GroupItemsClient({ group }: Props) {
             <ArrowLeft className="mr-1.5 h-4 w-4" />
             返回教材信息
           </Button>
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            size="sm"
-            className="flex-1 bg-indigo-600 text-white hover:bg-indigo-700 sm:flex-none"
-          >
-            {saving ? (
-              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-1.5 h-4 w-4" />
-            )}
-            保存所有修改
-          </Button>
+          {readOnly ? (
+            <Button
+              onClick={() => router.push(`/parent/materials/${group.id}/items/edit`)}
+              size="sm"
+              className="flex flex-1 items-center justify-center bg-indigo-600 text-white hover:bg-indigo-700 sm:flex-none"
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              编辑词句表
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSave}
+              disabled={saving}
+              size="sm"
+              className="flex-1 bg-indigo-600 text-white hover:bg-indigo-700 sm:flex-none"
+            >
+              {saving ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-1.5 h-4 w-4" />
+              )}
+              保存所有修改
+            </Button>
+          )}
         </div>
       </div>
 
@@ -157,10 +170,12 @@ export function GroupItemsClient({ group }: Props) {
                 录入本次课程需要掌握的英文核心生词，AI 在对话中会重点考察并辅助孩子造句。
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => addItem("word")}>
-              <Plus className="mr-1.5 h-4 w-4 text-indigo-600" />
-              添加单词
-            </Button>
+            {!readOnly && (
+              <Button variant="outline" size="sm" onClick={() => addItem("word")}>
+                <Plus className="mr-1.5 h-4 w-4 text-indigo-600" />
+                添加单词
+              </Button>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -183,44 +198,78 @@ export function GroupItemsClient({ group }: Props) {
                     key={originalIndex}
                     className="flex flex-col gap-3 py-3 last:border-0 sm:flex-row sm:items-center sm:py-2"
                   >
-                    <input
-                      type="text"
-                      value={item.text}
-                      onChange={(e) => updateItem(originalIndex, { text: e.target.value })}
-                      placeholder="输入英文单词 (如: yellow)"
-                      className="bg-background border-border focus:ring-ring w-full min-w-0 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:flex-[3]"
-                    />
-                    <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:flex-[2]">
-                      <input
-                        type="text"
-                        value={item.pos || ""}
-                        onChange={(e) => updateItem(originalIndex, { pos: e.target.value })}
-                        placeholder="词性 (如: noun, verb)"
-                        className="bg-background border-border focus:ring-ring min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:w-36"
-                      />
-                      <select
-                        value={item.cefr_level || ""}
-                        onChange={(e) =>
-                          updateItem(originalIndex, { cefr_level: e.target.value || null })
-                        }
-                        className="bg-background border-border focus:ring-ring shrink-0 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1"
-                      >
-                        <option value="">难度</option>
-                        {CEFR_LEVELS.map((lvl) => (
-                          <option key={lvl} value={lvl}>
-                            {lvl}
-                          </option>
-                        ))}
-                      </select>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeItem(originalIndex)}
-                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {readOnly ? (
+                      <div className="flex flex-1 items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-foreground text-sm font-semibold select-all">
+                            {item.text || "—"}
+                          </span>
+                          {item.source_group_name && (
+                            <Link
+                              href={`/parent/materials/${item.source_group_id}/items/edit`}
+                              className="rounded border border-indigo-100/50 bg-indigo-50/50 px-1.5 py-0.5 text-[9px] font-medium text-indigo-600 hover:bg-indigo-100 dark:border-indigo-900/50 dark:bg-indigo-950/20"
+                              title="点击编辑此课时词句"
+                            >
+                              来自: {item.source_group_name}
+                            </Link>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {item.pos && (
+                            <span className="rounded border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">
+                              {item.pos}
+                            </span>
+                          )}
+                          {item.cefr_level && (
+                            <span className="rounded border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
+                              {item.cefr_level}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <input
+                          type="text"
+                          value={item.text}
+                          onChange={(e) => updateItem(originalIndex, { text: e.target.value })}
+                          placeholder="输入英文单词 (如: yellow)"
+                          className="bg-background border-border focus:ring-ring w-full min-w-0 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:flex-[3]"
+                        />
+                        <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:flex-[2]">
+                          <input
+                            type="text"
+                            value={item.pos || ""}
+                            onChange={(e) => updateItem(originalIndex, { pos: e.target.value })}
+                            placeholder="词性 (如: noun, verb)"
+                            className="bg-background border-border focus:ring-ring min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:w-36"
+                          />
+                          <select
+                            value={item.cefr_level || ""}
+                            onChange={(e) =>
+                              updateItem(originalIndex, { cefr_level: e.target.value || null })
+                            }
+                            className="bg-background border-border focus:ring-ring shrink-0 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1"
+                          >
+                            <option value="">难度</option>
+                            {CEFR_LEVELS.map((lvl) => (
+                              <option key={lvl} value={lvl}>
+                                {lvl}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeItem(originalIndex)}
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -237,10 +286,12 @@ export function GroupItemsClient({ group }: Props) {
                 录入常见的固定词组、动词短语等搭配 (如: get up, by the way)。
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => addItem("phrase")}>
-              <Plus className="mr-1.5 h-4 w-4 text-indigo-600" />
-              添加短语
-            </Button>
+            {!readOnly && (
+              <Button variant="outline" size="sm" onClick={() => addItem("phrase")}>
+                <Plus className="mr-1.5 h-4 w-4 text-indigo-600" />
+                添加短语
+              </Button>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -263,37 +314,64 @@ export function GroupItemsClient({ group }: Props) {
                     key={originalIndex}
                     className="flex flex-col gap-3 py-3 last:border-0 sm:flex-row sm:items-center sm:py-2"
                   >
-                    <input
-                      type="text"
-                      value={item.text}
-                      onChange={(e) => updateItem(originalIndex, { text: e.target.value })}
-                      placeholder="输入固定短语/搭配 (如: read a book)"
-                      className="bg-background border-border focus:ring-ring w-full min-w-0 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:flex-[4]"
-                    />
-                    <div className="flex w-full items-center gap-3 sm:w-auto">
-                      <select
-                        value={item.cefr_level || ""}
-                        onChange={(e) =>
-                          updateItem(originalIndex, { cefr_level: e.target.value || null })
-                        }
-                        className="bg-background border-border focus:ring-ring flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:flex-none"
-                      >
-                        <option value="">难度</option>
-                        {CEFR_LEVELS.map((lvl) => (
-                          <option key={lvl} value={lvl}>
-                            {lvl}
-                          </option>
-                        ))}
-                      </select>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeItem(originalIndex)}
-                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {readOnly ? (
+                      <div className="flex flex-1 items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-foreground text-sm font-semibold select-all">
+                            {item.text || "—"}
+                          </span>
+                          {item.source_group_name && (
+                            <Link
+                              href={`/parent/materials/${item.source_group_id}/items/edit`}
+                              className="rounded border border-indigo-100/50 bg-indigo-50/50 px-1.5 py-0.5 text-[9px] font-medium text-indigo-600 hover:bg-indigo-100 dark:border-indigo-900/50 dark:bg-indigo-950/20"
+                              title="点击编辑此课时词句"
+                            >
+                              来自: {item.source_group_name}
+                            </Link>
+                          )}
+                        </div>
+                        {item.cefr_level && (
+                          <span className="rounded border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
+                            {item.cefr_level}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <input
+                          type="text"
+                          value={item.text}
+                          onChange={(e) => updateItem(originalIndex, { text: e.target.value })}
+                          placeholder="输入固定短语/搭配 (如: read a book)"
+                          className="bg-background border-border focus:ring-ring w-full min-w-0 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:flex-[4]"
+                        />
+                        <div className="flex w-full items-center gap-3 sm:w-auto">
+                          <select
+                            value={item.cefr_level || ""}
+                            onChange={(e) =>
+                              updateItem(originalIndex, { cefr_level: e.target.value || null })
+                            }
+                            className="bg-background border-border focus:ring-ring flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:flex-none"
+                          >
+                            <option value="">难度</option>
+                            {CEFR_LEVELS.map((lvl) => (
+                              <option key={lvl} value={lvl}>
+                                {lvl}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeItem(originalIndex)}
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -313,74 +391,115 @@ export function GroupItemsClient({ group }: Props) {
                 ___.)。
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => addItem("pattern")}>
-              <Plus className="mr-1.5 h-4 w-4 text-indigo-600" />
-              添加句型
-            </Button>
+            {!readOnly && (
+              <Button variant="outline" size="sm" onClick={() => addItem("pattern")}>
+                <Plus className="mr-1.5 h-4 w-4 text-indigo-600" />
+                添加句型
+              </Button>
+            )}
           </div>
 
           <div className="space-y-2">
             {itemsByType.pattern.length === 0 ? (
               <div className="rounded-lg border border-dashed bg-slate-50/50 py-8 text-center dark:bg-slate-900/10">
-                <p className="text-muted-foreground text-sm italic">暂无句型/语法模板</p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-2 text-indigo-600 hover:text-indigo-700"
-                  onClick={() => addItem("pattern")}
-                >
-                  + 立即添加第一个句型
-                </Button>
+                <p className="text-muted-foreground text-sm italic">暂无句型学习点</p>
+                {!readOnly && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 text-indigo-600 hover:text-indigo-700"
+                    onClick={() => addItem("pattern")}
+                  >
+                    + 立即添加第一个句型
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="max-h-[500px] space-y-4 divide-y overflow-y-auto pr-2">
                 {itemsByType.pattern.map(({ item, originalIndex }) => (
                   <div key={originalIndex} className="flex flex-col gap-3 py-4 last:border-0">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                      <input
-                        type="text"
-                        value={item.text}
-                        onChange={(e) => updateItem(originalIndex, { text: e.target.value })}
-                        placeholder="句型模板 (如: I want to ___.)"
-                        className="bg-background border-border focus:ring-ring w-full min-w-0 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:flex-[4]"
-                      />
-                      <div className="flex w-full items-center gap-3 sm:w-auto">
-                        <select
-                          value={item.cefr_level || ""}
-                          onChange={(e) =>
-                            updateItem(originalIndex, { cefr_level: e.target.value || null })
-                          }
-                          className="bg-background border-border focus:ring-ring flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:flex-none"
-                        >
-                          <option value="">难度</option>
-                          {CEFR_LEVELS.map((lvl) => (
-                            <option key={lvl} value={lvl}>
-                              {lvl}
-                            </option>
-                          ))}
-                        </select>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeItem(originalIndex)}
-                          className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
+                    {readOnly ? (
+                      <div className="flex-1 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-foreground text-sm font-semibold select-all">
+                              {item.text || "—"}
+                            </span>
+                            {item.source_group_name && (
+                              <Link
+                                href={`/parent/materials/${item.source_group_id}/items/edit`}
+                                className="rounded border border-indigo-100/50 bg-indigo-50/50 px-1.5 py-0.5 text-[9px] font-medium text-indigo-600 hover:bg-indigo-100 dark:border-indigo-900/50 dark:bg-indigo-950/20"
+                                title="点击编辑此课时词句"
+                              >
+                                来自: {item.source_group_name}
+                              </Link>
+                            )}
+                          </div>
+                          {item.cefr_level && (
+                            <span className="rounded border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
+                              {item.cefr_level}
+                            </span>
+                          )}
+                        </div>
+                        {item.anchor && (
+                          <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-1.5 text-xs text-slate-700 dark:bg-slate-900/30">
+                            <span className="text-muted-foreground text-[10px] font-bold uppercase">
+                              Anchor 定位锚点:
+                            </span>
+                            <span className="font-mono text-xs select-all">{item.anchor}</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-3 sm:flex-row sm:items-center dark:bg-slate-900/30">
-                      <span className="text-muted-foreground shrink-0 text-xs font-semibold tracking-wider uppercase">
-                        Anchor 定位锚点:
-                      </span>
-                      <input
-                        type="text"
-                        value={item.anchor || ""}
-                        onChange={(e) => updateItem(originalIndex, { anchor: e.target.value })}
-                        placeholder="句型起始段，AI用来做识别匹配 (如: i want to)"
-                        className="bg-background border-border focus:ring-ring min-w-0 flex-1 rounded-md border px-3 py-1 text-xs outline-none focus:ring-1"
-                      />
-                    </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                          <input
+                            type="text"
+                            value={item.text}
+                            onChange={(e) => updateItem(originalIndex, { text: e.target.value })}
+                            placeholder="句型模板 (如: I want to ___.)"
+                            className="bg-background border-border focus:ring-ring w-full min-w-0 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:flex-[4]"
+                          />
+                          <div className="flex w-full items-center gap-3 sm:w-auto">
+                            <select
+                              value={item.cefr_level || ""}
+                              onChange={(e) =>
+                                updateItem(originalIndex, { cefr_level: e.target.value || null })
+                              }
+                              className="bg-background border-border focus:ring-ring flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 sm:flex-none"
+                            >
+                              <option value="">难度</option>
+                              {CEFR_LEVELS.map((lvl) => (
+                                <option key={lvl} value={lvl}>
+                                  {lvl}
+                                </option>
+                              ))}
+                            </select>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeItem(originalIndex)}
+                              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-3 sm:flex-row sm:items-center dark:bg-slate-900/30">
+                          <span className="text-muted-foreground shrink-0 text-xs font-semibold tracking-wider uppercase">
+                            Anchor 定位锚点:
+                          </span>
+                          <input
+                            type="text"
+                            value={item.anchor || ""}
+                            onChange={(e) => updateItem(originalIndex, { anchor: e.target.value })}
+                            placeholder="句型起始段，AI用来做识别匹配 (如: i want to)"
+                            className="bg-background border-border focus:ring-ring min-w-0 flex-1 rounded-md border px-3 py-1 text-xs outline-none focus:ring-1"
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>

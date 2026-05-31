@@ -1,7 +1,6 @@
-import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import { createApi } from "@/lib/api";
-import { GroupItemsClient } from "./GroupItemsClient";
+import { GroupItemsClient } from "../GroupItemsClient";
 import { TagPathHeader } from "@/components/TagPathHeader";
 
 interface Props {
@@ -11,9 +10,8 @@ interface Props {
   }>;
 }
 
-export default async function GroupItemsPage({ params }: Props) {
+export default async function GroupItemsEditPage({ params }: Props) {
   const { groupId } = await params;
-  const t = await getTranslations("Materials");
   const api = await createApi();
 
   // Fetch details and all groups in parallel
@@ -23,10 +21,10 @@ export default async function GroupItemsPage({ params }: Props) {
     <div className="mx-auto w-full max-w-4xl px-4 py-6">
       <header className="mb-2 flex items-center gap-4">
         <Link
-          href={`/parent/materials/${groupId}`}
+          href={`/parent/materials/${groupId}/items`}
           className="text-muted-foreground hover:text-primary text-sm transition"
         >
-          ← {t("back_to_detail", { defaultValue: "返回教材信息" })}
+          ← 返回词句列表
         </Link>
       </header>
 
@@ -35,10 +33,10 @@ export default async function GroupItemsPage({ params }: Props) {
         groupName={group.name}
         groupKind={group.kind}
         allGroups={allGroups}
-        subtitle="为该素材定制的详细词表与核心句式大纲列表。"
+        subtitle="专为该素材定制的详细词表与核心句式管理器。所有的单词、短语和句型修改在这里统一保存。"
       />
 
-      <GroupItemsClient group={group} readOnly={true} />
+      <GroupItemsClient group={group} readOnly={false} />
     </div>
   );
 }

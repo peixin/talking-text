@@ -1,44 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
-  AlertTriangle,
   Archive,
   ArchiveRestore,
   BookOpen,
   Bookmark,
-  Camera,
-  Check,
   ChevronDown,
   ChevronRight,
-  HelpCircle,
-  Image as ImageIcon,
+  Eye,
   Inbox,
   Loader2,
   MessageSquare,
-  Mic,
-  MicOff,
-  Pencil,
   Plus,
   Sparkles,
   Trash2,
-  X,
   Zap,
 } from "lucide-react";
-import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { CefrLevel, ExtractedItem, GroupOut, IngestionResult, ItemType } from "@/lib/backend";
-import { archiveGroup, deleteGroup, createGroup, startSessionFromGroupAction } from "./actions";
-import {
-  transcribeIngestion,
-  extractIngestion,
-} from "@/app/[locale]/(app)/chat/[sessionId]/actions";
+import type { GroupOut } from "@/lib/backend";
+import { archiveGroup, deleteGroup, startSessionFromGroupAction } from "./actions";
 import { Link } from "@/i18n/routing";
 import { useKindLabel } from "./MaterialPickersClient";
+import { IngestDrawerClient } from "@/app/[locale]/(app)/chat/[sessionId]/IngestDrawerClient";
 
 const KIND_ICON: Record<string, typeof BookOpen> = {
   textbook_book: BookOpen,
@@ -58,18 +46,8 @@ interface GroupNode {
   children: GroupNode[];
 }
 
-type Step =
-  | { kind: "input" }
-  | { kind: "extracting" }
-  | { kind: "preview"; result: IngestionResult }
-  | { kind: "saving" }
-  | { kind: "error"; message: string };
-
-const CEFR_OPTIONS = ["", "A1", "A2", "B1", "B2", "C1", "C2"];
-
 export function MaterialsClient({ groups: initialGroups }: Props) {
   const t = useTranslations("Materials");
-  const tIngest = useTranslations("Ingest");
   const kindLabel = useKindLabel();
   const router = useRouter();
   const [groups, setGroups] = useState<GroupOut[]>(initialGroups);
@@ -78,30 +56,6 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
 
   // Smart Ingest Dialog State
   const [isIngestOpen, setIsIngestOpen] = useState(false);
-  const [step, setStep] = useState<Step>({ kind: "input" });
-  const [files, setFiles] = useState<File[]>([]);
-  const [description, setDescription] = useState("");
-
-  const [warningMessage, setWarningMessage] = useState<string | null>(null);
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
-  const warningTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Transformed details inside preview step. Capture is a flat bag: just a name,
-  // no hierarchy — structuring is a separate step. See docs/content-lifecycle.md §3.
-  const [extractedItems, setExtractedItems] = useState<ExtractedItem[]>([]);
-  const [name, setName] = useState<string>("");
-  const [inferredCefr, setInferredCefr] = useState<string | null>(null);
-
-  // Audio Recorder State
-  const [recordMode, setRecordMode] = useState<"idle" | "recording" | "transcribing">("idle");
-  const [recordError, setRecordError] = useState<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const recorderChunksRef = useRef<BlobPart[]>([]);
-  const recorderStreamRef = useRef<MediaStream | null>(null);
-  const recorderMimeRef = useRef<string>("");
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   // Set initial state on list updates
   useEffect(() => {
@@ -133,6 +87,45 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
     return roots;
   }, [groups]);
 
+  // Recursively compute descendant counts for every group
+  const descendantCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    const active = groups.filter((g) => !g.archived);
+    const childrenMap = new Map<string, string[]>();
+    const directCounts = new Map<string, number>();
+
+    active.forEach((g) => {
+      directCounts.set(g.id, g.item_count || 0);
+      if (g.parent_id) {
+        const list = childrenMap.get(g.parent_id) || [];
+        list.push(g.id);
+        childrenMap.set(g.parent_id, list);
+      }
+    });
+
+    function getRecursiveCount(id: string, visited: Set<string> = new Set()): number {
+      if (counts.has(id)) return counts.get(id)!;
+      if (visited.has(id)) {
+        console.warn("Circular reference detected in getRecursiveCount for group:", id);
+        return 0;
+      }
+      visited.add(id);
+      let sum = directCounts.get(id) || 0;
+      const children = childrenMap.get(id) || [];
+      children.forEach((childId) => {
+        sum += getRecursiveCount(childId, new Set(visited));
+      });
+      counts.set(id, sum);
+      return sum;
+    }
+
+    active.forEach((g) => {
+      getRecursiveCount(g.id);
+    });
+
+    return counts;
+  }, [groups]);
+
   // Canonical textbook trees vs. un-organized capture bags (the latter go to the
   // organize workbench). Splitting them makes the tag tree actually visible.
   const canonicalRoots = useMemo(
@@ -140,267 +133,27 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
     [activeTree],
   );
   const captureRoots = useMemo(
-    () => activeTree.filter((n) => n.group.kind === "quick_practice"),
+    () => activeTree.filter((n) => n.group.kind === "quick_practice" && n.group.item_count > 0),
     [activeTree],
   );
 
   const archivedGroups = useMemo(() => {
-    return groups.filter((g) => g.archived);
+    return groups.filter((g) => g.archived && g.kind !== "quick_practice");
   }, [groups]);
 
-  // Audio Remux helpers
-  function pickRecorderMime(): string {
-    if (typeof MediaRecorder === "undefined") return "";
-    const candidates = [
-      "audio/webm;codecs=opus",
-      "audio/webm",
-      "audio/ogg;codecs=opus",
-      "audio/mp4",
-    ];
-    for (const m of candidates) if (MediaRecorder.isTypeSupported(m)) return m;
-    return "";
-  }
-
-  function stopRecorderStream() {
-    recorderStreamRef.current?.getTracks().forEach((tr) => tr.stop());
-    recorderStreamRef.current = null;
-    recorderRef.current = null;
-  }
-
   function handleOpenChange(open: boolean) {
-    if (open) {
-      setStep({ kind: "input" });
-      setFiles([]);
-      setDescription("");
-      setExtractedItems([]);
-      setWarningMessage(null);
-      setPreviewImageUrl(null);
-      setName("");
-      setInferredCefr(null);
-      if (warningTimeoutRef.current) {
-        clearTimeout(warningTimeoutRef.current);
-        warningTimeoutRef.current = null;
-      }
-      setIsIngestOpen(true);
-    } else {
-      setIsIngestOpen(false);
-      stopRecorderStream();
-      setWarningMessage(null);
-      setPreviewImageUrl(null);
-      setName("");
-      setInferredCefr(null);
-      if (warningTimeoutRef.current) {
-        clearTimeout(warningTimeoutRef.current);
-        warningTimeoutRef.current = null;
-      }
-    }
-  }
-
-  async function startRecording() {
-    setRecordError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 48000,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-      });
-      recorderStreamRef.current = stream;
-      const mime = pickRecorderMime();
-      recorderMimeRef.current = mime;
-      const recorder = mime
-        ? new MediaRecorder(stream, { mimeType: mime })
-        : new MediaRecorder(stream);
-      recorderRef.current = recorder;
-      recorderChunksRef.current = [];
-      recorder.ondataavailable = (ev) => {
-        if (ev.data && ev.data.size > 0) recorderChunksRef.current.push(ev.data);
-      };
-      recorder.onstop = () => void finishRecording();
-      recorder.start();
-      setRecordMode("recording");
-    } catch {
-      setRecordError("麦克风权限被拒绝，无法录音");
-      setRecordMode("idle");
-    }
-  }
-
-  function stopRecording() {
-    if (recorderRef.current?.state === "recording") {
-      recorderRef.current.stop();
-      setRecordMode("transcribing");
-    }
-  }
-
-  async function finishRecording() {
-    const blob = new Blob(recorderChunksRef.current, {
-      type: recorderMimeRef.current || "audio/webm",
-    });
-    stopRecorderStream();
-    if (blob.size === 0) {
-      setRecordError("录音文件为空，请重试");
-      setRecordMode("idle");
-      return;
-    }
-    const fd = new FormData();
-    const ext = (recorderMimeRef.current || "audio/webm").includes("mp4") ? "mp4" : "webm";
-    fd.append("audio", blob, `voice.${ext}`);
-    const result = await transcribeIngestion(fd);
-    if (!result.ok) {
-      setRecordError(result.error || "语音识别失败，请手动输入或重试");
-      setRecordMode("idle");
-      return;
-    }
-    setDescription((prev) => {
-      const trimmed = prev.trim();
-      return trimmed ? `${trimmed} ${result.text}` : result.text;
-    });
-    setRecordMode("idle");
-  }
-
-  function handleRecordToggle() {
-    if (recordMode === "recording") stopRecording();
-    else if (recordMode === "idle") void startRecording();
-  }
-
-  const previews = useMemo(
-    () => files.map((f) => ({ name: f.name, url: URL.createObjectURL(f) })),
-    [files],
-  );
-
-  useEffect(() => {
-    return () => previews.forEach((p) => URL.revokeObjectURL(p.url));
-  }, [previews]);
-
-  const triggerWarning = (msg: string) => {
-    setWarningMessage(msg);
-    if (warningTimeoutRef.current) {
-      clearTimeout(warningTimeoutRef.current);
-    }
-    warningTimeoutRef.current = setTimeout(() => {
-      setWarningMessage(null);
-    }, 5000);
-  };
-
-  function addFiles(selected: FileList | File[] | null) {
-    if (!selected) return;
-    const arr = Array.from(selected);
-    if (arr.length === 0) return;
-
-    let limitWarning = false;
-    let sizeWarning = false;
-    const next = [...files];
-    let currentTotalSize = next.reduce((sum, file) => sum + file.size, 0);
-
-    for (const f of arr) {
-      if (next.length >= 5) {
-        limitWarning = true;
-        break;
-      }
-      if (f.size > 10 * 1024 * 1024) {
-        sizeWarning = true;
-        continue;
-      }
-      if (currentTotalSize + f.size > 10 * 1024 * 1024) {
-        sizeWarning = true;
-        continue;
-      }
-      next.push(f);
-      currentTotalSize += f.size;
-    }
-    setFiles(next);
-
-    if (limitWarning) {
-      triggerWarning(tIngest("warning_limit_reached"));
-    } else if (sizeWarning) {
-      triggerWarning(tIngest("warning_size_reached"));
-    }
-  }
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-
-    const pastedFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.indexOf("image") !== -1) {
-        const file = item.getAsFile();
-        if (file) {
-          const extension = file.type.split("/")[1] || "png";
-          const fileName =
-            file.name === "image.png" ? `paste-${Date.now()}.${extension}` : file.name;
-          const customFile = new File([file], fileName, { type: file.type });
-          pastedFiles.push(customFile);
-        }
-      }
-    }
-
-    if (pastedFiles.length > 0) {
-      e.preventDefault();
-      addFiles(pastedFiles);
-    }
-  };
-
-  // Handle core AI extraction
-  async function handleExtract() {
-    if (files.length === 0 && !description.trim()) {
-      setStep({ kind: "error", message: "请提供课本照片、录音或手动输入描述" });
-      return;
-    }
-    setStep({ kind: "extracting" });
-    const fd = new FormData();
-    if (description.trim()) fd.append("description", description.trim());
-    for (const f of files) fd.append("images", f, f.name);
-
-    const res = await extractIngestion(fd);
-    if (!res.ok) {
-      setStep({ kind: "error", message: res.error || "智能解析失败，请检查网络并重试" });
-      return;
-    }
-
-    const { result } = res;
-    setExtractedItems(result.items);
-
-    const meta = result.metadata;
-    setName((meta.suggested_name || "").trim());
-    setInferredCefr(meta.cefr_level);
-
-    setStep({ kind: "preview", result });
-  }
-
-  // Saving smart creation
-  async function handleSaveExtracted() {
-    setStep({ kind: "saving" });
-    const formattedItems = extractedItems
-      .filter((i) => i.text.trim().length > 0)
-      .map((i) => ({
-        text: i.text.trim(),
-        type: i.type,
-        anchor: i.anchor || null,
-        cefr_level: i.cefr || null,
-        pos: i.pos || null,
-      }));
-
-    const res = await createGroup({
-      name: name.trim() || "未分类教材",
-      kind: "quick_practice",
-      items: formattedItems,
-    });
-
-    if (res.ok) {
-      setGroups((prev) => [res.group, ...prev]);
-      handleOpenChange(false);
-      router.refresh();
-    } else {
-      setStep({ kind: "error", message: res.error || "保存失败，请稍后重试" });
-    }
+    setIsIngestOpen(open);
   }
 
   // Trigger fast chat session
   function handleStartSession(groupId: string) {
+    const totalCount = descendantCounts.get(groupId) || 0;
+    if (totalCount > 100) {
+      const ok = confirm(
+        `当前选择的教材层级包含词句较多（共 ${totalCount} 个）。\n为了保证最佳对话练习效果，AI 老师将智能优先挑选您还未掌握的词句（最多 100 个）进行重点操练。\n建议您也可以选择具体单元或课次进行针对性练习。\n\n是否继续？`,
+      );
+      if (!ok) return;
+    }
     setBusy(groupId);
     startTransition(async () => {
       const res = await startSessionFromGroupAction(groupId);
@@ -522,6 +275,7 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
                 depth={0}
                 busy={busy}
                 kindLabel={kindLabel}
+                descendantCounts={descendantCounts}
                 onStartSession={handleStartSession}
                 onArchive={handleToggleArchive}
                 onDelete={confirmDelete}
@@ -578,432 +332,14 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
       )}
 
       {/* Ingestion Drawer Dialog Overlay */}
-      <DialogPrimitive.Root open={isIngestOpen} onOpenChange={handleOpenChange}>
-        <DialogPrimitive.Portal>
-          <DialogPrimitive.Backdrop className="data-[state=open]:animate-in data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/60 backdrop-blur-sm duration-150" />
-          <DialogPrimitive.Popup className="bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=open]:zoom-in-95 fixed inset-x-4 bottom-4 z-50 mx-auto flex max-h-[85vh] w-full max-w-3xl flex-col rounded-2xl border shadow-2xl duration-200 outline-none sm:inset-x-0 sm:top-[10%] sm:bottom-auto">
-            {/* Header */}
-            <header className="flex shrink-0 items-center justify-between border-b px-6 py-4">
-              <DialogPrimitive.Title className="text-foreground flex items-center gap-1.5 text-base font-bold tracking-tight">
-                <Sparkles className="h-5 w-5 text-indigo-500" />
-                三合一智能多维录入
-              </DialogPrimitive.Title>
-              <DialogPrimitive.Close
-                render={
-                  <Button variant="ghost" size="icon-sm" aria-label="关闭">
-                    <X className="h-4 w-4" />
-                  </Button>
-                }
-              />
-            </header>
-
-            {/* Content Body */}
-            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
-              {/* STEP 1: Input controls */}
-              {step.kind === "input" && (
-                <div className="space-y-4" onPaste={handlePaste}>
-                  <div className="flex flex-wrap gap-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => cameraInputRef.current?.click()}
-                      className="border-indigo-100 hover:bg-indigo-50 hover:text-indigo-900"
-                    >
-                      <Camera className="mr-1.5 h-4 w-4 text-indigo-600" />
-                      相机拍照
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="border-indigo-100 hover:bg-indigo-50 hover:text-indigo-900"
-                    >
-                      <ImageIcon className="mr-1.5 h-4 w-4 text-indigo-600" />
-                      选取课本照片
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={recordMode === "recording" ? "destructive" : "outline"}
-                      size="sm"
-                      onClick={handleRecordToggle}
-                      disabled={recordMode === "transcribing"}
-                      className={cn(
-                        recordMode !== "recording" &&
-                          "border-indigo-100 hover:bg-indigo-50 hover:text-indigo-900",
-                      )}
-                    >
-                      {recordMode === "recording" ? (
-                        <>
-                          <MicOff className="mr-1.5 h-4 w-4 animate-bounce" />
-                          停止语音录音
-                        </>
-                      ) : recordMode === "transcribing" ? (
-                        <>
-                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                          语音转换中...
-                        </>
-                      ) : (
-                        <>
-                          <Mic className="mr-1.5 h-4 w-4 animate-pulse text-indigo-600" />
-                          说一段话描述教材
-                        </>
-                      )}
-                    </Button>
-                  </div>
-
-                  {recordError && (
-                    <div className="text-destructive bg-destructive/10 rounded px-2 py-1 text-xs">
-                      {recordError}
-                    </div>
-                  )}
-
-                  {warningMessage && (
-                    <div className="animate-in fade-in slide-in-from-top-1 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 shadow-sm duration-200 dark:border-amber-500/20 dark:bg-amber-500/5 dark:text-amber-300">
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                      <span className="flex-1 font-medium">{warningMessage}</span>
-                      <button
-                        type="button"
-                        onClick={() => setWarningMessage(null)}
-                        className="text-amber-800/60 hover:text-amber-800 dark:text-amber-300/60 dark:hover:text-amber-300"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Hidden fields */}
-                  <input
-                    ref={cameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => addFiles(e.target.files)}
-                  />
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => addFiles(e.target.files)}
-                  />
-
-                  {/* Image previews */}
-                  {previews.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      {previews.map((p, i) => (
-                        <div
-                          key={p.url}
-                          className="group bg-muted relative h-20 w-20 overflow-hidden rounded-xl border shadow-sm"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={p.url}
-                            alt={p.name}
-                            onClick={() => setPreviewImageUrl(p.url)}
-                            className="h-full w-full cursor-zoom-in object-cover transition-transform duration-200 hover:scale-105"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setFiles(files.filter((_, idx) => idx !== i))}
-                            className="animate-in fade-in absolute top-1 right-1 rounded-full bg-black/75 p-1 text-white opacity-0 shadow-md transition duration-150 group-hover:opacity-100"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Typed Description Textarea */}
-                  <div className="space-y-1">
-                    <label className="text-muted-foreground flex items-center gap-1 text-xs font-bold">
-                      手动备注/语音输入结果
-                      <span title="语音转文字的内容也会即时追加在这里，你可以进行手动校正或扩充。">
-                        <HelpCircle className="h-3 w-3 text-slate-400" />
-                      </span>
-                    </label>
-                    <textarea
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="您可以输入对本教材的文字描述。如果是语音识别到的文字，可在这里直接进行二次校对、修改或丰富。"
-                      rows={5}
-                      className="border-input bg-background focus:ring-ring w-full resize-none rounded-xl border px-3 py-2 text-sm shadow-sm outline-none focus:ring-1"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 2: Analyzing shimmers */}
-              {step.kind === "extracting" && (
-                <div className="flex flex-col items-center justify-center space-y-4 py-10">
-                  <div className="relative">
-                    <div className="h-16 w-16 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
-                    <Sparkles className="absolute inset-0 m-auto h-6 w-6 animate-bounce text-indigo-500" />
-                  </div>
-                  <div className="space-y-2 text-center">
-                    <p className="text-foreground text-sm font-bold">
-                      大模型正在智能进行三合一解析中...
-                    </p>
-                    <p className="text-muted-foreground max-w-xs text-xs leading-relaxed">
-                      正在将图片文字、语音转译与文本描述结合，并跨本地数据库进行相似书名检索和层级匹配...
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 3: Ingestion Error */}
-              {step.kind === "error" && (
-                <div className="space-y-4 py-8 text-center">
-                  <div className="bg-destructive/10 text-destructive mx-auto flex h-12 w-12 items-center justify-center rounded-full text-xl font-bold">
-                    !
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-foreground text-sm font-bold">解析失败</p>
-                    <p className="text-destructive mx-auto max-w-sm text-xs">{step.message}</p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => setStep({ kind: "input" })}>
-                    返回重新录入
-                  </Button>
-                </div>
-              )}
-
-              {/* STEP 4: Review and confirmation panel */}
-              {step.kind === "preview" && (
-                <div className="space-y-5">
-                  <div className="space-y-4 rounded-xl border border-indigo-500/10 bg-indigo-500/5 p-4">
-                    {/* Capture name — a flat bag. Organizing into a textbook tree
-                        is a separate step in the organize workbench. */}
-                    <div className="space-y-2">
-                      <label className="block text-[10px] font-bold tracking-wider text-indigo-800 uppercase">
-                        给这一组起个名
-                      </label>
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="如：Unit 3 单词、动物"
-                        className="bg-background border-border w-full rounded-lg border px-3 py-1.5 text-sm font-medium outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-
-                    {/* CEFR Level Selection */}
-                    <div className="space-y-1">
-                      <label className="block text-[10px] font-bold tracking-wider text-indigo-800 uppercase">
-                        推算难度等级 (CEFR)
-                      </label>
-                      <select
-                        value={inferredCefr || ""}
-                        onChange={(e) => setInferredCefr(e.target.value || null)}
-                        className="bg-background focus:ring-ring w-full rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1"
-                      >
-                        <option value="">(由AI自适应)</option>
-                        {CEFR_OPTIONS.filter(Boolean).map((lvl) => (
-                          <option key={lvl} value={lvl}>
-                            {lvl} (标准 {lvl} 级)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Extracted vocabulary items list */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between border-b pb-1.5">
-                      <h4 className="text-foreground flex items-center gap-1.5 text-xs font-bold">
-                        <Check className="h-4 w-4 text-emerald-500" />
-                        提取的学习点 ({extractedItems.length} 个)
-                      </h4>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setExtractedItems((prev) => [
-                            ...prev,
-                            {
-                              text: "",
-                              type: "word",
-                              anchor: null,
-                              cefr: null,
-                              pos: null,
-                              confidence: "high",
-                              note: null,
-                            },
-                          ])
-                        }
-                        className="h-7 text-xs text-indigo-600 hover:text-indigo-700"
-                      >
-                        <Plus className="mr-1 h-3.5 w-3.5" />
-                        手动添加点
-                      </Button>
-                    </div>
-
-                    <div className="max-h-64 space-y-2 divide-y overflow-y-auto pr-1">
-                      {extractedItems.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="flex flex-col gap-2 py-2 text-xs sm:flex-row sm:items-center"
-                        >
-                          <input
-                            type="text"
-                            value={item.text}
-                            onChange={(e) =>
-                              setExtractedItems((prev) =>
-                                prev.map((it, i) =>
-                                  i === idx ? { ...it, text: e.target.value } : it,
-                                ),
-                              )
-                            }
-                            placeholder="条目文本"
-                            className="bg-background flex-[2] rounded border px-2 py-1"
-                          />
-                          <select
-                            value={item.type}
-                            onChange={(e) =>
-                              setExtractedItems((prev) =>
-                                prev.map((it, i) =>
-                                  i === idx ? { ...it, type: e.target.value as ItemType } : it,
-                                ),
-                              )
-                            }
-                            className="bg-background shrink-0 rounded border px-2 py-1"
-                          >
-                            <option value="word">单词 (Word)</option>
-                            <option value="phrase">短语 (Phrase)</option>
-                            <option value="pattern">句型 (Pattern)</option>
-                          </select>
-                          {item.type === "pattern" && (
-                            <input
-                              type="text"
-                              value={item.anchor || ""}
-                              onChange={(e) =>
-                                setExtractedItems((prev) =>
-                                  prev.map((it, i) =>
-                                    i === idx ? { ...it, anchor: e.target.value } : it,
-                                  ),
-                                )
-                              }
-                              placeholder="句型锚点(如: can you)"
-                              className="bg-background flex-1 rounded border px-2 py-1"
-                            />
-                          )}
-                          <select
-                            value={item.cefr || ""}
-                            onChange={(e) =>
-                              setExtractedItems((prev) =>
-                                prev.map((it, i) =>
-                                  i === idx
-                                    ? { ...it, cefr: (e.target.value as CefrLevel) || null }
-                                    : it,
-                                ),
-                              )
-                            }
-                            className="bg-background shrink-0 rounded border px-2 py-1"
-                          >
-                            <option value="">难度</option>
-                            {CEFR_OPTIONS.filter(Boolean).map((lvl) => (
-                              <option key={lvl} value={lvl}>
-                                {lvl}
-                              </option>
-                            ))}
-                          </select>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() =>
-                              setExtractedItems((prev) => prev.filter((_, i) => i !== idx))
-                            }
-                            className="text-muted-foreground hover:text-destructive shrink-0 self-end sm:self-auto"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 5: Saving database indicator */}
-              {step.kind === "saving" && (
-                <div className="flex flex-col items-center justify-center space-y-4 py-10">
-                  <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
-                  <p className="text-foreground text-sm font-bold">正在同步至本地教材库...</p>
-                </div>
-              )}
-            </div>
-
-            {/* Footer Control buttons */}
-            <footer className="bg-muted/40 flex shrink-0 items-center justify-end gap-3 rounded-b-2xl border-t px-6 py-4">
-              {step.kind === "input" && (
-                <>
-                  <Button variant="outline" size="sm" onClick={() => handleOpenChange(false)}>
-                    取消
-                  </Button>
-                  <Button
-                    onClick={handleExtract}
-                    disabled={files.length === 0 && !description.trim()}
-                    size="sm"
-                    className="bg-indigo-600 font-semibold text-white hover:bg-indigo-700"
-                  >
-                    开始智能分析
-                  </Button>
-                </>
-              )}
-
-              {step.kind === "preview" && (
-                <>
-                  <Button variant="outline" size="sm" onClick={() => setStep({ kind: "input" })}>
-                    返回修改输入
-                  </Button>
-                  <Button
-                    onClick={handleSaveExtracted}
-                    disabled={extractedItems.filter((i) => i.text.trim().length > 0).length === 0}
-                    size="sm"
-                    className="bg-emerald-600 font-semibold text-white hover:bg-emerald-700"
-                  >
-                    确认录入教材库
-                  </Button>
-                </>
-              )}
-            </footer>
-          </DialogPrimitive.Popup>
-
-          {previewImageUrl && (
-            <div
-              className="animate-in fade-in fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md duration-200"
-              onClick={() => setPreviewImageUrl(null)}
-            >
-              {/* Close button with premium blur and gold hover accent */}
-              <button
-                type="button"
-                onClick={() => setPreviewImageUrl(null)}
-                className="absolute top-4 right-4 z-[70] rounded-full border border-yellow-500/30 bg-black/40 p-2 text-yellow-500/80 backdrop-blur-md transition-all hover:scale-105 hover:border-yellow-500/60 hover:text-yellow-400"
-                aria-label="关闭预览"
-              >
-                <X className="h-6 w-6" />
-              </button>
-
-              {/* Main image container */}
-              <div
-                className="animate-in zoom-in-95 relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-lg border border-yellow-500/10 shadow-2xl duration-300"
-                onClick={(e) => e.stopPropagation()} // prevent closing when clicking the image
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={previewImageUrl}
-                  alt="教材预览"
-                  className="max-h-[85vh] max-w-[85vw] rounded-md object-contain"
-                />
-              </div>
-            </div>
-          )}
-        </DialogPrimitive.Portal>
-      </DialogPrimitive.Root>
+      <IngestDrawerClient
+        open={isIngestOpen}
+        initialTrigger={null}
+        onOpenChange={handleOpenChange}
+        onGroupApplied={(group) => {
+          setGroups((prev) => [group, ...prev]);
+        }}
+      />
     </div>
   );
 }
@@ -1014,6 +350,7 @@ function TreeViewNode({
   depth,
   busy,
   kindLabel,
+  descendantCounts,
   onStartSession,
   onArchive,
   onDelete,
@@ -1022,11 +359,12 @@ function TreeViewNode({
   depth: number;
   busy: string | null;
   kindLabel: (kind: string) => string;
+  descendantCounts: Map<string, number>;
   onStartSession: (id: string) => void;
   onArchive: (g: GroupOut) => void;
   onDelete: (g: GroupOut) => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const { group, children } = node;
 
   const Icon = KIND_ICON[group.kind] ?? Bookmark;
@@ -1093,16 +431,35 @@ function TreeViewNode({
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-foreground truncate text-sm leading-tight font-bold">
-                {group.name}
-              </span>
+              <Link href={`/parent/materials/${group.id}`}>
+                <span className="text-foreground cursor-pointer truncate text-sm leading-tight font-bold transition-colors hover:text-indigo-600 hover:underline">
+                  {group.name}
+                </span>
+              </Link>
               <span className="py-0.2 shrink-0 rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-500">
                 {kindLabel(group.kind)}
               </span>
             </div>
             <span className="text-muted-foreground mt-0.5 block text-[10px]">
-              {group.item_count} 个重点学习词句{" "}
-              {group.source_book_hint && `· ${group.source_book_hint}`}
+              {(() => {
+                const recursiveCount = descendantCounts.get(group.id) || group.item_count;
+                if (group.item_count === 0 && recursiveCount > 0) {
+                  return (
+                    <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                      包含 {recursiveCount} 个词句
+                    </span>
+                  );
+                } else if (recursiveCount > group.item_count) {
+                  return (
+                    <span>
+                      {group.item_count} 个词句（共 {recursiveCount} 个）
+                    </span>
+                  );
+                } else {
+                  return <span>{group.item_count} 个词句</span>;
+                }
+              })()}
+              {group.source_book_hint && ` · ${group.source_book_hint}`}
             </span>
           </div>
         </div>
@@ -1124,15 +481,15 @@ function TreeViewNode({
             对话练习
           </Button>
 
-          {/* Edit detailed material */}
+          {/* View detailed material */}
           <Link href={`/parent/materials/${group.id}`}>
             <Button
               variant="ghost"
               size="icon-sm"
               className="text-muted-foreground hover:text-foreground shrink-0"
-              title="编辑详细词表"
+              title="查看详情"
             >
-              <Pencil className="h-3.5 w-3.5" />
+              <Eye className="h-3.5 w-3.5" />
             </Button>
           </Link>
 
@@ -1172,6 +529,7 @@ function TreeViewNode({
               depth={depth + 1}
               busy={busy}
               kindLabel={kindLabel}
+              descendantCounts={descendantCounts}
               onStartSession={onStartSession}
               onArchive={onArchive}
               onDelete={onDelete}

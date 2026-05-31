@@ -50,6 +50,38 @@ class V1ScopeComputer:
             )
             items = list(items_row.scalars().all())
 
+            # Bounded context optimization: if descendant items exceed 100, prioritize
+            # and slice items based on learner's mastery statistics.
+            if len(items) > 100:
+                from app.storage.models.learning import LearnerItemStats
+
+                item_ids = [i.id for i in items]
+                stats_row = await db.execute(
+                    select(
+                        LearnerItemStats.item_id,
+                        LearnerItemStats.mastered_at,
+                        LearnerItemStats.correct_count,
+                    ).where(
+                        LearnerItemStats.learner_id == learner_id,
+                        LearnerItemStats.item_id.in_(item_ids),
+                    )
+                )
+                stats_map = {
+                    row.item_id: (row.mastered_at, row.correct_count) for row in stats_row.all()
+                }
+
+                def get_item_score(it: LanguageItem) -> float:
+                    stats = stats_map.get(it.id)
+                    if stats:
+                        mastered_at, correct_count = stats
+                        if mastered_at is not None:
+                            return 1000.0 + float(correct_count or 0)
+                        return float(correct_count or 0)
+                    return -1.0
+
+                items.sort(key=get_item_score)
+                items = items[:100]
+
             return ScopeResult(
                 mode="group",
                 cefr_level=cefr_level,

@@ -5,7 +5,12 @@ import { redirect } from "next/navigation";
 import { getLocale } from "next-intl/server";
 
 import { BackendError, backend } from "@/lib/backend";
-import type { GroupCreateBody, UpdatePersonaBody, SyncPersonaBody } from "@/lib/backend";
+import type {
+  GroupCreateBody,
+  GroupUpdateBody,
+  UpdatePersonaBody,
+  SyncPersonaBody,
+} from "@/lib/backend";
 
 async function buildHeaders(): Promise<HeadersInit> {
   const jar = await cookies();
@@ -50,27 +55,9 @@ export async function createApi() {
     },
     groups: {
       list: (includeArchived?: boolean) => c((h) => backend.groups.list(includeArchived, h)),
-      get: (id: string) => c((h) => backend.groups.get(id, h)),
+      get: (id: string, recursive?: boolean) => c((h) => backend.groups.get(id, recursive, h)),
       create: (body: GroupCreateBody) => c((h) => backend.groups.create(body, h)),
-      update: (
-        id: string,
-        body: {
-          name?: string;
-          archived?: boolean;
-          parent_id?: string | null;
-          kind?: string;
-          source_book_hint?: string | null;
-          prompt_notes?: string | null;
-          items?: Array<{
-            text: string;
-            type: import("./backend").ItemType;
-            anchor?: string | null;
-            cefr_level?: string | null;
-            pos?: string | null;
-          }> | null;
-          tag_path?: string[] | null;
-        },
-      ) => c((h) => backend.groups.update(id, body, h)),
+      update: (id: string, body: GroupUpdateBody) => c((h) => backend.groups.update(id, body, h)),
       delete: (id: string) => c((h) => backend.groups.delete(id, h)),
       listLearners: (groupId: string) => c((h) => backend.groups.listLearners(groupId, h)),
       assignLearner: (groupId: string, learnerId: string) =>
@@ -87,8 +74,13 @@ export async function createApi() {
       dismiss: (groupId: string, itemId: string) =>
         c((h) => backend.organize.dismiss(groupId, itemId, h)),
       suggestBag: (groupId: string) => c((h) => backend.organize.suggestBag(groupId, h)),
-      fileBag: (sourceGroupId: string, tagPath: string[]) =>
-        c((h) => backend.organize.fileBag(sourceGroupId, tagPath, h)),
+      fileBag: (
+        sourceGroupId: string,
+        tagPath: string[],
+        levelTitles?: string[] | null,
+        sourceRawText?: string | null,
+      ) =>
+        c((h) => backend.organize.fileBag(sourceGroupId, tagPath, levelTitles, sourceRawText, h)),
     },
     sessions: {
       list: (learnerId: string) => c((h) => backend.sessions.list(learnerId, h)),

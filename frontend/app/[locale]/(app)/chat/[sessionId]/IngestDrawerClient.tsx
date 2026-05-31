@@ -30,9 +30,9 @@ type Step =
   | { kind: "error"; message: string };
 
 interface Props {
-  sessionId: string;
+  sessionId?: string;
   open: boolean;
-  initialTrigger: IngestTrigger;
+  initialTrigger?: IngestTrigger | null;
   onOpenChange: (open: boolean) => void;
   onGroupApplied: (group: GroupOut) => void;
 }
@@ -86,6 +86,7 @@ export function IngestDrawerClient({
   const [step, setStep] = useState<Step>({ kind: "input" });
   const [files, setFiles] = useState<File[]>([]);
   const [description, setDescription] = useState("");
+  const [rawText, setRawText] = useState("");
 
   // Owned by the drawer; refreshed when extraction completes.
   const [items, setItems] = useState<ExtractedItem[]>([]);
@@ -118,6 +119,7 @@ export function IngestDrawerClient({
         setDescription("");
         setItems([]);
         setName("");
+        setRawText("");
         setInferredCefr(null);
         setRecordMode("idle");
         setRecordError(null);
@@ -140,7 +142,7 @@ export function IngestDrawerClient({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !initialTrigger) return;
     if (initialTrigger === "camera") cameraInputRef.current?.click();
     if (initialTrigger === "file") fileInputRef.current?.click();
     if (initialTrigger === "voice") void startRecording();
@@ -335,6 +337,30 @@ export function IngestDrawerClient({
     setName((meta.suggested_name || "").trim());
     setInferredCefr(meta.cefr_level || "");
     setItems(sortForEdit(result.result.items));
+    setRawText(result.result.source_raw_text || "");
+    setStep({ kind: "preview", mode: "summary", result: result.result });
+  }
+
+  async function handleReExtract() {
+    if (!rawText.trim()) return;
+    setStep({ kind: "extracting" });
+    const fd = new FormData();
+    fd.append("description", rawText.trim());
+
+    const result = await extractIngestion(fd);
+    if (!result.ok) {
+      setStep({ kind: "error", message: result.error || t("error_extract_failed") });
+      return;
+    }
+    if (result.result.items.length === 0) {
+      setStep({ kind: "error", message: t("error_no_items") });
+      return;
+    }
+    const meta = result.result.metadata;
+    setName((meta.suggested_name || "").trim());
+    setInferredCefr(meta.cefr_level || "");
+    setItems(sortForEdit(result.result.items));
+    setRawText(result.result.source_raw_text || "");
     setStep({ kind: "preview", mode: "summary", result: result.result });
   }
 
@@ -351,18 +377,22 @@ export function IngestDrawerClient({
       name: name.trim() || t("default_group_name"),
       kind: "quick_practice",
       items: body,
+      source_raw_text: rawText.trim() || null,
     });
     if (!createRes.ok) {
       setStep({ kind: "error", message: createRes.error || t("error_save_failed") });
       return;
     }
-    try {
-      await setSessionGroup(sessionId, createRes.group.id);
-    } catch {
-      setStep({ kind: "error", message: t("error_scope_failed") });
-      return;
+    if (sessionId) {
+      try {
+        await setSessionGroup(sessionId, createRes.group.id);
+      } catch {
+        setStep({ kind: "error", message: t("error_scope_failed") });
+        return;
+      }
     }
     onGroupApplied(createRes.group);
+    onOpenChange(false);
   }
 
   function updateItem(idx: number, patch: Partial<ExtractedItem>) {
@@ -588,6 +618,42 @@ export function IngestDrawerClient({
                     ))}
                   </select>
                 </div>
+
+                {/* 📝 底稿微调与重新分析 (Start with Vision, Refine with Text) */}
+                {step.kind === "preview" && (
+                  <details className="group rounded-xl border border-slate-500/10 bg-slate-500/5 p-4 transition-all duration-200 open:border-slate-500/20 open:bg-slate-500/10">
+                    <summary className="flex cursor-pointer items-center justify-between text-[10px] font-bold tracking-wider text-slate-700 uppercase outline-none select-none">
+                      <span className="flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5" />
+                        底稿与二次微调 (AI OCR Draft)
+                      </span>
+                      <span className="text-[9px] font-normal text-slate-500 group-open:hidden">
+                        点击展开编辑
+                      </span>
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      <textarea
+                        value={rawText}
+                        onChange={(e) => setRawText(e.target.value)}
+                        placeholder="在此修改由 Vision 提取的原始教材文本，微调 OCR 错误..."
+                        rows={6}
+                        className="bg-background border-border w-full resize-y rounded-lg border p-3 font-mono text-xs leading-relaxed outline-none focus:ring-1 focus:ring-slate-500"
+                      />
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={!rawText.trim()}
+                          onClick={handleReExtract}
+                          className="h-8 gap-1.5 border border-indigo-500/20 bg-indigo-500/5 text-xs font-medium text-indigo-700 transition-all hover:bg-indigo-500/10 active:scale-[0.98]"
+                        >
+                          ✨ 重新提取 (Re-extract)
+                        </Button>
+                      </div>
+                    </div>
+                  </details>
+                )}
 
                 {step.kind === "preview" && step.mode === "summary" && (
                   <SummaryView

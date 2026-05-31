@@ -8,6 +8,7 @@ import {
   type GroupOut,
   type InboxOut,
   type LanguageItemOut,
+  type IngestionResult,
 } from "@/lib/backend";
 import { createApi } from "@/lib/api";
 
@@ -55,12 +56,13 @@ export async function dismissItem(
 export async function suggestBag(
   groupId: string,
 ): Promise<
-  { ok: true; tag_path: string[]; source: "ai" | "default" } | { ok: false; error: string }
+  | { ok: true; tag_path: string[]; level_titles?: string[] | null; source: "ai" | "default" }
+  | { ok: false; error: string }
 > {
   const api = await createApi();
   try {
     const s = await api.organize.suggestBag(groupId);
-    return { ok: true, tag_path: s.tag_path, source: s.source };
+    return { ok: true, tag_path: s.tag_path, level_titles: s.level_titles, source: s.source };
   } catch (e) {
     return { ok: false, error: e instanceof BackendError ? e.detail : "SUGGEST_FAILED" };
   }
@@ -69,15 +71,46 @@ export async function suggestBag(
 export async function fileBag(
   sourceGroupId: string,
   tagPath: string[],
+  levelTitles?: string[] | null,
+  sourceRawText?: string | null,
 ): Promise<{ ok: true; targetGroupId: string; moved: number } | { ok: false; error: string }> {
   const api = await createApi();
   try {
-    const r = await api.organize.fileBag(sourceGroupId, tagPath);
+    const r = await api.organize.fileBag(sourceGroupId, tagPath, levelTitles, sourceRawText);
     revalidatePath("/parent/organize");
     revalidatePath("/parent/materials");
     revalidatePath("/chat");
     return { ok: true, targetGroupId: r.target_group_id, moved: r.moved };
   } catch (e) {
     return { ok: false, error: e instanceof BackendError ? e.detail : "FILE_BAG_FAILED" };
+  }
+}
+
+export async function extractIngestionAction(
+  formData: FormData,
+): Promise<{ ok: true; result: IngestionResult } | { ok: false; error: string }> {
+  const api = await createApi();
+  try {
+    const result = await api.ingest.extract(formData);
+    return { ok: true, result };
+  } catch (e) {
+    return { ok: false, error: e instanceof BackendError ? e.detail : "EXTRACT_FAILED" };
+  }
+}
+
+export async function updateGroupAction(
+  id: string,
+  body: {
+    items?: Array<{ text: string; type: "word" | "phrase" | "pattern" }>;
+    source_raw_text?: string | null;
+  },
+): Promise<{ ok: true; group: GroupOut } | { ok: false; error: string }> {
+  const api = await createApi();
+  try {
+    const group = await api.groups.update(id, body);
+    revalidatePath("/parent/organize");
+    return { ok: true, group };
+  } catch (e) {
+    return { ok: false, error: e instanceof BackendError ? e.detail : "UPDATE_GROUP_FAILED" };
   }
 }

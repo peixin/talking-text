@@ -26,6 +26,17 @@ class LanguageItem(Base, TimestampMixin):
     __table_args__ = (sa.UniqueConstraint("type", "text", name="uq_language_item_type_text"),)
 
 
+class IngestionBatch(Base, TimestampMixin):
+    """Raw ingestion batch records: stores full OCR/transcribed page text and media source files."""
+
+    __tablename__ = "ingestion_batch"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    source_type: Mapped[str] = mapped_column(sa.String(20), nullable=False)  # image|audio|text
+    source_raw_text: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    media_urls: Mapped[list[str]] = mapped_column(sa.JSON, nullable=False, default=list)
+
+
 class ItemGroup(Base, TimestampMixin):
     """A named bag of language items. The only organizing entity.
 
@@ -45,6 +56,15 @@ class ItemGroup(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(sa.String(200), nullable=False)
     owner_account_id: Mapped[uuid.UUID] = mapped_column(
         sa.ForeignKey("account.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    ingestion_batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.ForeignKey("ingestion_batch.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    level_title: Mapped[str | None] = mapped_column(
+        sa.String(50),
+        nullable=True,
     )
 
     cover_image_url: Mapped[str | None] = mapped_column(sa.String(500), nullable=True)

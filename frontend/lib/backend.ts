@@ -134,6 +134,7 @@ export type GroupOut = {
   archived: boolean;
   source_book_hint: string | null;
   item_count: number;
+  level_title: string | null;
 };
 
 export type ItemType = "word" | "phrase" | "pattern";
@@ -168,6 +169,7 @@ export type ExtractedMetadata = {
 
 export type IngestionResult = {
   source_type: SourceType;
+  source_raw_text: string | null;
   metadata: ExtractedMetadata;
   items: ExtractedItem[];
   warnings: string[];
@@ -188,6 +190,30 @@ export type GroupCreateBody = {
   }>;
   // Organize-time tree assembly from human-confirmed exact tags (root → leaf).
   tag_path?: string[] | null;
+  level_titles?: string[] | null;
+  source_raw_text?: string | null;
+  media_urls?: string[] | null;
+};
+
+/** Corresponds to ``GroupUpdate`` Pydantic model in backend/app/api/groups.py. */
+export type GroupUpdateBody = {
+  name?: string;
+  archived?: boolean;
+  parent_id?: string | null;
+  kind?: string;
+  source_book_hint?: string | null;
+  prompt_notes?: string | null;
+  items?: Array<{
+    text: string;
+    type: ItemType;
+    anchor?: string | null;
+    cefr_level?: string | null;
+    pos?: string | null;
+  }> | null;
+  tag_path?: string[] | null;
+  level_titles?: string[] | null;
+  source_raw_text?: string | null;
+  media_urls?: string[] | null;
 };
 
 export type LanguageItemOut = {
@@ -197,6 +223,8 @@ export type LanguageItemOut = {
   anchor: string;
   cefr_level: string | null;
   pos: string | null;
+  source_group_name?: string | null;
+  source_group_id?: string | null;
 };
 
 export type GroupDetailOut = {
@@ -207,6 +235,7 @@ export type GroupDetailOut = {
   archived: boolean;
   source_book_hint: string | null;
   prompt_notes: string | null;
+  level_title: string | null;
   items: LanguageItemOut[];
 };
 
@@ -217,6 +246,10 @@ export type InboxBag = {
   group_id: string;
   name: string;
   items: LanguageItemOut[];
+  level_title: string | null;
+  ingestion_batch_id: string | null;
+  source_raw_text: string | null;
+  media_urls: string[];
 };
 
 export type InboxCandidate = { text: string; count: number };
@@ -227,7 +260,11 @@ export type InboxOut = {
   practice_candidates: InboxCandidate[];
 };
 
-export type SuggestBagOut = { tag_path: string[]; source: "ai" | "default" };
+export type SuggestBagOut = {
+  tag_path: string[];
+  level_titles?: string[] | null;
+  source: "ai" | "default";
+};
 export type FileBagOut = { target_group_id: string; moved: number };
 
 export type FileItemBody = {
@@ -293,34 +330,15 @@ export const backend = {
   groups: {
     list: (includeArchived?: boolean, headers?: HeadersInit) =>
       request<GroupOut[]>(`/groups${includeArchived ? "?include_archived=true" : ""}`, { headers }),
-    get: (id: string, headers?: HeadersInit) =>
-      request<GroupDetailOut>(`/groups/${id}`, { headers }),
+    get: (id: string, recursive?: boolean, headers?: HeadersInit) =>
+      request<GroupDetailOut>(`/groups/${id}${recursive ? "?recursive=true" : ""}`, { headers }),
     create: (body: GroupCreateBody, headers?: HeadersInit) =>
       request<GroupOut>("/groups", {
         method: "POST",
         body: body as unknown as Record<string, unknown>,
         headers,
       }),
-    update: (
-      id: string,
-      body: {
-        name?: string;
-        archived?: boolean;
-        parent_id?: string | null;
-        kind?: string;
-        source_book_hint?: string | null;
-        prompt_notes?: string | null;
-        items?: Array<{
-          text: string;
-          type: ItemType;
-          anchor?: string | null;
-          cefr_level?: string | null;
-          pos?: string | null;
-        }> | null;
-        tag_path?: string[] | null;
-      },
-      headers?: HeadersInit,
-    ) =>
+    update: (id: string, body: GroupUpdateBody, headers?: HeadersInit) =>
       request<GroupOut>(`/groups/${id}`, {
         method: "PATCH",
         body: body as Record<string, unknown>,
@@ -378,10 +396,21 @@ export const backend = {
         body: { group_id: groupId },
         headers,
       }),
-    fileBag: (sourceGroupId: string, tagPath: string[], headers?: HeadersInit) =>
+    fileBag: (
+      sourceGroupId: string,
+      tagPath: string[],
+      levelTitles?: string[] | null,
+      sourceRawText?: string | null,
+      headers?: HeadersInit,
+    ) =>
       request<FileBagOut>("/organize/file-bag", {
         method: "POST",
-        body: { source_group_id: sourceGroupId, tag_path: tagPath },
+        body: {
+          source_group_id: sourceGroupId,
+          tag_path: tagPath,
+          level_titles: levelTitles ?? null,
+          source_raw_text: sourceRawText ?? null,
+        },
         headers,
       }),
   },

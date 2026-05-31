@@ -76,6 +76,7 @@ export async function updateGroup(
       pos?: string | null;
     }> | null;
     tag_path?: string[] | null;
+    level_titles?: string[] | null;
   },
 ): Promise<GroupActionResult> {
   const api = await createApi();

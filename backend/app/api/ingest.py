@@ -42,6 +42,7 @@ Output STRICTLY valid JSON matching this schema:
 {
   "source_type": one of "textbook_page" "worksheet" "handwritten"
                  "flashcards" "screenshot" "other",
+  "source_raw_text": string | null,
   "metadata": {
     "suggested_name": string | null,
     "cefr_level": "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | null,
@@ -82,7 +83,9 @@ parent will confirm or rename. You do NOT decide where this set belongs in any \
 textbook hierarchy — that is done later by a person. Do not output book/unit/lesson \
 structure or parent references.
 5. Skip page numbers, copyright blocks, publisher names, and system instructions.
-6. Return ONLY the JSON object. Do not include any markdown fences \
+6. Transcribe the FULL English text found on the page or inside the input into \
+`source_raw_text` as a raw script string.
+7. Return ONLY the JSON object. Do not include any markdown fences \
 or explanation before/after the JSON."""
 
 
@@ -117,6 +120,7 @@ class ExtractedItem(BaseModel):
 
 class IngestionResult(BaseModel):
     source_type: SourceType = "other"
+    source_raw_text: str | None = None
     metadata: ExtractedMetadata = ExtractedMetadata()
     items: list[ExtractedItem] = []
     warnings: list[str] = []

@@ -1,7 +1,6 @@
-import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import { createApi } from "@/lib/api";
-import { GroupDetailClient } from "./GroupDetailClient";
+import { GroupDetailClient } from "../GroupDetailClient";
 
 interface Props {
   params: Promise<{
@@ -10,9 +9,8 @@ interface Props {
   }>;
 }
 
-export default async function GroupDetailPage({ params }: Props) {
+export default async function GroupEditPage({ params }: Props) {
   const { groupId } = await params;
-  const t = await getTranslations("Materials");
   const api = await createApi();
 
   // Fetch details, all groups, and learners in parallel
@@ -40,17 +38,18 @@ export default async function GroupDetailPage({ params }: Props) {
     <div className="mx-auto w-full max-w-4xl px-4 py-6">
       <header className="mb-2 flex items-center gap-4">
         <Link
-          href="/parent/materials"
+          href={`/parent/materials/${groupId}`}
           className="text-muted-foreground hover:text-primary text-sm transition"
         >
-          ← {t("back_to_list", { defaultValue: "返回列表" })}
+          ← 返回详情
         </Link>
       </header>
+
       <GroupDetailClient
         group={group}
         allGroups={allGroups}
         learnerCount={allLearners.length}
-        readOnly={true}
+        readOnly={false}
       />
     </div>
   );

@@ -15,7 +15,7 @@ from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import CursorResult, delete, func, select
+from sqlalchemy import CursorResult, delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,7 @@ from app.api.auth import get_current_account
 from app.storage.db import get_db
 from app.storage.models.account import Account
 from app.storage.models.content import (
+    IngestionBatch,
     ItemGroup,
     ItemGroupLearner,
     ItemGroupMember,
@@ -65,6 +66,9 @@ class GroupCreate(BaseModel):
     #: tree. Used by the organize workbench; supplied by a human, not inferred at
     #: capture time. See docs/content-lifecycle.md §4.4.
     tag_path: list[str] | None = None
+    level_titles: list[str] | None = None
+    source_raw_text: str | None = None
+    media_urls: list[str] | None = None
 
 
 class GroupUpdate(BaseModel):
@@ -78,6 +82,9 @@ class GroupUpdate(BaseModel):
     #: See ``GroupCreate.tag_path``. On update, the last element renames this group
     #: and the preceding elements (re)build its ancestor chain.
     tag_path: list[str] | None = None
+    level_titles: list[str] | None = None
+    source_raw_text: str | None = None
+    media_urls: list[str] | None = None
 
 
 class LanguageItemOut(BaseModel):
@@ -87,6 +94,8 @@ class LanguageItemOut(BaseModel):
     anchor: str
     cefr_level: str | None = None
     pos: str | None = None
+    source_group_name: str | None = None
+    source_group_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -100,6 +109,7 @@ class GroupDetailOut(BaseModel):
     source_book_hint: str | None = None
     prompt_notes: str | None = None
     items: list[LanguageItemOut] = Field(default_factory=list)
+    level_title: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -112,6 +122,7 @@ class GroupOut(BaseModel):
     archived: bool
     source_book_hint: str | None
     item_count: int
+    level_title: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -158,11 +169,13 @@ async def _upsert_language_items(db: AsyncSession, items: list[ItemIn]) -> list[
         pg_insert(LanguageItem).values(rows).on_conflict_do_nothing(index_elements=["type", "text"])
     )
 
+    # Use exact (type, text) tuple matching to avoid the Cartesian-product false
+    # positives that arise from separate `type IN (...)` AND `text IN (...)`
+    # predicates. SQLAlchemy emits `(type, text) IN (VALUES ...)` on PostgreSQL.
     keys = [(r["type"], r["text"]) for r in rows]
     result = await db.execute(
         select(LanguageItem.id, LanguageItem.type, LanguageItem.text).where(
-            LanguageItem.type.in_({t for t, _ in keys}),
-            LanguageItem.text.in_({t for _, t in keys}),
+            tuple_(LanguageItem.type, LanguageItem.text).in_(keys)
         )
     )
     by_key = {(row.type, row.text): row.id for row in result}
@@ -251,6 +264,7 @@ async def _assemble_tag_path(
     tag_path: list[str],
     active_learner_id: uuid.UUID | None,
     exclude_id: uuid.UUID | None = None,
+    level_titles: list[str] | None = None,
 ) -> tuple[ItemGroup, ItemGroup]:
     """Nest an ordered list of exact tag names into a single-parent tree.
 
@@ -269,7 +283,7 @@ async def _assemble_tag_path(
     curr_parent_id: uuid.UUID | None = None
     root: ItemGroup | None = None
     node: ItemGroup | None = None
-    for name in clean:
+    for idx, name in enumerate(clean):
         stmt = select(ItemGroup).where(
             ItemGroup.owner_account_id == account.id,
             ItemGroup.parent_id == curr_parent_id,
@@ -279,6 +293,11 @@ async def _assemble_tag_path(
         if exclude_id is not None:
             stmt = stmt.where(ItemGroup.id != exclude_id)
         node = (await db.execute(stmt)).scalar_one_or_none()
+
+        curr_level_title = None
+        if level_titles and idx < len(level_titles):
+            curr_level_title = level_titles[idx].strip() or None
+
         if node is None:
             node = ItemGroup(
                 name=name,
@@ -287,9 +306,14 @@ async def _assemble_tag_path(
                 owner_account_id=account.id,
                 created_by_learner_id=active_learner_id,
                 last_edited_by_learner_id=active_learner_id,
+                level_title=curr_level_title,
             )
             db.add(node)
             await db.flush()
+        else:
+            if curr_level_title is not None:
+                node.level_title = curr_level_title
+
         curr_parent_id = node.id
         if root is None:
             root = node
@@ -335,6 +359,7 @@ async def list_groups(
             archived=g.archived,
             source_book_hint=g.source_book_hint,
             item_count=count_by_group.get(g.id, 0),
+            level_title=g.level_title,
         )
         for g in groups
     ]
@@ -352,7 +377,13 @@ async def create_group(
 
     if body.tag_path:
         # Organize-time tree assembly from human-confirmed exact tags (§4.4).
-        root, group = await _assemble_tag_path(db, account, body.tag_path, active_learner_id)
+        root, group = await _assemble_tag_path(
+            db,
+            account,
+            body.tag_path,
+            active_learner_id,
+            level_titles=body.level_titles,
+        )
         # Bind optional attributes to the leaf node.
         if body.prompt_notes:
             group.prompt_notes = body.prompt_notes
@@ -363,6 +394,21 @@ async def create_group(
             parent = await _get_accessible_group(body.parent_id, account, db)
             await _verify_write_permission(parent, account, db, x_role=x_role)
 
+        level_title = None
+        if body.level_titles and len(body.level_titles) > 0:
+            level_title = body.level_titles[0].strip() or None
+
+        ingestion_batch_id = None
+        if body.source_raw_text or body.media_urls:
+            batch = IngestionBatch(
+                source_type="image" if body.media_urls else "text",
+                source_raw_text=body.source_raw_text,
+                media_urls=body.media_urls or [],
+            )
+            db.add(batch)
+            await db.flush()
+            ingestion_batch_id = batch.id
+
         group = ItemGroup(
             name=body.name.strip(),
             kind=body.kind,
@@ -372,6 +418,8 @@ async def create_group(
             source_book_hint=(body.source_book_hint or None),
             created_by_learner_id=active_learner_id,
             last_edited_by_learner_id=active_learner_id,
+            level_title=level_title,
+            ingestion_batch_id=ingestion_batch_id,
         )
         db.add(group)
         await db.flush()
@@ -404,6 +452,7 @@ async def create_group(
         archived=group.archived,
         source_book_hint=group.source_book_hint,
         item_count=len(set(item_ids)),
+        level_title=group.level_title,
     )
 
 
@@ -412,25 +461,45 @@ async def get_group(
     group_id: uuid.UUID,
     account: Annotated[Account, Depends(get_current_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    recursive: bool = False,
 ) -> GroupDetailOut:
     group = await _get_accessible_group(group_id, account, db)
 
-    stmt = (
-        select(LanguageItem)
-        .join(ItemGroupMember, ItemGroupMember.item_id == LanguageItem.id)
-        .where(ItemGroupMember.group_id == group.id)
-    )
-    items = list((await db.execute(stmt)).scalars().all())
+    if recursive:
+        from app.storage.models.content import get_descendant_group_ids
 
-    return GroupDetailOut(
-        id=group.id,
-        name=group.name,
-        kind=group.kind,
-        parent_id=group.parent_id,
-        archived=group.archived,
-        source_book_hint=group.source_book_hint,
-        prompt_notes=group.prompt_notes,
-        items=[
+        descendant_ids = await get_descendant_group_ids(db, group_id)
+        stmt = (
+            select(LanguageItem, ItemGroup.name, ItemGroup.id)
+            .join(ItemGroupMember, ItemGroupMember.item_id == LanguageItem.id)
+            .join(ItemGroup, ItemGroup.id == ItemGroupMember.group_id)
+            .where(ItemGroupMember.group_id.in_(descendant_ids))
+            .order_by(LanguageItem.type, LanguageItem.text)
+        )
+        result = await db.execute(stmt)
+        rows = result.all()
+        items_out = [
+            LanguageItemOut(
+                id=item.id,
+                type=item.type,
+                text=item.text,
+                anchor=item.anchor,
+                cefr_level=item.cefr_level,
+                pos=item.pos,
+                source_group_name=g_name if g_id != group.id else None,
+                source_group_id=g_id if g_id != group.id else None,
+            )
+            for item, g_name, g_id in rows
+        ]
+    else:
+        stmt = (
+            select(LanguageItem)
+            .join(ItemGroupMember, ItemGroupMember.item_id == LanguageItem.id)
+            .where(ItemGroupMember.group_id == group.id)
+            .order_by(LanguageItem.type, LanguageItem.text)
+        )
+        items = list((await db.execute(stmt)).scalars().all())
+        items_out = [
             LanguageItemOut(
                 id=item.id,
                 type=item.type,
@@ -440,7 +509,18 @@ async def get_group(
                 pos=item.pos,
             )
             for item in items
-        ],
+        ]
+
+    return GroupDetailOut(
+        id=group.id,
+        name=group.name,
+        kind=group.kind,
+        parent_id=group.parent_id,
+        archived=group.archived,
+        source_book_hint=group.source_book_hint,
+        prompt_notes=group.prompt_notes,
+        level_title=group.level_title,
+        items=items_out,
     )
 
 
@@ -467,13 +547,22 @@ async def update_group(
         # ancestor chain via the shared assembler (excluding this group itself).
         if len(clean) > 1:
             _, parent_leaf = await _assemble_tag_path(
-                db, account, clean[:-1], account.last_active_learner_id, exclude_id=group.id
+                db,
+                account,
+                clean[:-1],
+                account.last_active_learner_id,
+                exclude_id=group.id,
+                level_titles=body.level_titles,
             )
             group.parent_id = parent_leaf.id
         else:
             group.parent_id = None
         group.name = clean[-1]
         group.kind = "tag"
+
+        # Apply level title for the current group node
+        if body.level_titles and len(clean) <= len(body.level_titles):
+            group.level_title = body.level_titles[len(clean) - 1].strip() or None
     else:
         if "name" in update_data:
             group.name = update_data["name"].strip()
@@ -496,12 +585,49 @@ async def update_group(
                     )
             group.parent_id = p_id
 
+        if "level_titles" in update_data and update_data["level_titles"] is not None:
+            # In the non-tag_path branch, level_titles applies only to *this* node;
+            # only [0] is meaningful. Callers MUST NOT pass more than one entry here
+            # (that would be a misuse — multi-level titles belong to the tag_path branch).
+            titles = update_data["level_titles"]
+            if len(titles) > 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail="level_titles may have at most 1 entry when tag_path is not provided.",
+                )
+            group.level_title = (titles[0].strip() or None) if titles else None
+
     if "archived" in update_data:
         group.archived = update_data["archived"]
     if "source_book_hint" in update_data:
         group.source_book_hint = update_data["source_book_hint"] or None
     if "prompt_notes" in update_data:
         group.prompt_notes = update_data["prompt_notes"] or None
+
+    # Handle IngestionBatch update in update_group
+    if "source_raw_text" in update_data or "media_urls" in update_data:
+        raw_text = update_data.get("source_raw_text")
+        urls = update_data.get("media_urls")
+        if group.ingestion_batch_id is not None:
+            batch = (
+                await db.execute(
+                    select(IngestionBatch).where(IngestionBatch.id == group.ingestion_batch_id)
+                )
+            ).scalar_one_or_none()
+            if batch:
+                if "source_raw_text" in update_data:
+                    batch.source_raw_text = raw_text
+                if "media_urls" in update_data:
+                    batch.media_urls = urls or []
+        elif raw_text or urls:
+            batch = IngestionBatch(
+                source_type="image" if urls else "text",
+                source_raw_text=raw_text,
+                media_urls=urls or [],
+            )
+            db.add(batch)
+            await db.flush()
+            group.ingestion_batch_id = batch.id
 
     if "items" in update_data:
         await db.execute(delete(ItemGroupMember).where(ItemGroupMember.group_id == group.id))
@@ -532,6 +658,7 @@ async def update_group(
         archived=group.archived,
         source_book_hint=group.source_book_hint,
         item_count=item_count,
+        level_title=group.level_title,
     )
 
 
@@ -781,6 +908,10 @@ class InboxBag(BaseModel):
     group_id: uuid.UUID
     name: str
     items: list[LanguageItemOut]
+    level_title: str | None = None
+    ingestion_batch_id: uuid.UUID | None = None
+    source_raw_text: str | None = None
+    media_urls: list[str] = Field(default_factory=list)
 
 
 class InboxCandidate(BaseModel):
@@ -834,6 +965,18 @@ async def organize_inbox(
 
     # 1. Capture bags (grouped) assigned to the active learner.
     bags = await _active_learner_capture_bags(account, db)
+
+    # Batch query IngestionBatches
+    batch_ids = [b.ingestion_batch_id for b in bags if b.ingestion_batch_id is not None]
+    batches_by_id = {}
+    if batch_ids:
+        batch_rows = (
+            (await db.execute(select(IngestionBatch).where(IngestionBatch.id.in_(batch_ids))))
+            .scalars()
+            .all()
+        )
+        batches_by_id = {batch.id: batch for batch in batch_rows}
+
     items_by_bag: dict[uuid.UUID, list[LanguageItemOut]] = {b.id: [] for b in bags}
     if bags:
         rows = (
@@ -855,37 +998,59 @@ async def organize_inbox(
                     pos=item.pos,
                 )
             )
-    capture_bags = [
-        InboxBag(group_id=b.id, name=b.name, items=items_by_bag[b.id])
-        for b in bags
-        if items_by_bag[b.id]  # skip already-emptied bags
-    ]
+    capture_bags = []
+    for b in bags:
+        if not items_by_bag[b.id]:
+            continue
+        batch = batches_by_id.get(b.ingestion_batch_id) if b.ingestion_batch_id else None
+        capture_bags.append(
+            InboxBag(
+                group_id=b.id,
+                name=b.name,
+                items=items_by_bag[b.id],
+                level_title=b.level_title,
+                ingestion_batch_id=b.ingestion_batch_id,
+                source_raw_text=batch.source_raw_text if batch else None,
+                media_urls=batch.media_urls if batch else [],
+            )
+        )
 
     # 2. Practice-derived candidates: words the child said, not yet anywhere in
     #    the account's content. Derived from turn text — no separate event table.
-    existing_texts = {
-        t.lower()
-        for (t,) in (
-            await db.execute(
-                select(LanguageItem.text)
-                .join(ItemGroupMember, ItemGroupMember.item_id == LanguageItem.id)
-                .join(ItemGroup, ItemGroup.id == ItemGroupMember.group_id)
-                .where(ItemGroup.owner_account_id == account.id)
-            )
-        ).all()
-    }
-
+    #
+    # Count per-word occurrences across turns first, then do a single NOT EXISTS
+    # check in the DB — avoids pulling the entire account vocabulary into Python.
     counts: dict[str, int] = {}
     user_texts = (
         await db.execute(select(Turn.text_user).where(Turn.learner_id == learner_id))
     ).all()
     for (text_user,) in user_texts:
         for word in _tokenize_words(text_user or ""):
-            if len(word) < 2 or word in _STOPWORDS or word in existing_texts:
+            if len(word) < 2 or word in _STOPWORDS:
                 continue
             counts[word] = counts.get(word, 0) + 1
 
-    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    # Filter out words already stored anywhere in the account's content.
+    # Subquery approach: one DB round-trip to look up only the candidate set.
+    candidate_words = list(counts.keys())
+    existing_texts: set[str] = set()
+    if candidate_words:
+        existing_rows = (
+            await db.execute(
+                select(LanguageItem.text)
+                .join(ItemGroupMember, ItemGroupMember.item_id == LanguageItem.id)
+                .join(ItemGroup, ItemGroup.id == ItemGroupMember.group_id)
+                .where(
+                    ItemGroup.owner_account_id == account.id,
+                    func.lower(LanguageItem.text).in_(candidate_words),
+                )
+            )
+        ).all()
+        existing_texts = {t.lower() for (t,) in existing_rows}
+
+    # Remove words already present anywhere in the account's content.
+    filtered = {w: c for w, c in counts.items() if w not in existing_texts}
+    ranked = sorted(filtered.items(), key=lambda kv: (-kv[1], kv[0]))
     practice_candidates = [InboxCandidate(text=w, count=c) for w, c in ranked[:_MAX_CANDIDATES]]
 
     return InboxOut(
@@ -1003,15 +1168,40 @@ def _path_of(group: ItemGroup, by_id: dict[uuid.UUID, ItemGroup]) -> str:
     return " › ".join(reversed(names))  # noqa: RUF001 (intentional UI path separator)
 
 
-_SUGGEST_PROMPT = """You organize a child's English learning materials into a tag tree \
+LEVEL_PRESETS = [
+    "教材",
+    "单元",
+    "课次",
+    "小节",
+    "知识点",
+    "册次",
+    "级别",
+    "分类",
+    "考试",
+    "科目",
+    "模块",
+    "题型",
+    "专项",
+    "任务",
+    "分级",
+]
+
+_SUGGEST_PROMPT = f"""You organize a child's English learning materials into a tag tree \
 (textbook → book → unit → lesson, variable depth). Given a freshly captured set of words \
-and the family's EXISTING tag paths, return the single best tag path to file this set under.
+and the family's EXISTING tag paths, return the single best tag path to file this set under, \
+along with a corresponding child-friendly semantic level title for each tag.
+
+Preferred Level Titles:
+Choose or prioritize level titles from this list if they fit: {", ".join(LEVEL_PRESETS)}.
+However, you are free to expand or suggest other child-friendly or contextually appropriate \
+terms if none of the presets fit (e.g. "Part", "Section", "Task" or custom book divisions).
 
 Rules:
 - Strongly prefer extending an EXISTING path (reuse exact tag names) when the content fits.
 - Otherwise propose a sensible new path (2-4 tags, e.g. ["Tot Talk", "Book 1", "Unit 3"]).
-- Tags are short human-readable names; never invent words not implied by the input.
-- Return ONLY JSON: {"tag_path": ["...", "..."]}. No prose, no fences."""
+- Provide a clear, child-friendly level title for each path segment (e.g. ["教材", "单元"]).
+- Return ONLY JSON: {{"tag_path": ["...", "..."], "level_titles": ["...", "..."]}}. \
+No prose, no fences."""
 
 
 class SuggestBagBody(BaseModel):
@@ -1020,6 +1210,7 @@ class SuggestBagBody(BaseModel):
 
 class SuggestBagOut(BaseModel):
     tag_path: list[str]
+    level_titles: list[str] | None = None
     source: Literal["ai", "default"]
 
 
@@ -1031,7 +1222,11 @@ async def organize_suggest_bag(
 ) -> SuggestBagOut:
     """Predict where a capture bag should be filed. Falls back to the bag's own name."""
     bag = await _require_owned_group(body.group_id, account, db)
-    default = SuggestBagOut(tag_path=[bag.name.strip() or "未分类"], source="default")
+    default = SuggestBagOut(
+        tag_path=[bag.name.strip() or "未分类"],
+        level_titles=[bag.level_title or "教材"],
+        source="default",
+    )
 
     words = [
         t
@@ -1071,12 +1266,20 @@ async def organize_suggest_bag(
         f"name: {bag.name}\nwords: {', '.join(words[:60])}\n"
     )
     try:
-        resp = await factory.llm.invoke([LLMMessage(role="user", content=prompt)], max_tokens=200)
+        resp = await factory.llm.invoke([LLMMessage(role="user", content=prompt)], max_tokens=300)
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", resp.text.strip())
         data = json.loads(text)
         tag_path = [str(s).strip() for s in data.get("tag_path", []) if str(s).strip()]
+        level_titles = [str(s).strip() for s in data.get("level_titles", []) if str(s).strip()]
         if tag_path:
-            return SuggestBagOut(tag_path=tag_path[:6], source="ai")
+            # Cap tag_path first; then align level_titles to the same length so
+            # they never have more entries than the returned path segments.
+            clean_tag_path = tag_path[:6]
+            return SuggestBagOut(
+                tag_path=clean_tag_path,
+                level_titles=level_titles[: len(clean_tag_path)] if level_titles else None,
+                source="ai",
+            )
     except Exception:
         log.warning("organize suggest-bag: LLM suggestion failed, using default", exc_info=True)
     return default
@@ -1086,6 +1289,8 @@ class FileBagBody(BaseModel):
     source_group_id: uuid.UUID
     tag_path: list[str]
     archive_emptied: bool = True
+    level_titles: list[str] | None = None
+    source_raw_text: str | None = None
 
 
 class FileBagOut(BaseModel):
@@ -1109,7 +1314,42 @@ async def organize_file_bag(
     if not clean:
         raise HTTPException(status_code=400, detail="tag_path cannot be empty")
 
-    _, leaf = await _assemble_tag_path(db, account, clean, account.last_active_learner_id)
+    _, leaf = await _assemble_tag_path(
+        db,
+        account,
+        clean,
+        account.last_active_learner_id,
+        level_titles=body.level_titles,
+    )
+    # Verify the target leaf is writable (respects lock chain on existing nodes).
+    await _verify_write_permission(leaf, account, db, x_role=x_role)
+
+    # IngestionBatch creation/updating/inheritance logic
+    ingestion_batch_id = source.ingestion_batch_id
+    if body.source_raw_text is not None:
+        if ingestion_batch_id is not None:
+            # If batch already existed, update its text
+            batch = (
+                await db.execute(
+                    select(IngestionBatch).where(IngestionBatch.id == ingestion_batch_id)
+                )
+            ).scalar_one_or_none()
+            if batch:
+                batch.source_raw_text = body.source_raw_text
+        else:
+            # Create a new batch
+            batch = IngestionBatch(
+                source_type="text",
+                source_raw_text=body.source_raw_text,
+                media_urls=[],
+            )
+            db.add(batch)
+            await db.flush()
+            ingestion_batch_id = batch.id
+            source.ingestion_batch_id = ingestion_batch_id
+
+    if ingestion_batch_id is not None:
+        leaf.ingestion_batch_id = ingestion_batch_id
 
     item_ids = [
         i
