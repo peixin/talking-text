@@ -102,7 +102,10 @@
       "CHAT_TURN_FAILED": "對話失敗，請稍後再試",
       "CHAT_SESSION_HARD_LIMIT": "對話已達到最大長度，請開始新對話"
     },
-    "transcribing": "識別中…"
+    "transcribing": "識別中…",
+    "scope_items": "{count} 個學習點",
+    "scope_incl_sub": "含子章節",
+    "scope_too_many": "偏多 · 智能挑選 {cap}"
   },
   "Materials": {
     "title": "學習素材",
@@ -165,7 +168,9 @@
     "no_groups_yet": "還沒有素材 — 點拍照圖示新增一個",
     "items_count": "{count} 個學習點",
     "ingest_new_material": "📸 智能錄入新教材",
-    "close": "關閉"
+    "close": "關閉",
+    "items_count_total": "共 {count} 個學習點 · 含子章節",
+    "too_many": "超過 {cap} 個 · AI 將挑選未掌握的 {cap} 個"
   },
   "Ingest": {
     "title_input": "新增學習素材",

@@ -114,7 +114,10 @@
       "CHAT_TURN_FAILED": "对话失败，请稍后再试",
       "CHAT_SESSION_HARD_LIMIT": "对话已达到最大长度，请开始新对话"
     },
-    "transcribing": "识别中…"
+    "transcribing": "识别中…",
+    "scope_items": "{count} 个学习点",
+    "scope_incl_sub": "含子章节",
+    "scope_too_many": "偏多 · 智能挑选 {cap}"
   },
   "Materials": {
     "title": "学习素材",
@@ -177,7 +180,9 @@
     "no_groups_yet": "还没有素材 — 点拍照图标添加一个",
     "items_count": "{count} 个学习点",
     "ingest_new_material": "📸 智能录入新教材",
-    "close": "关闭"
+    "close": "关闭",
+    "items_count_total": "共 {count} 个学习点 · 含子章节",
+    "too_many": "超过 {cap} 个 · AI 将挑选未掌握的 {cap} 个"
   },
   "Ingest": {
     "title_input": "添加学习素材",

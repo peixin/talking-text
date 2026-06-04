@@ -114,7 +114,10 @@
       "CHAT_TURN_FAILED": "Chat failed. Please try again later.",
       "CHAT_SESSION_HARD_LIMIT": "Conversation reached its limit. Please start a new one."
     },
-    "transcribing": "Transcribing…"
+    "transcribing": "Transcribing…",
+    "scope_items": "{count} items",
+    "scope_incl_sub": "incl. sub-chapters",
+    "scope_too_many": "lots · picks {cap}"
   },
   "Materials": {
     "title": "Materials",
@@ -177,7 +180,9 @@
     "no_groups_yet": "No materials yet — tap the camera to add one",
     "items_count": "{count} items",
     "ingest_new_material": "📸 Smart Ingest New Textbook",
-    "close": "Close"
+    "close": "Close",
+    "items_count_total": "{count} items (incl. sub-chapters)",
+    "too_many": "Over {cap} — AI focuses on {cap} unmastered"
   },
   "Ingest": {
     "title_input": "Add learning material",

@@ -1,11 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Check, ChevronDown, Keyboard, Menu, Mic, Pencil, Send, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  Keyboard,
+  Menu,
+  Mic,
+  Pencil,
+  Send,
+  X,
+} from "lucide-react";
 import { useLocale } from "next-intl";
 
 import { GroupOut, LearnerOut, SessionOut, TurnOut } from "@/lib/backend";
+import { SCOPE_SOFT_CAP } from "@/lib/constants";
 import { useRouter } from "@/i18n/routing";
 import { Message, createSession, deleteSession, getAudio, renameSession } from "./actions";
 import { SessionSidebarClient } from "./SessionSidebarClient";
@@ -13,6 +24,7 @@ import { MessageListClient, AudioState } from "./MessageListClient";
 import { RecordButtonClient, Mode } from "./RecordButtonClient";
 import { IngestDrawerClient, IngestTrigger } from "./IngestDrawerClient";
 import { ScopeSwitcherClient } from "./ScopeSwitcherClient";
+import { ScopePath, type Crumb } from "./ScopePathClient";
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
@@ -76,6 +88,47 @@ export function ChatClient({
 
   // Ingest drawer + scope switcher
   const [currentGroup, setCurrentGroup] = useState<GroupOut | null>(initialCurrentGroup);
+
+  // Recursive item total for the scoped group — a container's own item_count is often
+  // 0, so the banner shows what would actually be practiced (self + all descendants).
+  const currentGroupTotal = useMemo(() => {
+    if (!currentGroup) return 0;
+    const byId = new Map(groups.map((g) => [g.id, g]));
+    const childrenMap = new Map<string, GroupOut[]>();
+    groups.forEach((g) => {
+      if (g.parent_id && byId.has(g.parent_id)) {
+        const list = childrenMap.get(g.parent_id) || [];
+        list.push(g);
+        childrenMap.set(g.parent_id, list);
+      }
+    });
+    function total(id: string, seen: Set<string>): number {
+      if (seen.has(id)) return 0;
+      seen.add(id);
+      const self = byId.get(id)?.item_count || 0;
+      return self + (childrenMap.get(id) || []).reduce((a, k) => a + total(k.id, new Set(seen)), 0);
+    }
+    return total(currentGroup.id, new Set());
+  }, [currentGroup, groups]);
+
+  // Banner shows the full root → current path (collapsing the middle when it doesn't
+  // fit — see ScopePath). Built by walking parent_id up from the current group.
+  const currentChain = useMemo<Crumb[]>(() => {
+    if (!currentGroup) return [];
+    const byId = new Map(groups.map((g) => [g.id, g]));
+    const out: Crumb[] = [];
+    const seen = new Set<string>();
+    let cur: GroupOut | undefined = byId.get(currentGroup.id);
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      out.unshift({ id: cur.id, name: cur.name });
+      cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
+    }
+    return out;
+  }, [currentGroup, groups]);
+  const currentIsContainer = currentGroup != null && currentGroupTotal > currentGroup.item_count;
+  const currentTooMany = currentGroupTotal > SCOPE_SOFT_CAP;
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTrigger, setDrawerTrigger] = useState<IngestTrigger>("camera");
   const [scopeSwitchOpen, setScopeSwitchOpen] = useState(false);
@@ -565,18 +618,28 @@ export function ChatClient({
         <button
           type="button"
           onClick={() => setScopeSwitchOpen(true)}
-          className="bg-muted/40 text-muted-foreground hover:bg-muted flex w-full items-center gap-2 border-b px-4 py-2 text-left text-xs transition"
+          className="bg-muted/40 text-muted-foreground hover:bg-muted relative flex w-full items-center gap-2 border-b px-4 py-2 text-left text-xs transition"
         >
           {currentGroup ? (
             <>
-              <span>📕</span>
-              <span className="text-foreground font-medium">{currentGroup.name}</span>
-              <span>· {currentGroup.item_count} items</span>
+              <span className="shrink-0">📕</span>
+              {/* full root → current path, collapsing the middle when space is tight */}
+              <ScopePath chain={currentChain} />
+              <span className="shrink-0">· {t("scope_items", { count: currentGroupTotal })}</span>
+              {currentIsContainer && (
+                <span className="text-muted-foreground/70 shrink-0">{t("scope_incl_sub")}</span>
+              )}
+              {currentTooMany && (
+                <span className="flex shrink-0 items-center gap-0.5 font-medium text-amber-600 dark:text-amber-500">
+                  <AlertTriangle className="h-3 w-3" />
+                  {t("scope_too_many", { cap: SCOPE_SOFT_CAP })}
+                </span>
+              )}
             </>
           ) : (
             <span>✨ {t("scope_free_practice")}</span>
           )}
-          <ChevronDown className="text-muted-foreground ml-auto h-3.5 w-3.5" />
+          <ChevronDown className="text-muted-foreground ml-auto h-3.5 w-3.5 shrink-0" />
         </button>
 
         {/* Singleton audio element — owned here, shared via handlePlay */}

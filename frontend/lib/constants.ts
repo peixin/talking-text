@@ -1,3 +1,7 @@
+// Scope Computer V1 caps a turn's vocab at this many items (mastery-prioritized when
+// exceeded). The picker/banner warn past it so parents know a big scope gets sampled.
+export const SCOPE_SOFT_CAP = 100;
+
 export const LEVEL_PRESETS = [
   // Textbook defaults & hierarchy presets
   "教材",
