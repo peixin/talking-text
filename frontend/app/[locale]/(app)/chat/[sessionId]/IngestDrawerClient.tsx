@@ -94,6 +94,9 @@ export function IngestDrawerClient({
   // in the organize workbench. See docs/content-lifecycle.md §3, §4.
   const [name, setName] = useState<string>("");
   const [inferredCefr, setInferredCefr] = useState<string | null>(null);
+  // The parent's own note about this material, separated out by the AI. Editable,
+  // saved as the group's prompt_notes — never mixed into the extracted items.
+  const [parentNote, setParentNote] = useState<string>("");
 
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -121,6 +124,7 @@ export function IngestDrawerClient({
         setName("");
         setRawText("");
         setInferredCefr(null);
+        setParentNote("");
         setRecordMode("idle");
         setRecordError(null);
         setWarningMessage(null);
@@ -336,6 +340,7 @@ export function IngestDrawerClient({
     const meta = result.result.metadata;
     setName((meta.suggested_name || "").trim());
     setInferredCefr(meta.cefr_level || "");
+    setParentNote((meta.parent_note || "").trim());
     setItems(sortForEdit(result.result.items));
     setRawText(result.result.source_raw_text || "");
     setStep({ kind: "preview", mode: "summary", result: result.result });
@@ -359,6 +364,7 @@ export function IngestDrawerClient({
     const meta = result.result.metadata;
     setName((meta.suggested_name || "").trim());
     setInferredCefr(meta.cefr_level || "");
+    setParentNote((meta.parent_note || "").trim());
     setItems(sortForEdit(result.result.items));
     setRawText(result.result.source_raw_text || "");
     setStep({ kind: "preview", mode: "summary", result: result.result });
@@ -377,6 +383,7 @@ export function IngestDrawerClient({
       name: name.trim() || t("default_group_name"),
       kind: "quick_practice",
       items: body,
+      prompt_notes: parentNote.trim() || null,
       source_raw_text: rawText.trim() || null,
     });
     if (!createRes.ok) {
@@ -617,6 +624,25 @@ export function IngestDrawerClient({
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* 我的说明 / 要求 — separated from the content by the AI. Saved as the
+                    group's prompt_notes; it steers the AI teacher, never becomes items. */}
+                <div className="space-y-1.5 rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
+                  <label className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-emerald-800 uppercase">
+                    我的说明 · 要求
+                    <span className="rounded bg-emerald-100 px-1.5 py-px text-[8px] font-bold tracking-normal text-emerald-700 normal-case dark:bg-emerald-950/40">
+                      AI 已从内容中分离
+                    </span>
+                  </label>
+                  <textarea
+                    value={parentNote}
+                    onChange={(e) => setParentNote(e.target.value)}
+                    disabled={step.kind === "saving"}
+                    placeholder="你对这份素材的说明、要求或批注（任意语言）。例如：这是第3单元生词，重点练 r 发音。仅用于指导 AI 老师，不会被当作学习内容。"
+                    rows={2}
+                    className="bg-background border-border w-full resize-y rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+                  />
                 </div>
 
                 {/* 📝 底稿微调与重新分析 (Start with Vision, Refine with Text) */}

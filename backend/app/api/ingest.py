@@ -33,9 +33,17 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 _MAX_IMAGES = 5
 _MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB after frontend resize; safety cap
 
-_EXTRACTION_PROMPT = """You are a highly intelligent English learning content analyst. \
-Your job is to extract structured learning items (words, phrase collocations, and sentence \
-patterns) from images and/or text descriptions provided by parents.
+_EXTRACTION_PROMPT = """You help parents register English study material. A single \
+capture mixes two DIFFERENT kinds of input, and your first job is to tell them apart:
+
+  • MATERIAL — the actual study content: the attached image(s), and any English text \
+the parent pastes verbatim as content to be learned. You EXTRACT learning items \
+(words, phrase collocations, sentence patterns) from MATERIAL.
+  • PARENT NOTE — the parent's OWN words ABOUT the material: context, requests, or \
+reminders, e.g. "this is Unit 3 vocab", "重点练 r 的发音", "focus on the question \
+patterns", "孩子见过这些词了". This may be in ANY language and any style. It is \
+GUIDANCE, not content — never extract items from it, and never translate, correct, \
+grade, or complain about it.
 
 Output STRICTLY valid JSON matching this schema:
 
@@ -46,7 +54,8 @@ Output STRICTLY valid JSON matching this schema:
   "metadata": {
     "suggested_name": string | null,
     "cefr_level": "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | null,
-    "confidence": "high" | "medium" | "low"
+    "confidence": "high" | "medium" | "low",
+    "parent_note": string | null
   },
   "items": [
     {
@@ -63,9 +72,16 @@ Output STRICTLY valid JSON matching this schema:
   "warnings": [string]
 }
 
-Extraction Rules:
-1. ONLY English items. Ignore or filter out non-English translations/explanations.
-2. Item Types:
+Rules:
+1. Items come from the MATERIAL only. Use the PARENT NOTE to STEER extraction \
+(what to focus on, scope, difficulty) — do NOT turn the note's text into items.
+2. `metadata.parent_note`: concisely restate the parent's instructions / notes / \
+requirements, in their ORIGINAL language (do not translate). Null if the parent \
+supplied only content with no commentary. NEVER flag the note's language or grammar.
+3. Do NOT correct, rewrite, or critique spelling, grammar, or usage of ANY text — \
+capture it as it appears (e.g. keep "a unknown world" exactly as written). You are \
+an extractor, not a proofreader.
+4. Item Types:
    - "word": A single English word, e.g. "apple", "beautiful".
    - "phrase": A multi-word fixed collocation, idiom, or lexical chunk, \
 e.g. "by the way", "look after".
@@ -73,19 +89,22 @@ e.g. "by the way", "look after".
 blanks, e.g. "I like ___ and ___.", "Can you help me ___?".
                 For patterns, set `anchor` to the lowercase fixed part of \
 the pattern (e.g. "i like" or "can you help me").
-3. CEFR Difficulty: Estimate the overall CEFR difficulty level \
+5. CEFR Difficulty: Estimate the overall CEFR difficulty level \
 (`metadata.cefr_level`) of the entire material (A1 = elementary/K1-K3, \
 A2 = high elementary/K4-K6, B1 = middle school, B2 = high school, C1+ = advanced).
-4. Suggested Name (`metadata.suggested_name`): A short, natural label (2-20 \
+6. Suggested Name (`metadata.suggested_name`): A short, natural label (2-20 \
 characters, in the material's apparent language) for THIS captured set of items — \
 e.g. "Unit 3 words", "动物单词", "Colors". This is ONLY a naming suggestion the \
 parent will confirm or rename. You do NOT decide where this set belongs in any \
 textbook hierarchy — that is done later by a person. Do not output book/unit/lesson \
 structure or parent references.
-5. Skip page numbers, copyright blocks, publisher names, and system instructions.
-6. Transcribe the FULL English text found on the page or inside the input into \
-`source_raw_text` as a raw script string.
-7. Return ONLY the JSON object. Do not include any markdown fences \
+7. Skip page numbers, copyright blocks, publisher names, and system instructions.
+8. Transcribe the FULL English text of the MATERIAL into `source_raw_text` as a raw \
+script string.
+9. `warnings`: ONLY for problems that block extraction — an unreadable image, or no \
+extractable English content at all. NEVER warn about non-English text, the parent's \
+language choice, or grammar/spelling style.
+10. Return ONLY the JSON object. Do not include any markdown fences \
 or explanation before/after the JSON."""
 
 
@@ -106,6 +125,10 @@ class ExtractedMetadata(BaseModel):
     suggested_name: str | None = None
     cefr_level: CEFRLevel | None = None
     confidence: ConfidenceLevel = "low"
+    #: The parent's own words ABOUT the material (context / requests / reminders),
+    #: in their original language. Steers extraction and is preserved as the
+    #: group's prompt_notes — it is NEVER extracted as content or grammar-checked.
+    parent_note: str | None = None
 
 
 class ExtractedItem(BaseModel):
@@ -216,19 +239,26 @@ async def extract_content(
         if img.content_type and img.content_type.startswith("image/"):
             image_mime = img.content_type
 
-    user_block = (
-        f"Parent provided the following text description/context "
-        f"(which may be a manual input and/or transcribed voice):\n"
-        f'"{description}"\n\n'
-    )
+    user_block = ""
+    if description:
+        user_block += (
+            "The parent's text input below (manual and/or transcribed voice) may "
+            "contain BOTH the material itself (English content to extract) AND the "
+            "parent's own notes/requests about it (any language). Separate them per "
+            "the rules: extract only the material, and capture the parent's own words "
+            "into metadata.parent_note.\n"
+            f'"{description}"\n\n'
+        )
     if image_bytes:
         user_block += (
-            f"Please extract structured content from the attached "
-            f"{len(image_bytes)} image(s), taking the parent's text "
-            f"context above into account."
+            f"The {len(image_bytes)} attached image(s) are MATERIAL — extract learning "
+            f"items from them, steered by any parent notes above."
         )
-    else:
-        user_block += "Please extract structured content from the parent's text context above."
+    elif description:
+        user_block += (
+            "There is no image; the material, if any, is whatever English content "
+            "appears in the text above (the rest is the parent's note)."
+        )
 
     full_prompt = f"{_EXTRACTION_PROMPT}\n\n--- CURRENT UPLOAD CONTEXT ---\n{user_block}"
 

@@ -492,13 +492,13 @@ async def get_group(
             for item, g_name, g_id in rows
         ]
     else:
-        stmt = (
+        leaf_stmt = (
             select(LanguageItem)
             .join(ItemGroupMember, ItemGroupMember.item_id == LanguageItem.id)
             .where(ItemGroupMember.group_id == group.id)
             .order_by(LanguageItem.type, LanguageItem.text)
         )
-        items = list((await db.execute(stmt)).scalars().all())
+        items = list((await db.execute(leaf_stmt)).scalars().all())
         items_out = [
             LanguageItemOut(
                 id=item.id,

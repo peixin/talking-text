@@ -88,8 +88,23 @@ def test_parse_extraction_reads_new_metadata_shape():
     assert isinstance(result, IngestionResult)
     assert result.metadata.suggested_name == "Animals"
     assert result.metadata.cefr_level == "A1"
+    assert result.metadata.parent_note is None  # absent → None
     assert result.items[0].text == "cat"
     assert result.items[0].anchor == "cat"  # normalized
+
+
+def test_parse_extraction_captures_parent_note_without_extracting_it():
+    """The parent's own note (any language) rides along in metadata.parent_note;
+    it is preserved verbatim, never turned into items."""
+    note = "重点练 unknown world 句型 孩子 r 发音不好"
+    raw = (
+        '{"metadata": {"suggested_name": "Unit 3", '
+        f'"parent_note": "{note}"}}, '
+        '"items": [{"text": "unknown", "type": "word"}], "warnings": []}'
+    )
+    result = _parse_extraction(raw)
+    assert result.metadata.parent_note == note
+    assert [i.text for i in result.items] == ["unknown"]
 
 
 def test_parse_extraction_strips_json_code_fence():

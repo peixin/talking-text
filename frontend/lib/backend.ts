@@ -165,6 +165,9 @@ export type ExtractedMetadata = {
   suggested_name: string | null;
   cefr_level: CefrLevel | null;
   confidence: Confidence;
+  // The parent's own words about the material (context / requests), any language.
+  // Steers extraction and is preserved as the group's prompt_notes — never extracted.
+  parent_note: string | null;
 };
 
 export type IngestionResult = {

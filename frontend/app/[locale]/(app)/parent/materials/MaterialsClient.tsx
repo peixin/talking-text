@@ -219,31 +219,58 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
         </Button>
       </div>
 
-      {/* Un-organized capture bags → go to the organize workbench */}
+      {/* Un-organized capture bags → practice straight away, or organize later */}
       {captureRoots.length > 0 && (
         <section className="space-y-3 rounded-2xl border border-amber-300/60 bg-amber-50/40 p-4">
           <div className="flex items-center justify-between">
             <h3 className="flex items-center gap-1.5 text-sm font-bold text-amber-700">
               <Inbox className="h-4 w-4" />
-              待整理采集（{captureRoots.length} 袋）
+              随手采集（{captureRoots.length} 袋）
             </h3>
             <Link
               href="/parent/organize"
               className="text-sm font-medium text-amber-700 transition hover:text-amber-900"
             >
-              去整理 →
+              去整理成教材 →
             </Link>
           </div>
+          <p className="text-xs text-amber-700/70">
+            可直接开练，无需归入教材；想沉淀成教材时再去整理。
+          </p>
           <div className="flex flex-wrap gap-2">
-            {captureRoots.map((n) => (
-              <span
-                key={n.group.id}
-                className="border-border bg-background inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs"
-              >
-                {n.group.name}
-                <span className="text-muted-foreground">{n.group.item_count} 词</span>
-              </span>
-            ))}
+            {captureRoots.map((n) => {
+              const isBusy = busy === n.group.id;
+              return (
+                <div
+                  key={n.group.id}
+                  className="border-border bg-background inline-flex items-center gap-2 rounded-full border py-1 pr-1 pl-3 text-xs"
+                >
+                  <Link
+                    href={`/parent/materials/${n.group.id}`}
+                    className="font-medium transition hover:text-amber-700"
+                    title="查看 / 编辑这袋"
+                  >
+                    {n.group.name}
+                  </Link>
+                  <span className="text-muted-foreground">{n.group.item_count} 词</span>
+                  <Button
+                    size="sm"
+                    onClick={() => handleStartSession(n.group.id)}
+                    disabled={isBusy}
+                    className="h-6 rounded-full bg-amber-500 px-2.5 text-[11px] font-semibold text-white hover:bg-amber-600"
+                  >
+                    {isBusy ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <>
+                        <MessageSquare className="mr-1 h-3 w-3" />
+                        练习
+                      </>
+                    )}
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
