@@ -1,0 +1,137 @@
+# Model registry — per-model metadata that drives context limits, capability
+# gating, and (later) cost calculation. Committed business config; no secrets.
+#
+# Structure: [model.<provider>."<model_id>"] — the CHANNEL (provider) is a table
+# level, not a name prefix, so model ids stay clean. <provider> matches
+# config.toml [adapter.stage.*].provider (and stt_provider/tts_provider); the
+# code looks up by the (provider, model) pair. The SAME model under two channels
+# costs differently → it lives once per channel section, no prefix gymnastics.
+#
+# kind: "llm" | "stt" | "tts"
+# features: any of "cache" "thinking" "structured_output" "function_calling"
+# pricing.unit:
+#   "token_million" — LLM, CNY per million tokens. Flat: input/output/cache_hit.
+#                     Tiered: tiers=[{max_input, input, output, cache_hit}, ...].
+#   "char"          — TTS, CNY per character (price).
+#   "audio_second"  — STT, CNY per second of audio (price).
+#   "audio_hour"    — STT, CNY per hour of audio (price).
+#   "free"          — no charge.
+#
+# Prices are point-in-time; re-check vendor pricing pages / pull from Aliyun's
+# model-intro API (see data/update_models.py, planned) before trusting for billing.
+# `# TODO(fill)` marks data I could not confirm — please verify and fill in.
+
+[defaults]
+# Fallback context window when a (provider, model) is not listed below.
+context_limit = 131072
+
+# ── DeepSeek (direct channel) ─────────────────────────────────────────────────
+
+[model.deepseek."deepseek-v4-flash"]
+kind = "llm"
+context_limit = 1_000_000
+features = ["cache", "thinking"]
+input_modalities = ["text"]
+output_modalities = ["text"]
+pricing = { unit = "token_million", input = 1.0, output = 2.0, cache_hit = 0.02 }
+
+[model.deepseek."deepseek-v4-pro"]
+kind = "llm"
+context_limit = 1_000_000
+features = ["cache", "thinking"]
+input_modalities = ["text"]
+output_modalities = ["text"]
+pricing = { unit = "token_million", input = 3.0, output = 6.0, cache_hit = 0.025 }
+
+# ── Volcengine Ark (Doubao) ───────────────────────────────────────────────────
+
+[model.volc_ark."doubao-seed-2-0-mini-260215"]
+kind = "llm"
+context_limit = 262_144
+features = ["cache"]                       # TODO(fill): confirm thinking support
+input_modalities = ["text"]
+output_modalities = ["text"]
+# TODO(fill): Doubao mini pricing (CNY/M input, output, cache_hit)
+pricing = { unit = "token_million", input = 0.0, output = 0.0, cache_hit = 0.0 }
+
+[model.volc_ark."doubao-vision"]
+# Logical name; the actual Ark endpoint id is mapped in .env VOLC_ARK_ENDPOINTS.
+kind = "llm"
+context_limit = 32_768                     # TODO(fill): confirm vision model context
+features = []
+input_modalities = ["text", "image"]
+output_modalities = ["text"]
+# TODO(fill): Doubao vision pricing
+pricing = { unit = "token_million", input = 0.0, output = 0.0, cache_hit = 0.0 }
+
+# ── Aliyun Bailian (pull from Aliyun model-intro API) ─────────────────────────
+
+[model.aliyun."qwen-plus"]
+kind = "llm"
+context_limit = 131_072                    # TODO(fill): confirm
+features = ["cache"]
+input_modalities = ["text"]
+output_modalities = ["text"]
+pricing = { unit = "token_million", input = 0.8, output = 4.8, cache_hit = 0.0 }  # TODO(fill): cache_hit
+
+[model.aliyun."qwen3-vl-plus"]
+kind = "llm"
+context_limit = 131_072                    # TODO(fill): confirm
+features = ["cache"]
+input_modalities = ["text", "image"]
+output_modalities = ["text"]
+# TODO(fill): qwen3-vl-plus pricing (and whether image tokens priced separately)
+pricing = { unit = "token_million", input = 0.0, output = 0.0, cache_hit = 0.0 }
+
+[model.aliyun."qwen3-asr-flash"]
+kind = "stt"
+input_modalities = ["audio"]
+output_modalities = ["text"]
+# Qwen-ASR is token-billed (rides on /chat/completions).
+pricing = { unit = "token_million", input = 0.0, output = 0.0, cache_hit = 0.0 }  # TODO(fill)
+
+# ── Xiaomi MiMo (multimodal) ──────────────────────────────────────────────────
+
+[model.xiaomi."mimo-v2.5"]
+kind = "llm"
+context_limit = 131_072                    # TODO(fill): confirm
+features = []
+input_modalities = ["text", "image"]
+output_modalities = ["text"]
+pricing = { unit = "token_million", input = 1.0, output = 2.0, cache_hit = 0.0 }  # TODO(fill): cache_hit
+
+[model.xiaomi."mimo-v2.5-pro"]
+kind = "llm"
+context_limit = 131_072                    # TODO(fill): confirm
+features = []
+input_modalities = ["text", "image"]
+output_modalities = ["text"]
+pricing = { unit = "token_million", input = 3.0, output = 6.0, cache_hit = 0.0 }  # TODO(fill): cache_hit
+
+[model.xiaomi."mimo-v2.5-asr"]
+kind = "stt"
+input_modalities = ["audio"]
+output_modalities = ["text"]
+pricing = { unit = "audio_hour", price = 0.5 }     # TODO(fill): confirm ¥0.5/hour
+
+[model.xiaomi."mimo-v2.5-tts"]
+kind = "tts"
+input_modalities = ["text"]
+output_modalities = ["audio"]
+pricing = { unit = "free" }                        # limited-time free
+
+# ── Volcengine Speech (STT + TTS; provider "volc", logical model names) ───────
+# Volc's real STT/TTS ids are resource ids in .env; we key by a stable logical
+# name here and map to the resource id in the adapter.
+
+[model.volc."seedasr"]
+kind = "stt"
+input_modalities = ["audio"]
+output_modalities = ["text"]
+pricing = { unit = "audio_second", price = 0.0 }   # TODO(fill): Volc STT CNY/second
+
+[model.volc."tina"]
+kind = "tts"
+input_modalities = ["text"]
+output_modalities = ["audio"]
+pricing = { unit = "char", price = 0.0 }           # TODO(fill): Volc TTS CNY/char

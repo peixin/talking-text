@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.factory import chat as llm
 from app.adapters.llm.protocol import LLMMessage
 from app.api.auth import get_current_account
+from app.app_config import app_config
 from app.storage.db import get_db
 from app.storage.models.account import Account
 from app.storage.models.learner import Learner
@@ -226,10 +227,11 @@ async def sync_persona(
         gender=body.ai_gender,
         prompt=body.ai_persona_prompt,
     )
+    persona_task = app_config.task("persona")
     response = await llm.invoke(
         [LLMMessage(role="user", content=user_msg)],
-        temperature=0.2,
-        max_tokens=600,
+        temperature=persona_task.temperature,
+        max_tokens=persona_task.max_tokens,
     )
     try:
         synced = json.loads(response.text)

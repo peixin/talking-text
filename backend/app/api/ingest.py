@@ -271,10 +271,11 @@ async def _run_perception(image_bytes: list[bytes], image_mime: str) -> str:
     """Stage 1 of two_stage: transcribe images into layout-aware Markdown."""
     content: list[str | ImagePart] = [_PERCEPTION_PROMPT]
     content += [ImagePart(data=b, mime=image_mime) for b in image_bytes]
+    task = app_config.task("perception")
     resp = await factory.perception.invoke(
         [LLMMessage(role="user", content=content)],
-        temperature=0.1,
-        max_tokens=2048,
+        temperature=task.temperature,
+        max_tokens=task.max_tokens,
     )
     return resp.text.strip()
 
@@ -289,10 +290,11 @@ async def _extract_raw(description: str, image_bytes: list[bytes], image_mime: s
                 len(transcription),
                 transcription,
             )
+        task = app_config.task("extraction")
         resp = await factory.structuring.invoke(
             [LLMMessage(role="user", content=_structuring_prompt(description, transcription))],
-            temperature=0.2,
-            max_tokens=2048,
+            temperature=task.temperature,
+            max_tokens=task.max_tokens,
             response_format=_JSON_FORMAT,
         )
         return resp.text
@@ -300,10 +302,11 @@ async def _extract_raw(description: str, image_bytes: list[bytes], image_mime: s
     # single mode: one multimodal call (image + prompt together)
     content: list[str | ImagePart] = [_single_prompt(description, bool(image_bytes))]
     content += [ImagePart(data=b, mime=image_mime) for b in image_bytes]
+    task = app_config.task("extraction")
     resp = await factory.extraction.invoke(
         [LLMMessage(role="user", content=content)],
-        temperature=0.2,
-        max_tokens=2048,
+        temperature=task.temperature,
+        max_tokens=task.max_tokens,
         response_format=_JSON_FORMAT,
     )
     return resp.text

@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters import factory
 from app.adapters.llm.protocol import LLMMessage
 from app.api.auth import get_current_account
+from app.app_config import app_config
 from app.storage.db import get_db
 from app.storage.models.account import Account
 from app.storage.models.content import (
@@ -1266,7 +1267,12 @@ async def organize_suggest_bag(
         f"name: {bag.name}\nwords: {', '.join(words[:60])}\n"
     )
     try:
-        resp = await factory.chat.invoke([LLMMessage(role="user", content=prompt)], max_tokens=300)
+        naming = app_config.task("group_naming")
+        resp = await factory.chat.invoke(
+            [LLMMessage(role="user", content=prompt)],
+            max_tokens=naming.max_tokens,
+            temperature=naming.temperature,
+        )
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", resp.text.strip())
         data = json.loads(text)
         tag_path = [str(s).strip() for s in data.get("tag_path", []) if str(s).strip()]

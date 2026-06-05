@@ -22,6 +22,8 @@ extraction_mode = "single"
 # model for high-volume chat and a stronger one for material extraction.
 # Supported LLM providers (all OpenAI-compatible): deepseek | volc_ark | aliyun | xiaomi
 # Per-provider base_url + API key live in .env (see app/config.py).
+# Context window / capabilities / pricing per model live in models.toml, keyed by
+# "<provider>/<model>" — switching model auto-updates the context limit.
 
 [adapter.stage.chat]
 # Dialog turns + utility text tasks (session titles, mastery, calibration).
@@ -30,19 +32,18 @@ extraction_mode = "single"
 # turn, so multi-turn chat is mostly cache hits.
 provider = "deepseek"
 model = "deepseek-v4-flash"
-context_window = 1048576    # 1M tokens
 thinking = "disabled"       # deepseek only: "disabled" | "enabled"
 reasoning_effort = "low"    # deepseek only, when thinking = "enabled"
 
 [adapter.stage.extraction]
 # Used when ingest.extraction_mode = "single": one multimodal call does both
 # OCR and structuring. Vision-capable provider: volc_ark | aliyun | xiaomi.
-#   volc_ark : model id (endpoint) comes from VOLC_ARK_VISION_MODEL in .env
+#   volc_ark : a logical model name (e.g. "doubao-vision"); map it to an Ark
+#              endpoint id in .env VOLC_ARK_ENDPOINTS for the traffic discount.
 #   aliyun   : e.g. "qwen3-vl-plus" (strong VL + reasoning)
 #   xiaomi   : e.g. "mimo-v2.5-pro" (multimodal)
 provider = "volc_ark"
-model = ""                  # volc_ark: leave empty, resolved from VOLC_ARK_VISION_MODEL
-context_window = 262144
+model = "doubao-vision"
 
 [adapter.stage.perception]
 # Used when extraction_mode = "two_stage" (images only): a VLM that transcribes
@@ -50,7 +51,7 @@ context_window = 262144
 # groupings). Just a good transcriber — the reasoning lives in structuring.
 # Vision-capable provider: volc_ark | aliyun | xiaomi.
 provider = "volc_ark"
-model = ""                  # volc_ark: resolved from VOLC_ARK_VISION_MODEL
+model = "doubao-vision"     # volc_ark: map to an endpoint id via VOLC_ARK_ENDPOINTS (.env)
 
 [adapter.stage.structuring]
 # Used when extraction_mode = "two_stage": the single "brain" that turns all
@@ -58,9 +59,39 @@ model = ""                  # volc_ark: resolved from VOLC_ARK_VISION_MODEL
 # text-only reasoner since it never sees images.
 provider = "deepseek"
 model = "deepseek-v4-pro"
-context_window = 1048576
 thinking = "enabled"        # complex structuring benefits from reasoning
 reasoning_effort = "medium"
+
+# ── Per-task generation budgets ───────────────────────────────────────────────
+# How long an output we request per use. A task decision (not a model property);
+# the model's hard ceiling lives in models.toml.
+[task.dialog]
+max_tokens = 200            # child chat reply (kept short for low latency)
+temperature = 0.7
+[task.greeting]
+max_tokens = 100            # AI-initiated session opener
+temperature = 0.7
+[task.title]
+max_tokens = 20             # ≤8-char session title
+temperature = 0.3
+[task.calibration]
+max_tokens = 200            # learner level estimation
+temperature = 0.0
+[task.mastery]
+max_tokens = 600            # session-end mastery analysis
+temperature = 0.0
+[task.persona]
+max_tokens = 600            # learner AI-persona generation
+temperature = 0.2
+[task.group_naming]
+max_tokens = 300            # auto-name an item group
+temperature = 0.7
+[task.extraction]
+max_tokens = 2048           # curriculum item extraction / structuring
+temperature = 0.2
+[task.perception]
+max_tokens = 2048           # two-stage VLM transcription
+temperature = 0.1
 
 [session]
 # UX soft limit: show "start a new topic?" prompt when turn count reaches this value.

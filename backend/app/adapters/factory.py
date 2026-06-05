@@ -44,10 +44,14 @@ def _openai_llm(
                 reasoning_effort=stage.reasoning_effort if thinking_on else None,
             )
         case "volc_ark":
+            # Model NAME is the identity (config/registry/billing); an optional
+            # endpoint (接入点) id is the wire id sent to the API — used when set
+            # (for traffic discounts), else the model name goes through directly.
+            wire_model = settings.volc_ark_endpoints.get(model, model)
             return OpenAICompatibleLLMAdapter(
                 api_key=settings.volc_ark_api_key,
                 base_url=settings.volc_ark_base_url,
-                model=model,
+                model=wire_model,
                 modalities=modalities,
             )
         case "aliyun":
@@ -76,18 +80,13 @@ def _make_chat() -> TextLLM:
 
 def _make_multimodal(stage: StageConfig, role: str) -> MultimodalLLM:
     """Build a vision-capable adapter for a stage (extraction / perception)."""
-    from app.config import settings
-
     if stage.provider not in _VISION_CAPABLE_PROVIDERS:
         raise ValueError(
             f"{role} provider {stage.provider!r} does not support image input; "
             f"pick one of {sorted(_VISION_CAPABLE_PROVIDERS)}"
         )
-    # volc_ark's vision endpoint id lives in .env; other providers use the config model.
-    model = stage.model
-    if stage.provider == "volc_ark":
-        model = settings.volc_ark_vision_model or stage.model
-    return _openai_llm(stage, model, frozenset({"text", "image"}))
+    # The logical model name; volc_ark endpoint resolution happens in _openai_llm.
+    return _openai_llm(stage, stage.model, frozenset({"text", "image"}))
 
 
 def _make_extraction() -> MultimodalLLM:

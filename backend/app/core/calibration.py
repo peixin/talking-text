@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters import factory
 from app.adapters.llm.protocol import LLMMessage
+from app.app_config import app_config
 from app.storage.db import _SessionFactory
 from app.storage.models.learner import Learner
 from app.storage.models.learning import LearnerCalibrationTurn
@@ -91,13 +92,14 @@ async def _needs_calibration(db: AsyncSession, learner_id: uuid.UUID) -> bool:
 async def _call_estimator(text: str) -> dict | None:
     """One small LLM call; returns None on any parsing problem."""
     try:
+        task = app_config.task("calibration")
         response = await factory.chat.invoke(
             [
                 LLMMessage(role="system", content=_ESTIMATOR_PROMPT),
                 LLMMessage(role="user", content=text),
             ],
-            temperature=0.0,
-            max_tokens=200,
+            temperature=task.temperature,
+            max_tokens=task.max_tokens,
         )
     except Exception:
         log.exception("calibration estimator LLM call failed")

@@ -14,13 +14,22 @@ _CONFIG_PATH = Path(__file__).parent.parent / "config.toml"
 @dataclass(frozen=True)
 class StageConfig:
     """One AI interaction stage's model choice. Each stage can use a different
-    provider + model; base_url + API key per provider live in .env."""
+    provider + model; base_url + API key per provider live in .env. The model's
+    context window / capabilities / pricing come from models.toml (model_registry)."""
 
     provider: str
     model: str
-    context_window: int = 32768  # token limit for this stage's model
     thinking: str = "disabled"  # deepseek only: "disabled" | "enabled"
     reasoning_effort: str = "low"  # deepseek only, when thinking = "enabled"
+
+
+@dataclass(frozen=True)
+class TaskConfig:
+    """Per-task generation budget — how long an output we request for a given
+    use (chat reply, title, extraction, …). A task decision, not a model property."""
+
+    max_tokens: int
+    temperature: float = 0.7
 
 
 @dataclass(frozen=True)
@@ -61,6 +70,13 @@ class AppConfig:
     session: SessionConfig
     auth: AuthConfig
     debug: DebugConfig
+    tasks: dict[str, TaskConfig]  # keyed by task name (see config.toml [task.*])
+
+    def task(self, name: str) -> TaskConfig:
+        try:
+            return self.tasks[name]
+        except KeyError:
+            raise KeyError(f"No [task.{name}] in config.toml") from None
 
 
 def _load() -> AppConfig:
@@ -78,10 +94,14 @@ def _load() -> AppConfig:
         return StageConfig(
             provider=s["provider"],
             model=s.get("model", ""),
-            context_window=s.get("context_window", 32768),
             thinking=s.get("thinking", "disabled"),
             reasoning_effort=s.get("reasoning_effort", "low"),
         )
+
+    tasks = {
+        name: TaskConfig(max_tokens=t["max_tokens"], temperature=t.get("temperature", 0.7))
+        for name, t in raw.get("task", {}).items()
+    }
 
     return AppConfig(
         adapter=AdapterConfig(
@@ -104,6 +124,7 @@ def _load() -> AppConfig:
         debug=DebugConfig(
             perf_logging=debug.get("perf_logging", False),
         ),
+        tasks=tasks,
     )
 
 

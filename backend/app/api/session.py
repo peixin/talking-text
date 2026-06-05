@@ -31,6 +31,7 @@ from app.audio_codec import webm_opus_to_ogg
 from app.config import settings
 from app.core.dialog import EmptyTranscriptionError
 from app.core.dialog.orchestrator import audio_blob_key, audio_media_type
+from app.model_registry import model_registry
 from app.storage.db import get_db
 from app.storage.models.account import Account
 from app.storage.models.learner import Learner
@@ -167,9 +168,9 @@ async def _check_session_limits(session_id: uuid.UUID, db: AsyncSession) -> int:
         ).where(Turn.session_id == session_id)
     )
     turn_count, max_input_tokens = row.one()
-    context_ceiling = int(
-        app_config.session.context_hard_limit * app_config.adapter.chat.context_window
-    )
+    chat = app_config.adapter.chat
+    context_window = model_registry.context_limit(chat.provider, chat.model)
+    context_ceiling = int(app_config.session.context_hard_limit * context_window)
     if max_input_tokens > context_ceiling:
         raise HTTPException(status_code=422, detail="SESSION_HARD_LIMIT")
     return int(turn_count)
@@ -558,6 +559,7 @@ async def _after_turn(
         count = await db.scalar(select(func.count()).where(Turn.session_id == session_id))
         if count == 2:
             try:
+                title_task = app_config.task("title")
                 resp = await _chat.invoke(
                     [
                         LLMMessage(role="system", content=_TITLE_PROMPT),
@@ -566,8 +568,8 @@ async def _after_turn(
                             content=f"Child: {text_user}\nAI: {text_ai}",
                         ),
                     ],
-                    max_tokens=20,
-                    temperature=0.3,
+                    max_tokens=title_task.max_tokens,
+                    temperature=title_task.temperature,
                 )
                 title = resp.text.strip()
                 if title:

@@ -195,7 +195,10 @@ class DialogOrchestrator:
                 len(messages),
                 "\n---\n".join(f"[{m.role}] {m.content}" for m in messages),
             )
-        llm_response = await self._llm.invoke(messages, max_tokens=200)
+        dialog = app_config.task("dialog")
+        llm_response = await self._llm.invoke(
+            messages, max_tokens=dialog.max_tokens, temperature=dialog.temperature
+        )
         text_ai = llm_response.text.strip()
         if app_config.debug.perf_logging:
             log.info(
@@ -331,7 +334,10 @@ class DialogOrchestrator:
             LLMMessage(role="user", content=f"(System instruction: {greeting_instruction})"),
         ]
 
-        llm_response = await self._llm.invoke(messages, max_tokens=100)
+        greeting = app_config.task("greeting")
+        llm_response = await self._llm.invoke(
+            messages, max_tokens=greeting.max_tokens, temperature=greeting.temperature
+        )
         text_ai = llm_response.text.strip()
 
         turn_id = uuid.uuid4()
@@ -440,7 +446,10 @@ class DialogOrchestrator:
             )
 
         text_ai = ""
-        async for delta in self._llm.stream(messages, max_tokens=200):
+        dialog = app_config.task("dialog")
+        async for delta in self._llm.stream(
+            messages, max_tokens=dialog.max_tokens, temperature=dialog.temperature
+        ):
             text_ai += delta
             yield {"event": "text_ai_delta", "delta": delta}
         text_ai = text_ai.strip()

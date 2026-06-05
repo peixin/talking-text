@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters import factory
 from app.adapters.llm.protocol import LLMMessage
+from app.app_config import app_config
 from app.storage.db import _SessionFactory
 from app.storage.models.content import ItemGroupMember, LanguageItem, get_descendant_group_ids
 from app.storage.models.learning import LearnerItemStats
@@ -131,13 +132,14 @@ async def analyze_session(learner_id: uuid.UUID, session_id: uuid.UUID) -> None:
             user_msg = f"TARGET ITEMS:\n{item_lines}\n\nTRANSCRIPT:\n{transcript}"
 
             try:
+                task = app_config.task("mastery")
                 response = await factory.chat.invoke(
                     [
                         LLMMessage(role="system", content=_ANALYSIS_PROMPT),
                         LLMMessage(role="user", content=user_msg),
                     ],
-                    temperature=0.0,
-                    max_tokens=600,
+                    temperature=task.temperature,
+                    max_tokens=task.max_tokens,
                 )
             except Exception:
                 log.exception("session analysis LLM call failed")
