@@ -416,5 +416,7 @@ just db-history
 - [ ] 内置首批教材（Tot Talk 系列 — 给库下种，冷启动）
 - [ ] `_assemble_tag_path` / scope V1 的 DB 集成测试（需 Postgres 测试夹具）
 - [ ] `learner_word_stats` 掌握度表（V2）
+- [ ] **录入闭环 → 抬进 `core/curriculum/`（DB-aware）**：做「重整理 / 未入库素材整理 / AI 自动归档（用 DB 已有 `ItemGroup` 把素材归到某课本某章节）」时，把抽取编排从 `app/api/ingest.py` 抬进 `core/curriculum/`。复用两段式接缝：perception 转写是可重跑的 capture 原始件（重结构化不必重新 OCR），`structuring` 环节作为 AI 归档建议器的扩展点（读已有分组结构）。
+- [ ] **语音存储生命周期（本地 → 远端）**：V1 经 `BlobStorage` 存本地盘（已完成）。下一步：加云 `BlobStorage` 后端并 push 上去。待定：本地副本保留多久、何时返回远端签名 URL 而非本地字节、本地保留/淘汰策略（上传后多久删本地）。
 
 > 截至 2026-05-30：`just check` 全绿 — 后端 `ruff` + `mypy`（0 错，已删死代码 `conversation.py`），前端 `eslint` + `prettier` + `tsc`。

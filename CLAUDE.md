@@ -423,5 +423,7 @@ Rules:
 - [ ] First-party textbook data (Tot Talk series — seed the library, cold-start)
 - [ ] DB-backed tests for `_assemble_tag_path` / scope V1 (needs a Postgres test fixture)
 - [ ] `learner_word_stats` mastery table (V2, when mastery tracker is needed)
+- [ ] **Ingestion closed loop → lift into `core/curriculum/` (DB-aware)** — when building re-organization / inbox organizing / AI-assisted filing ("file this into the right textbook + chapter" using existing DB groups), move the extraction orchestration out of `app/api/ingest.py` into `core/curriculum/`. Reuse the two-stage seam: perception transcription is the re-runnable capture artifact (re-structure without re-OCR); the `structuring` stage becomes the extension point for an AI filing suggester that reads existing `ItemGroup`s.
+- [ ] **Voice storage lifecycle (local → remote)** — V1 keeps audio on local disk via `BlobStorage` (done). Next: add a cloud `BlobStorage` backend and push there. Open decisions: how long to keep the local copy, when to serve a remote signed URL vs local bytes, and the local retention/eviction policy (when to delete local after upload).
 
 > As of 2026-05-30: `just check` is fully green — backend `ruff` + `mypy` (0 errors, dead `conversation.py` removed), frontend `eslint` + `prettier` + `tsc`.

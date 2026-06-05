@@ -36,6 +36,11 @@ be *args:
 fe *args:
     cd frontend && pnpm {{args}}
 
+# 模型探针：直连真实 API 打印响应（详见 backend/probes/README.md）
+# 例：just probe llm --provider deepseek --model deepseek-v4-flash
+probe *args:
+    cd backend && poetry run python -m probes {{args}}
+
 # ───── 安装 ─────
 
 install:
