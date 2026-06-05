@@ -2,9 +2,12 @@
 # Secrets and infrastructure URLs belong in .env
 
 [adapter]
-# Voice pipeline providers (separate wire protocols, not OpenAI-compatible).
-stt_provider = "volc"        # supported: "volc"
-tts_provider = "volc"        # supported: "volc"
+# Voice pipeline providers (separate wire protocols).
+#   stt: "volc" (WebSocket) | "dashscope" (Qwen-ASR, zh+en code-switching)
+#   tts: "volc" (Tina child voice) | "openai_compatible" (/audio/speech: OpenAI / self-hosted)
+# Note: Aliyun Qwen-TTS (DashScope-native WS) and Xiaomi audio are not yet wired.
+stt_provider = "volc"
+tts_provider = "volc"
 
 [adapter.ingest]
 # How material extraction runs (A/B this on real textbook pages):

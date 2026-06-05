@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     # --- Aliyun DashScope / Bailian (LLM, OpenAI-compatible) ---
     dashscope_api_key: str = ""
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    # Qwen-ASR rides on the compatible-mode /chat/completions endpoint (audio part).
+    dashscope_asr_model: str = "qwen3-asr-flash"
+
+    # --- OpenAI-compatible TTS (/audio/speech) — OpenAI or self-hosted ---
+    openai_tts_base_url: str = ""
+    openai_tts_api_key: str = ""
+    openai_tts_model: str = ""
 
     # --- Xiaomi MiMo (LLM, OpenAI-compatible) ---
     xiaomi_api_key: str = ""

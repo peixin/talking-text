@@ -112,6 +112,10 @@ def _make_stt() -> STTAdapter:
             from app.adapters.stt.volc import VolcSTTAdapter
 
             return VolcSTTAdapter()
+        case "dashscope":
+            from app.adapters.stt.dashscope import DashScopeQwenASRAdapter
+
+            return DashScopeQwenASRAdapter()
         case other:
             raise ValueError(f"Unknown STT provider: {other!r}")
 
@@ -122,6 +126,10 @@ def _make_tts() -> TTSAdapter:
             from app.adapters.tts.volc import VolcTTSAdapter
 
             return VolcTTSAdapter()
+        case "openai_compatible":
+            from app.adapters.tts.openai_compatible import OpenAITTSAdapter
+
+            return OpenAITTSAdapter()
         case other:
             raise ValueError(f"Unknown TTS provider: {other!r}")
 
