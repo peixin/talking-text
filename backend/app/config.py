@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
 
+    # --- Aliyun DashScope / Bailian (LLM, OpenAI-compatible) ---
+    dashscope_api_key: str = ""
+    dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+    # --- Xiaomi MiMo (LLM, OpenAI-compatible) ---
+    xiaomi_api_key: str = ""
+    xiaomi_base_url: str = "https://api.xiaomimimo.com/v1"
+
     # --- Volcengine Ark (LLM) ---
     volc_ark_api_key: str = ""
     volc_ark_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"

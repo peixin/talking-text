@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.factory import llm
+from app.adapters.factory import chat as llm
 from app.adapters.llm.protocol import LLMMessage
 from app.api.auth import get_current_account
 from app.storage.db import get_db

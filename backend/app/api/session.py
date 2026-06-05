@@ -20,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.factory import blob as _blob
-from app.adapters.factory import llm as _llm
+from app.adapters.factory import chat as _chat
 from app.adapters.factory import orchestrator as _orchestrator
 from app.adapters.factory import tts as _tts
 from app.adapters.llm.protocol import LLMMessage
@@ -168,7 +168,7 @@ async def _check_session_limits(session_id: uuid.UUID, db: AsyncSession) -> int:
     )
     turn_count, max_input_tokens = row.one()
     context_ceiling = int(
-        app_config.session.context_hard_limit * app_config.adapter.llm.context_window
+        app_config.session.context_hard_limit * app_config.adapter.chat.context_window
     )
     if max_input_tokens > context_ceiling:
         raise HTTPException(status_code=422, detail="SESSION_HARD_LIMIT")
@@ -558,7 +558,7 @@ async def _after_turn(
         count = await db.scalar(select(func.count()).where(Turn.session_id == session_id))
         if count == 2:
             try:
-                resp = await _llm.invoke(
+                resp = await _chat.invoke(
                     [
                         LLMMessage(role="system", content=_TITLE_PROMPT),
                         LLMMessage(

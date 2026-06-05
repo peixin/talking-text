@@ -2,28 +2,62 @@
 # Secrets and infrastructure URLs belong in .env
 
 [adapter]
-# Which adapter implementation to use for each role.
-# Each provider's tunable params live in [adapter.<role>.<provider>] below.
-# Secrets (API keys, endpoints) still belong in .env.
-llm_provider = "deepseek"    # supported: "deepseek" | "volc_ark"
-vision_provider = "volc_ark" # supported: "volc_ark" (DeepSeek has no vision)
+# Voice pipeline providers (separate wire protocols, not OpenAI-compatible).
 stt_provider = "volc"        # supported: "volc"
 tts_provider = "volc"        # supported: "volc"
 
-[adapter.llm.deepseek]
+[adapter.ingest]
+# How material extraction runs (A/B this on real textbook pages):
+#   "single"    — one multimodal call (stage.extraction) does OCR + structuring.
+#   "two_stage" — stage.perception (VLM layout-aware transcription) feeds
+#                 stage.structuring (a strong text model, the single "brain").
+#                 Text-only input skips perception and goes straight to structuring.
+extraction_mode = "single"
+
+# ── LLM stages ────────────────────────────────────────────────────────────────
+# Each AI interaction stage picks its own provider + model, so we can run a cheap
+# model for high-volume chat and a stronger one for material extraction.
+# Supported LLM providers (all OpenAI-compatible): deepseek | volc_ark | aliyun | xiaomi
+# Per-provider base_url + API key live in .env (see app/config.py).
+
+[adapter.stage.chat]
+# Dialog turns + utility text tasks (session titles, mastery, calibration).
+# High volume, simple English Q&A → cheapest fast model wins. DeepSeek's cache-hit
+# price (~¥0.02/M) is ideal here: the curriculum+persona system prompt repeats every
+# turn, so multi-turn chat is mostly cache hits.
+provider = "deepseek"
 model = "deepseek-v4-flash"
 context_window = 1048576    # 1M tokens
-thinking = "disabled"       # "disabled" | "enabled"
-reasoning_effort = "low"    # only relevant when thinking = "enabled"
+thinking = "disabled"       # deepseek only: "disabled" | "enabled"
+reasoning_effort = "low"    # deepseek only, when thinking = "enabled"
 
-[adapter.llm.volc_ark]
-model = "doubao-seed-2-0-mini-260215"
-context_window = 262144               # 256K tokens
+[adapter.stage.extraction]
+# Used when ingest.extraction_mode = "single": one multimodal call does both
+# OCR and structuring. Vision-capable provider: volc_ark | aliyun | xiaomi.
+#   volc_ark : model id (endpoint) comes from VOLC_ARK_VISION_MODEL in .env
+#   aliyun   : e.g. "qwen3-vl-plus" (strong VL + reasoning)
+#   xiaomi   : e.g. "mimo-v2.5-pro" (multimodal)
+provider = "volc_ark"
+model = ""                  # volc_ark: leave empty, resolved from VOLC_ARK_VISION_MODEL
+context_window = 262144
 
-[adapter.vision.volc_ark]
-# Doubao 1.5 Vision Lite endpoint — used by /ingest/extract for OCR +
-# structured language-item extraction from textbook photos.
-model = ""
+[adapter.stage.perception]
+# Used when extraction_mode = "two_stage" (images only): a VLM that transcribes
+# the page into layout-aware Markdown (preserving image-word pairings, tables,
+# groupings). Just a good transcriber — the reasoning lives in structuring.
+# Vision-capable provider: volc_ark | aliyun | xiaomi.
+provider = "volc_ark"
+model = ""                  # volc_ark: resolved from VOLC_ARK_VISION_MODEL
+
+[adapter.stage.structuring]
+# Used when extraction_mode = "two_stage": the single "brain" that turns all
+# text artifacts (transcription + pasted text) into language items. Can be a
+# text-only reasoner since it never sees images.
+provider = "deepseek"
+model = "deepseek-v4-pro"
+context_window = 1048576
+thinking = "enabled"        # complex structuring benefits from reasoning
+reasoning_effort = "medium"
 
 [session]
 # UX soft limit: show "start a new topic?" prompt when turn count reaches this value.

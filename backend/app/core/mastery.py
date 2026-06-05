@@ -131,7 +131,7 @@ async def analyze_session(learner_id: uuid.UUID, session_id: uuid.UUID) -> None:
             user_msg = f"TARGET ITEMS:\n{item_lines}\n\nTRANSCRIPT:\n{transcript}"
 
             try:
-                response = await factory.llm.invoke(
+                response = await factory.chat.invoke(
                     [
                         LLMMessage(role="system", content=_ANALYSIS_PROMPT),
                         LLMMessage(role="user", content=user_msg),

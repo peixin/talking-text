@@ -91,7 +91,7 @@ async def _needs_calibration(db: AsyncSession, learner_id: uuid.UUID) -> bool:
 async def _call_estimator(text: str) -> dict | None:
     """One small LLM call; returns None on any parsing problem."""
     try:
-        response = await factory.llm.invoke(
+        response = await factory.chat.invoke(
             [
                 LLMMessage(role="system", content=_ESTIMATOR_PROMPT),
                 LLMMessage(role="user", content=text),

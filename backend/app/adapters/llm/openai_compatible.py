@@ -145,10 +145,10 @@ class OpenAICompatibleLLMAdapter:
 
 async def _smoke_test() -> None:
     """Run as `poetry run python -m app.adapters.llm.openai_compatible`."""
-    from app.adapters.factory import llm
+    from app.adapters.factory import chat
 
     logging.basicConfig(level=logging.INFO)
-    response = await llm.invoke(
+    response = await chat.invoke(
         [
             LLMMessage(role="system", content="You are a friendly English teacher for kids."),
             LLMMessage(role="user", content="Say hi to me in one short sentence."),

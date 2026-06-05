@@ -24,6 +24,7 @@ from app.adapters import factory
 from app.adapters.llm.protocol import ImagePart, LLMMessage
 from app.adapters.stt.protocol import STTRequest
 from app.api.auth import get_current_account
+from app.app_config import app_config
 from app.audio_codec import webm_opus_to_ogg
 from app.storage.models.account import Account
 
@@ -107,6 +108,25 @@ extractable English content at all. NEVER warn about non-English text, the paren
 language choice, or grammar/spelling style.
 10. Return ONLY the JSON object. Do not include any markdown fences \
 or explanation before/after the JSON."""
+
+
+# Two-stage "perception" prompt: a VLM transcribes the page into layout-aware
+# Markdown for a downstream text model that will NOT see the image — so every
+# signal it needs must survive in text.
+_PERCEPTION_PROMPT = """You transcribe a photo of English study material into Markdown \
+for a downstream extractor that will NOT see the image. Preserve every signal it needs.
+
+- Transcribe ALL text verbatim. Do NOT correct spelling, grammar, or usage.
+- Preserve structure: headings, lists, and tables (as Markdown tables), in reading order.
+- CRUCIAL — image/word pairings: for every picture or illustration, state what it \
+depicts and which word/phrase it is paired with, e.g. `[picture: a red apple] → "apple"`. \
+On children's pages this pairing is often the whole point; never drop it.
+- Preserve visual groupings (e.g. words sharing one colored box) as a grouped list with \
+a short note like "(grouped together in one box)".
+- Keep page numbers, publisher names, and copyright notices OUT.
+- If the parent added notes (any language) describing the material, IGNORE them here — \
+transcribe only what is printed on the page.
+- Output ONLY the Markdown transcription. No commentary, no JSON."""
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -198,6 +218,97 @@ def _parse_extraction(raw_text: str) -> IngestionResult:
     return result
 
 
+# ── Extraction orchestration (single vs two-stage) ────────────────────────────
+
+_JSON_FORMAT: dict[str, Any] = {"type": "json_object"}
+
+
+def _description_block(description: str) -> str:
+    return (
+        "The parent's text input below (manual and/or transcribed voice) may contain "
+        "BOTH the material itself (English content to extract) AND the parent's own "
+        "notes/requests about it (any language). Separate them per the rules: extract "
+        "only the material, and capture the parent's own words into metadata.parent_note.\n"
+        f'"{description}"\n\n'
+    )
+
+
+def _structuring_prompt(description: str, transcription: str) -> str:
+    """Build the structuring user block from text artifacts (no image)."""
+    block = _description_block(description) if description else ""
+    if transcription:
+        block += (
+            "Below is a faithful transcription of the attached study material image(s) — "
+            "this is MATERIAL; extract learning items from it (image/word pairings are "
+            "noted inline):\n\n"
+            f"{transcription}"
+        )
+    elif description:
+        block += (
+            "There is no image; the material, if any, is whatever English content appears "
+            "in the text above (the rest is the parent's note)."
+        )
+    return f"{_EXTRACTION_PROMPT}\n\n--- CURRENT UPLOAD CONTEXT ---\n{block}"
+
+
+def _single_prompt(description: str, has_image: bool) -> str:
+    """Build the one-shot multimodal user block (image goes alongside as parts)."""
+    block = _description_block(description) if description else ""
+    if has_image:
+        block += (
+            "The attached image(s) are MATERIAL — extract learning items from them, "
+            "steered by any parent notes above."
+        )
+    elif description:
+        block += (
+            "There is no image; the material, if any, is whatever English content appears "
+            "in the text above (the rest is the parent's note)."
+        )
+    return f"{_EXTRACTION_PROMPT}\n\n--- CURRENT UPLOAD CONTEXT ---\n{block}"
+
+
+async def _run_perception(image_bytes: list[bytes], image_mime: str) -> str:
+    """Stage 1 of two_stage: transcribe images into layout-aware Markdown."""
+    content: list[str | ImagePart] = [_PERCEPTION_PROMPT]
+    content += [ImagePart(data=b, mime=image_mime) for b in image_bytes]
+    resp = await factory.perception.invoke(
+        [LLMMessage(role="user", content=content)],
+        temperature=0.1,
+        max_tokens=2048,
+    )
+    return resp.text.strip()
+
+
+async def _extract_raw(description: str, image_bytes: list[bytes], image_mime: str) -> str:
+    """Return the raw JSON string from the extraction LLM, per configured mode."""
+    if app_config.adapter.extraction_mode == "two_stage":
+        transcription = await _run_perception(image_bytes, image_mime) if image_bytes else ""
+        if app_config.debug.perf_logging:
+            log.info(
+                "[ingest] perception transcription (%d chars):\n%s",
+                len(transcription),
+                transcription,
+            )
+        resp = await factory.structuring.invoke(
+            [LLMMessage(role="user", content=_structuring_prompt(description, transcription))],
+            temperature=0.2,
+            max_tokens=2048,
+            response_format=_JSON_FORMAT,
+        )
+        return resp.text
+
+    # single mode: one multimodal call (image + prompt together)
+    content: list[str | ImagePart] = [_single_prompt(description, bool(image_bytes))]
+    content += [ImagePart(data=b, mime=image_mime) for b in image_bytes]
+    resp = await factory.extraction.invoke(
+        [LLMMessage(role="user", content=content)],
+        temperature=0.2,
+        max_tokens=2048,
+        response_format=_JSON_FORMAT,
+    )
+    return resp.text
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 
@@ -240,47 +351,8 @@ async def extract_content(
         if img.content_type and img.content_type.startswith("image/"):
             image_mime = img.content_type
 
-    user_block = ""
-    if description:
-        user_block += (
-            "The parent's text input below (manual and/or transcribed voice) may "
-            "contain BOTH the material itself (English content to extract) AND the "
-            "parent's own notes/requests about it (any language). Separate them per "
-            "the rules: extract only the material, and capture the parent's own words "
-            "into metadata.parent_note.\n"
-            f'"{description}"\n\n'
-        )
-    if image_bytes:
-        user_block += (
-            f"The {len(image_bytes)} attached image(s) are MATERIAL — extract learning "
-            f"items from them, steered by any parent notes above."
-        )
-    elif description:
-        user_block += (
-            "There is no image; the material, if any, is whatever English content "
-            "appears in the text above (the rest is the parent's note)."
-        )
-
-    full_prompt = f"{_EXTRACTION_PROMPT}\n\n--- CURRENT UPLOAD CONTEXT ---\n{user_block}"
-
-    response_format: dict[str, Any] = {"type": "json_object"}
-
     try:
-        if image_bytes:
-            content: list[str | ImagePart] = [full_prompt]
-            content += [ImagePart(data=b, mime=image_mime) for b in image_bytes]
-            llm_response = await factory.extraction.invoke(
-                [LLMMessage(role="user", content=content)],
-                temperature=0.2,
-                max_tokens=2048,
-                response_format=response_format,
-            )
-        else:
-            llm_response = await factory.llm.invoke(
-                [LLMMessage(role="user", content=full_prompt)],
-                max_tokens=2048,
-                response_format=response_format,
-            )
+        raw_text = await _extract_raw(description, image_bytes, image_mime)
     except Exception as e:
         log.exception("ingestion LLM call failed")
         raise HTTPException(
@@ -289,9 +361,9 @@ async def extract_content(
         ) from e
 
     try:
-        return _parse_extraction(llm_response.text)
+        return _parse_extraction(raw_text)
     except (json.JSONDecodeError, ValueError):
-        log.warning("invalid JSON from extraction LLM; raw=%r", llm_response.text[:500])
+        log.warning("invalid JSON from extraction LLM; raw=%r", raw_text[:500])
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Extraction returned malformed data; please try again.",

@@ -1266,7 +1266,7 @@ async def organize_suggest_bag(
         f"name: {bag.name}\nwords: {', '.join(words[:60])}\n"
     )
     try:
-        resp = await factory.llm.invoke([LLMMessage(role="user", content=prompt)], max_tokens=300)
+        resp = await factory.chat.invoke([LLMMessage(role="user", content=prompt)], max_tokens=300)
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", resp.text.strip())
         data = json.loads(text)
         tag_path = [str(s).strip() for s in data.get("tag_path", []) if str(s).strip()]
