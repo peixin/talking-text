@@ -12,6 +12,7 @@ To add a new provider (e.g. DeepSeek for LLM):
 from __future__ import annotations
 
 from app.adapters.llm.protocol import LLMAdapter
+from app.adapters.storage.protocol import BlobStorage
 from app.adapters.stt.protocol import STTAdapter
 from app.adapters.tts.protocol import TTSAdapter
 from app.app_config import app_config
@@ -65,12 +66,28 @@ def _make_tts() -> TTSAdapter:
             raise ValueError(f"Unknown TTS provider: {other!r}")
 
 
+def _make_blob() -> BlobStorage:
+    """Pick the blob backend. Local disk for V1; a cloud provider switch
+    (Qiniu / Aliyun / Tencent / Volcengine TOS / MinIO) lands here later."""
+    from app.config import settings
+
+    if not settings.audio_storage_enabled:
+        from app.adapters.storage.local import NullBlobStorage
+
+        return NullBlobStorage()
+
+    from app.adapters.storage.local import LocalBlobStorage
+
+    return LocalBlobStorage(root=settings.audio_storage_dir)
+
+
 # ── Shared singletons ────────────────────────────────────────────────────────
 
 llm: LLMAdapter = _make_llm()
 vision: LLMAdapter = _make_vision()
 stt: STTAdapter = _make_stt()
 tts: TTSAdapter = _make_tts()
+blob: BlobStorage = _make_blob()
 orchestrator: DialogOrchestrator = DialogOrchestrator(
-    stt=stt, llm=llm, tts=tts, scope=V1ScopeComputer()
+    stt=stt, llm=llm, tts=tts, scope=V1ScopeComputer(), blob=blob
 )

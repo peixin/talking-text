@@ -11,15 +11,15 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.factory import blob as _blob
 from app.adapters.factory import llm as _llm
 from app.adapters.factory import orchestrator as _orchestrator
 from app.adapters.factory import tts as _tts
@@ -30,6 +30,7 @@ from app.app_config import app_config
 from app.audio_codec import webm_opus_to_ogg
 from app.config import settings
 from app.core.dialog import EmptyTranscriptionError
+from app.core.dialog.orchestrator import audio_blob_key, audio_media_type
 from app.storage.db import get_db
 from app.storage.models.account import Account
 from app.storage.models.learner import Learner
@@ -272,9 +273,13 @@ async def get_turn_audio(
 ) -> Response:
     """Return audio for a turn direction.
 
-    Serves the stored file when available. When not available (text-mode turns
-    or storage disabled), generates TTS on demand and optionally saves the
-    result so subsequent requests are served from disk.
+    Serves the stored object when available. When not available (text-mode turns
+    or storage disabled), generates TTS on demand and optionally stores the
+    result so subsequent requests are a cache hit.
+
+    The Turn row holds a backend-independent storage *key*, never a path. Cloud
+    backends return a signed URL (we redirect there); the local backend returns
+    bytes that we serve through this authenticated endpoint.
     """
     await _require_session(session_id, account, db)
     row = await db.execute(select(Turn).where(Turn.id == turn_id, Turn.session_id == session_id))
@@ -282,24 +287,20 @@ async def get_turn_audio(
     if not turn:
         raise HTTPException(status_code=404, detail="Turn not found")
 
-    stored_path = turn.audio_in_path if dir == "in" else turn.audio_out_path
-    if stored_path:
-        p = Path(stored_path)
-        if p.exists():
-            media_type = "audio/mpeg" if p.suffix == ".mp3" else "audio/ogg"
-            return FileResponse(p, media_type=media_type)
+    served = await _serve_stored_audio(turn.audio_in_path if dir == "in" else turn.audio_out_path)
+    if served is not None:
+        return served
 
     # Generate TTS on demand — serialised per (turn_id, dir) to avoid duplicate
     # API calls when multiple tabs request the same missing audio simultaneously.
     async with _scoped_lock(_tts_gen_locks, f"{turn_id}:{dir}"):
-        # Double-check: another waiter may have generated and saved the file.
+        # Double-check: another waiter may have generated and stored the object.
         await db.refresh(turn)
-        stored_path = turn.audio_in_path if dir == "in" else turn.audio_out_path
-        if stored_path:
-            p = Path(stored_path)
-            if p.exists():
-                media_type = "audio/mpeg" if p.suffix == ".mp3" else "audio/ogg"
-                return FileResponse(p, media_type=media_type)
+        served = await _serve_stored_audio(
+            turn.audio_in_path if dir == "in" else turn.audio_out_path
+        )
+        if served is not None:
+            return served
 
         text = turn.text_user if dir == "in" else turn.text_ai
         tts_fmt: str = settings.volc_tts_audio_format
@@ -312,21 +313,35 @@ async def get_turn_audio(
             )
         )
 
-        # Save to disk and update the turn record so next request is a cache hit.
+        # Store and update the turn record so the next request is a cache hit.
         if settings.audio_storage_enabled:
-            base = Path(settings.audio_storage_dir) / str(turn.learner_id) / str(session_id)
-            base.mkdir(parents=True, exist_ok=True)
             ext = "mp3" if tts_fmt == "mp3" else tts_fmt
-            audio_file = base / f"{turn_id}_{dir}.{ext}"
-            audio_file.write_bytes(tts_result.audio)
+            key = audio_blob_key(turn.learner_id, session_id, turn_id, dir, ext)
+            await _blob.put(key, tts_result.audio, content_type=audio_media_type(ext))
             if dir == "in":
-                turn.audio_in_path = str(audio_file)
+                turn.audio_in_path = key
             else:
-                turn.audio_out_path = str(audio_file)
+                turn.audio_out_path = key
             await db.commit()
 
-    media_type = "audio/mpeg" if tts_fmt == "mp3" else "audio/ogg"
-    return Response(content=tts_result.audio, media_type=media_type)
+    return Response(content=tts_result.audio, media_type=audio_media_type(tts_fmt))
+
+
+async def _serve_stored_audio(key: str | None) -> Response | None:
+    """Return a Response for a stored audio key, or None if there is nothing stored.
+
+    Redirects to a signed URL when the backend provides one (cloud); otherwise
+    streams the bytes back through this endpoint (local).
+    """
+    if not key:
+        return None
+    signed = await _blob.url(key)
+    if signed:
+        return RedirectResponse(signed)
+    data = await _blob.get(key)
+    if data is None:
+        return None
+    return Response(content=data, media_type=audio_media_type(key))
 
 
 @router.post("/{session_id}/turns", response_model=TurnResponse)

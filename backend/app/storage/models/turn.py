@@ -25,7 +25,9 @@ class Turn(Base, TimestampMixin):
     text_user: Mapped[str] = mapped_column(Text, nullable=False)
     text_ai: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Local file path under AUDIO_STORAGE_DIR; switches to TOS URL in V2.
+    # Backend-independent blob storage key (e.g. "{learner}/{session}/{turn}_out.mp3"),
+    # resolved by the BlobStorage adapter — local disk in V1, a cloud provider later.
+    # NOT a filesystem path. (Column name kept for migration stability.)
     audio_in_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     audio_out_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
 

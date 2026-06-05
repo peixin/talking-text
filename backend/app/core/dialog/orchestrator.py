@@ -19,12 +19,12 @@ import time
 import uuid
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.llm.protocol import LLMAdapter, LLMMessage
+from app.adapters.storage.protocol import BlobStorage
 from app.adapters.stt.protocol import AudioFormat as STTAudioFormat
 from app.adapters.stt.protocol import STTAdapter, STTRequest
 from app.adapters.tts.protocol import AudioFormat as TTSAudioFormat
@@ -70,11 +70,13 @@ class DialogOrchestrator:
         llm: LLMAdapter,
         tts: TTSAdapter,
         scope: ScopeComputer,
+        blob: BlobStorage,
     ) -> None:
         self._stt = stt
         self._llm = llm
         self._tts = tts
         self._scope = scope
+        self._blob = blob
 
     async def _resolve_system_prompt(
         self,
@@ -94,6 +96,40 @@ class DialogOrchestrator:
 
         scope = await self._scope.get_scope(db, learner_id, group_id)
         return build_system_prompt(scope, persona_prompt=persona_prompt, learner_name=learner_name)
+
+    async def _persist_audio(
+        self,
+        *,
+        turn_id: uuid.UUID,
+        learner_id: uuid.UUID,
+        session_id: uuid.UUID,
+        audio_in: bytes | None,
+        audio_in_format: STTAudioFormat,
+        audio_out: bytes | None,
+        audio_out_format: TTSAudioFormat | None,
+    ) -> tuple[str | None, str | None]:
+        """Store turn audio via the blob backend and return storage keys.
+
+        Returns ``(in_key, out_key)`` — relative keys persisted on the Turn row,
+        not filesystem paths. ``None`` when there is nothing to store or
+        persistence is disabled.
+        """
+        if not settings.audio_storage_enabled:
+            return None, None
+
+        in_key: str | None = None
+        if audio_in is not None:
+            in_ext = "ogg" if audio_in_format == "ogg" else audio_in_format
+            in_key = audio_blob_key(learner_id, session_id, turn_id, "in", in_ext)
+            await self._blob.put(in_key, audio_in, content_type=audio_media_type(in_ext))
+
+        out_key: str | None = None
+        if audio_out is not None and audio_out_format is not None:
+            out_ext = "mp3" if audio_out_format == "mp3" else audio_out_format
+            out_key = audio_blob_key(learner_id, session_id, turn_id, "out", out_ext)
+            await self._blob.put(out_key, audio_out, content_type=audio_media_type(out_ext))
+
+        return in_key, out_key
 
     async def single_turn(
         self,
@@ -200,7 +236,7 @@ class DialogOrchestrator:
         next_sequence: int = seq_result.scalar_one() + 1
 
         turn_id = uuid.uuid4()
-        audio_in_path, audio_out_path = _persist_audio_files(
+        audio_in_path, audio_out_path = await self._persist_audio(
             turn_id=turn_id,
             learner_id=learner_id,
             session_id=session_id,
@@ -420,7 +456,7 @@ class DialogOrchestrator:
         next_sequence: int = seq_result.scalar_one() + 1
         turn_id = uuid.uuid4()
 
-        audio_in_path, _ = _persist_audio_files(
+        audio_in_path, _ = await self._persist_audio(
             turn_id=turn_id,
             learner_id=learner_id,
             session_id=session_id,
@@ -513,34 +549,17 @@ class EmptyTranscriptionError(RuntimeError):
     """Raised when STT returns empty text — typically silent / too-quiet audio."""
 
 
-def _persist_audio_files(
-    *,
-    turn_id: uuid.UUID,
+def audio_blob_key(
     learner_id: uuid.UUID,
     session_id: uuid.UUID,
-    audio_in: bytes | None,
-    audio_in_format: STTAudioFormat,
-    audio_out: bytes | None,
-    audio_out_format: TTSAudioFormat | None,
-) -> tuple[str | None, str | None]:
-    if not settings.audio_storage_enabled:
-        return None, None
+    turn_id: uuid.UUID,
+    direction: str,  # "in" | "out"
+    ext: str,  # "ogg" | "mp3"
+) -> str:
+    """The canonical storage key for one turn's audio — backend-independent."""
+    return f"{learner_id}/{session_id}/{turn_id}_{direction}.{ext}"
 
-    base = Path(settings.audio_storage_dir) / str(learner_id) / str(session_id)
-    base.mkdir(parents=True, exist_ok=True)
 
-    in_path: str | None = None
-    if audio_in is not None:
-        in_ext = "ogg" if audio_in_format == "ogg" else audio_in_format
-        in_file = base / f"{turn_id}_in.{in_ext}"
-        in_file.write_bytes(audio_in)
-        in_path = str(in_file)
-
-    out_path: str | None = None
-    if audio_out is not None and audio_out_format is not None:
-        out_ext = "mp3" if audio_out_format == "mp3" else audio_out_format
-        out_file = base / f"{turn_id}_out.{out_ext}"
-        out_file.write_bytes(audio_out)
-        out_path = str(out_file)
-
-    return in_path, out_path
+def audio_media_type(key_or_ext: str) -> str:
+    """HTTP media type inferred from a key or extension."""
+    return "audio/mpeg" if key_or_ext.endswith("mp3") else "audio/ogg"
