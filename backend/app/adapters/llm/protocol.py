@@ -1,9 +1,17 @@
-"""Protocol for an LLM provider.
+"""Protocols for LLM providers, segregated by input capability.
 
-invoke() / stream() / invoke_vision() are all declared from V1. Implementations
-may raise NotImplementedError for capabilities the provider does not support
-(e.g. DeepSeek does not currently offer vision); the factory picks providers
-per role so business code never calls an unsupported method.
+Two roles, because some models accept only text while others also accept images
+(and later audio / documents):
+
+- ``TextLLM``       — text in, text out (chat). Every provider supports this.
+- ``MultimodalLLM`` — a ``TextLLM`` whose configured model also accepts non-text
+                      parts. ``modalities`` advertises what it accepts; the
+                      factory validates the wired model before exposing it.
+
+Business code depends on the *narrowest* role it needs, so a text-only model can
+never be wired into a multimodal call site. The wire format is identical OpenAI
+chat-completions either way (image/audio ride as content parts), so a single
+``OpenAICompatibleLLMAdapter`` implements both — see ``openai_compatible.py``.
 """
 
 from __future__ import annotations
@@ -12,11 +20,26 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
+Modality = Literal["text", "image", "audio", "document"]
+
+
+@dataclass(frozen=True)
+class ImagePart:
+    """An image attachment within a multimodal message's content."""
+
+    data: bytes
+    mime: str = "image/jpeg"
+
+
+# A message's content is either plain text, or an ordered list of parts
+# (text and/or images). The list form mirrors OpenAI's content-parts shape.
+MessageContent = str | list[str | ImagePart]
+
 
 @dataclass(frozen=True)
 class LLMMessage:
     role: Literal["system", "user", "assistant"]
-    content: str
+    content: MessageContent
 
 
 @dataclass(frozen=True)
@@ -28,22 +51,12 @@ class LLMResponse:
     raw: dict = field(default_factory=dict)
 
 
-class LLMAdapter(Protocol):
+class TextLLM(Protocol):
     async def invoke(
         self,
         messages: list[LLMMessage],
         *,
         temperature: float = 0.7,
-        max_tokens: int | None = None,
-    ) -> LLMResponse: ...
-
-    async def invoke_vision(
-        self,
-        prompt: str,
-        images: list[bytes],
-        *,
-        image_mime: str = "image/jpeg",
-        temperature: float = 0.2,
         max_tokens: int | None = None,
         response_format: dict[str, Any] | None = None,
     ) -> LLMResponse: ...
@@ -55,3 +68,9 @@ class LLMAdapter(Protocol):
         temperature: float = 0.7,
         max_tokens: int | None = None,
     ) -> AsyncIterator[str]: ...
+
+
+class MultimodalLLM(TextLLM, Protocol):
+    # The set of content kinds the configured model accepts (always includes
+    # "text"). Lets callers/factory check capability without a separate method.
+    modalities: frozenset[Modality]

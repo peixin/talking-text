@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.llm.protocol import LLMAdapter, LLMMessage
+from app.adapters.llm.protocol import LLMMessage, TextLLM
 from app.adapters.storage.protocol import BlobStorage
 from app.adapters.stt.protocol import AudioFormat as STTAudioFormat
 from app.adapters.stt.protocol import STTAdapter, STTRequest
@@ -67,7 +67,7 @@ class DialogOrchestrator:
         self,
         *,
         stt: STTAdapter,
-        llm: LLMAdapter,
+        llm: TextLLM,
         tts: TTSAdapter,
         scope: ScopeComputer,
         blob: BlobStorage,

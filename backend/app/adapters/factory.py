@@ -3,15 +3,17 @@
 Module-level singletons are created once at startup and shared across all
 routers. Each adapter is a stateless async wrapper, so sharing is safe.
 
-To add a new provider (e.g. DeepSeek for LLM):
-  1. Add the adapter in app/adapters/llm/deepseek.py
-  2. Add a case to _make_llm() below
-  3. Set llm_provider = "deepseek" in config.toml
+All LLM providers share one OpenAI-compatible class, so adding a provider
+(e.g. Aliyun / Tencent / Xiaomi) is config + a case in _openai_llm():
+  1. Add its secret(s) to .env + Settings (+ .env.example)
+  2. Add a case to _openai_llm() mapping name -> base_url / key / knobs
+  3. Add [adapter.llm.<name>] in config.toml and point a role at it
 """
 
 from __future__ import annotations
 
-from app.adapters.llm.protocol import LLMAdapter
+from app.adapters.llm.openai_compatible import OpenAICompatibleLLMAdapter
+from app.adapters.llm.protocol import Modality, MultimodalLLM, TextLLM
 from app.adapters.storage.protocol import BlobStorage
 from app.adapters.stt.protocol import STTAdapter
 from app.adapters.tts.protocol import TTSAdapter
@@ -19,31 +21,59 @@ from app.app_config import app_config
 from app.core.dialog import DialogOrchestrator
 from app.core.scope import V1ScopeComputer
 
+# Providers whose configured models can accept image input (for the extraction
+# role). Text-only providers (e.g. deepseek) must not be wired here.
+_VISION_CAPABLE_PROVIDERS = frozenset({"volc_ark"})
 
-def _make_llm() -> LLMAdapter:
-    match app_config.adapter.llm_provider:
+
+def _openai_llm(
+    provider: str, model: str, modalities: frozenset[Modality]
+) -> OpenAICompatibleLLMAdapter:
+    """Build an OpenAI-compatible adapter for a named provider + model."""
+    from app.config import settings
+
+    match provider:
         case "deepseek":
-            from app.adapters.llm.deepseek import DeepSeekLLMAdapter
-
-            return DeepSeekLLMAdapter()
+            cfg = app_config.adapter.llm
+            thinking_on = cfg.thinking == "enabled"
+            return OpenAICompatibleLLMAdapter(
+                api_key=settings.deepseek_api_key,
+                base_url=settings.deepseek_base_url,
+                model=model,
+                modalities=modalities,
+                extra_body={"thinking": {"type": cfg.thinking}},
+                reasoning_effort=cfg.reasoning_effort if thinking_on else None,
+            )
         case "volc_ark":
-            from app.adapters.llm.volc import VolcLLMAdapter
-
-            return VolcLLMAdapter(model=app_config.adapter.llm.model or None)
+            return OpenAICompatibleLLMAdapter(
+                api_key=settings.volc_ark_api_key,
+                base_url=settings.volc_ark_base_url,
+                model=model,
+                modalities=modalities,
+            )
         case other:
-            raise ValueError(f"Unknown LLM provider: {other!r}")
+            raise ValueError(f"Unknown OpenAI-compatible LLM provider: {other!r}")
 
 
-def _make_vision() -> LLMAdapter:
-    match app_config.adapter.vision_provider:
-        case "volc_ark":
-            from app.adapters.llm.volc import VolcLLMAdapter
-            from app.config import settings
+def _make_llm() -> TextLLM:
+    """Chat role — text in, text out."""
+    return _openai_llm(
+        app_config.adapter.llm_provider, app_config.adapter.llm.model, frozenset({"text"})
+    )
 
-            vision_model = settings.volc_ark_vision_model or app_config.adapter.vision.model or None
-            return VolcLLMAdapter(vision_model=vision_model)
-        case other:
-            raise ValueError(f"Unknown vision provider: {other!r}")
+
+def _make_extraction() -> MultimodalLLM:
+    """Extraction role — text + image in (curriculum OCR / structured extraction)."""
+    from app.config import settings
+
+    provider = app_config.adapter.vision_provider
+    if provider not in _VISION_CAPABLE_PROVIDERS:
+        raise ValueError(
+            f"vision_provider {provider!r} does not support image input; "
+            f"pick one of {sorted(_VISION_CAPABLE_PROVIDERS)}"
+        )
+    model = settings.volc_ark_vision_model or app_config.adapter.vision.model
+    return _openai_llm(provider, model, frozenset({"text", "image"}))
 
 
 def _make_stt() -> STTAdapter:
@@ -83,8 +113,8 @@ def _make_blob() -> BlobStorage:
 
 # ── Shared singletons ────────────────────────────────────────────────────────
 
-llm: LLMAdapter = _make_llm()
-vision: LLMAdapter = _make_vision()
+llm: TextLLM = _make_llm()
+extraction: MultimodalLLM = _make_extraction()
 stt: STTAdapter = _make_stt()
 tts: TTSAdapter = _make_tts()
 blob: BlobStorage = _make_blob()

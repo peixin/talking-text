@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pydantic import BaseModel
 
 from app.adapters import factory
+from app.adapters.llm.protocol import ImagePart, LLMMessage
 from app.adapters.stt.protocol import STTRequest
 from app.api.auth import get_current_account
 from app.audio_codec import webm_opus_to_ogg
@@ -266,26 +267,20 @@ async def extract_content(
 
     try:
         if image_bytes:
-            llm_response = await factory.vision.invoke_vision(
-                full_prompt,
-                image_bytes,
-                image_mime=image_mime,
+            content: list[str | ImagePart] = [full_prompt]
+            content += [ImagePart(data=b, mime=image_mime) for b in image_bytes]
+            llm_response = await factory.extraction.invoke(
+                [LLMMessage(role="user", content=content)],
+                temperature=0.2,
                 max_tokens=2048,
                 response_format=response_format,
             )
         else:
-            from app.adapters.llm.protocol import LLMMessage
-
             llm_response = await factory.llm.invoke(
                 [LLMMessage(role="user", content=full_prompt)],
                 max_tokens=2048,
+                response_format=response_format,
             )
-    except NotImplementedError as e:
-        log.exception("vision adapter not available")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Vision provider unavailable: {e}",
-        ) from e
     except Exception as e:
         log.exception("ingestion LLM call failed")
         raise HTTPException(

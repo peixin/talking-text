@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # --- DeepSeek (LLM) ---
     deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
 
     # --- Volcengine Ark (LLM) ---
     volc_ark_api_key: str = ""

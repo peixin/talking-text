@@ -1,4 +1,19 @@
-from app.adapters.llm.protocol import LLMAdapter, LLMMessage, LLMResponse
-from app.adapters.llm.volc import VolcLLMAdapter
+from app.adapters.llm.openai_compatible import OpenAICompatibleLLMAdapter
+from app.adapters.llm.protocol import (
+    ImagePart,
+    LLMMessage,
+    LLMResponse,
+    Modality,
+    MultimodalLLM,
+    TextLLM,
+)
 
-__all__ = ["LLMAdapter", "LLMMessage", "LLMResponse", "VolcLLMAdapter"]
+__all__ = [
+    "ImagePart",
+    "LLMMessage",
+    "LLMResponse",
+    "Modality",
+    "MultimodalLLM",
+    "OpenAICompatibleLLMAdapter",
+    "TextLLM",
+]
