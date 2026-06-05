@@ -204,8 +204,8 @@
 | `sequence` | `INTEGER` | NOT NULL | 当前会话中的对话次序 (从 1 开始，单调递增) |
 | `text_user` | `TEXT` | NOT NULL | 孩子所说的英语文本（经 STT 转译后） |
 | `text_ai` | `TEXT` | NOT NULL | 陪伴机器人 Tina 的英语回复文本 |
-| `audio_in_path` | `VARCHAR(512)` | NULL | 孩子语音输入的物理存放路径 (V1 存放在本地 `AUDIO_STORAGE_DIR`) |
-| `audio_out_path` | `VARCHAR(512)` | NULL | AI 语音输出的物理存放路径 (由边缘云 TTS 生成) |
+| `audio_in_path` | `VARCHAR(512)` | NULL | 孩子语音输入的**后端无关 storage key**（如 `{learner}/{session}/{turn}_in.ogg`），由 `BlobStorage` 适配器解析（V1 本地盘）。列名沿用，语义非路径 |
+| `audio_out_path` | `VARCHAR(512)` | NULL | AI 语音输出的 storage key（同上，由 TTS 生成；缺省则按需生成并回填） |
 | `stt_audio_seconds` | `DOUBLE PRECISION` | NOT NULL, DEFAULT `0` | 输入语音的时长 (以秒计，用于核算成本与语速) |
 | `llm_input_tokens` | `INTEGER` | NOT NULL, DEFAULT `0` | 本轮调用大模型消耗的输入 Token 数 |
 | `llm_output_tokens` | `INTEGER` | NOT NULL, DEFAULT `0` | 本轮大模型返回的输出 Token 数 |

@@ -29,10 +29,11 @@
 | 后端 | Python 3.12 + FastAPI + SQLAlchemy 2.0 (async) + asyncpg |
 | 前端 | Next.js 16 App Router（**全 Next 范式，不当 SPA 写**）+ React 19.2 |
 | UI | Tailwind CSS v4 + shadcn/ui（Radix primitives）+ lucide-react |
-| 语音 + LLM | 火山方舟全家桶（STT + 豆包 + TTS） |
+| LLM | 多家 OpenAI 兼容（DeepSeek / 豆包 / 阿里 Qwen / 小米 MiMo），共用一个 `OpenAICompatibleLLMAdapter`；按交互环节配模型 |
+| 语音（STT + TTS） | 火山方舟（STT + Tina TTS） |
 | 主 DB | PostgreSQL 16 |
 | 缓存 | Redis |
-| 对象存储 | 火山 TOS |
+| 对象存储 | `BlobStorage` 适配器——V1 本地盘，可插云（TOS/OSS/COS/七牛/MinIO） |
 | 包管理 | backend: Poetry · frontend: pnpm |
 | DB 迁移 | Alembic（async 模板） |
 | Lint/Format (Py) | Ruff |
@@ -163,7 +164,7 @@ STT / LLM / TTS 一定会换。**所有外部 SDK 调用必须写在 `backend/ap
 - 所有配置走环境变量或 config 文件（DB URL、API key、端口等）
 - 日志走 stdout/stderr，不落固定路径的本地文件
 - 不依赖 `__file__` 的相对路径加载运行时资源
-- 音频等临时文件用 `tempfile` 或直接上传 TOS
+- 音频统一走 `BlobStorage` 适配器（存 storage key，绝不存绝对路径）——V1 本地盘，后续上云
 - 启动时不预设文件系统约定（如"必须存在 data/ 文件夹"）
 
 **目标：发布前一次性补 Dockerfile + docker-compose，不反悔。**
@@ -339,7 +340,7 @@ just db-history
 - **不能依赖被墙服务**：Vercel、OpenAI、Claude API、Supabase 等一律不可用
 - **儿童隐私（V1 不做合规，但自律）**：
   - 不存身份证号 / 家庭住址等敏感字段
-  - 音频只传火山 TOS（国内），不出境
+  - 音频只存国内对象存储（无论 `BlobStorage` 用哪个后端），不出境
   - V2 准备对外推广前补 COPPA / 个保法合规
 - **延后的事项（不要现在做）：**
   - Docker 化
@@ -393,6 +394,12 @@ just db-history
 
 **已完成（Adapter 工厂）：**
 - ✅ `config.toml [adapter]` 选择器 + `app/adapters/factory.py` 单例
+
+**已完成（适配器层整理 — 2026-06-05，详见 `docs/2026-06-05-dev-log.md`）：**
+- ✅ **`BlobStorage` 抽象**（`app/adapters/storage/`）——`put/get/exists/delete/url`；`LocalBlobStorage`（V1）+ 可插云。DB 存后端无关的 **storage key** 而非路径；`core` 不再碰 `pathlib`/`AUDIO_STORAGE_DIR`。
+- ✅ **LLM 角色协议**——胖接口 `LLMAdapter` 拆成 `TextLLM` + `MultimodalLLM`（接口隔离）；`invoke_vision` 废除（图片是 `ImagePart` content part）。一个 `OpenAICompatibleLLMAdapter` 收编火山+DeepSeek，新增阿里+小米。加厂商 = 配置 + 工厂一个 `case`，零新类。
+- ✅ **按交互环节配模型**（`[adapter.stage.*]`）——`chat`（便宜、高频）与 `extraction`（多模态）独立配；能力启动时校验（fail fast）。
+- ✅ **两段式抽取原型**（`[adapter.ingest] extraction_mode = single|two_stage`）——`two_stage` = perception（VLM 版式感知转写）→ structuring（`deepseek-v4-pro`，唯一文本大脑），供真实课本页 A/B。
 
 **已完成（Scope Computer V1 + Prompt 拼装）：**
 - ✅ `core/scope/v1.py` 三模式（group / calibration / free）

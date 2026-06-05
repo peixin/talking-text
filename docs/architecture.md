@@ -14,10 +14,10 @@
 | **前端开发** | Next.js App Router (React 19) | 选用 Vanilla CSS 保证样式控制力；使用 `pnpm` 作为包管理器 |
 | **主数据库** | PostgreSQL 16 | 存储关系型数据与核心学习档案，利用 `JSONB` 存放灵活配置 |
 | **缓存与状态** | Redis | 缓存会话上下文、Token 限流桶，以及临时 session 数据 |
-| **语音识别 (STT)** | 火山引擎 · 语音识别 (英文) | 支持流式与整段 HTTP 请求，将孩子发出的语音精准还原为文本 |
-| **大语言模型 (LLM)**| 豆包 / DeepSeek-V3/R1 | 核心陪伴对话中枢，通过 SSE 流式通道实现极低首字延迟 |
+| **语音识别 (STT)** | 火山引擎 · 语音识别 (中英混说) | 支持流式与整段 HTTP 请求；容忍孩子在英文里夹中文 |
+| **大语言模型 (LLM)**| 多家 OpenAI 兼容（DeepSeek / 豆包 / 阿里百炼 / 小米 MiMo） | 统一 `OpenAICompatibleLLMAdapter`；**按交互环节配模型**（对话用便宜模型，材料整理用多模态强模型）|
 | **语音合成 (TTS)** | 火山引擎 · 儿童自然音色 | 将 AI 助手的文本回复还原为自然贴切、充满情感的儿童陪伴音频 |
-| **对象存储** | 火山 TOS | 长期归档存储孩子发出的原音文件和 AI 生成的陪伴音频 |
+| **对象存储** | `BlobStorage` 抽象（V1 本地盘，可插云对象存储） | 存后端无关的 storage key；音频归档须留在国内（七牛/阿里/腾讯/火山 TOS/MinIO 任选其一实现） |
 | **包管理** | `poetry` (后端) / `pnpm` (前端) | 严格锁定依赖版本，排除开发环境污染 |
 
 ---
@@ -35,9 +35,11 @@ talking-text/
 │   │   │   ├── dialog/            # 陪伴对话核心编排逻辑
 │   │   │   └── mastery/           # 掌握度追踪逻辑 (V2/V3 演进)
 │   │   ├── adapters/              # 供应商隔离适配器层
-│   │   │   ├── stt/               # 语音转文字适配器 (火山引擎/Mock)
-│   │   │   ├── llm/               # 大语言模型适配器 (火山方舟/DeepSeek)
-│   │   │   └── tts/               # 文字转语音适配器 (火山引擎)
+│   │   │   ├── stt/               # 语音转文字适配器 (火山引擎)
+│   │   │   ├── llm/               # LLM 角色协议 + OpenAICompatibleLLMAdapter (DeepSeek/豆包/阿里/小米)
+│   │   │   ├── tts/               # 文字转语音适配器 (火山引擎)
+│   │   │   ├── storage/           # BlobStorage 抽象 (本地盘 / 云对象存储)
+│   │   │   └── factory.py         # 按 config.toml 的 stage 构建共享适配器单例
 │   │   ├── curriculum/            # 教材大纲结构化录入管道
 │   │   ├── storage/               # 数据库引擎与 SQLAlchemy 10 表数据模型
 │   │   └── main.py                # 后端服务主入口
@@ -199,7 +201,7 @@ sequenceDiagram
 
 在引入 DeepSeek-R1 等具备推理链（Reasoning Chain）的先进大模型时，我们遭遇了严峻的流式延迟挑战：
 - **延迟危机**：大语言模型在生成最终的简短少儿英语对话回复前，会输出数千个 Token 的 CoT 推理思维链。虽然这带来了更精准的语境感知，但导致首字返回时间（TTFT）从平时的 **~1.1秒** 直线暴增至 **~8.2秒**，让孩子面对屏幕产生巨大的焦虑和挫败感。
-- **调优策略**：我们在 `backend/app/adapters/llm/deepseek.py` 适配器中通过 API 层面引入了硬性控制：配置参数 `thinking = "disabled"`。
+- **调优策略**：在 `config.toml` 的对话环节（`[adapter.stage.chat]`）对 DeepSeek 配置 `thinking = "disabled"`，由统一的 `OpenAICompatibleLLMAdapter` 通过 `extra_body` 透传给 API。
 - **实测收益**：关闭思维链后，延迟瞬间回落至 **~1.1秒**。在口语陪伴这一高频、低复杂度语法、高实时性要求的场景下，该决策不仅保住了大模型强大的上下文适应力，同时彻底抹平了等待白屏，大幅改善了用户体验。
 
 ---
@@ -241,28 +243,41 @@ sequenceDiagram
 
 ## 九、服务抽象与适配器隔离设计 (Adapter Pattern)
 
-为了将外部供应商（火山引擎、DeepSeek、阿里、讯飞等）的 SDK 级变化对我们核心业务的扰动降为零，我们在系统架构中贯彻了**「依赖倒置原则」**：
+为了将外部供应商（火山引擎、DeepSeek、阿里、腾讯、小米等）的 SDK 级变化对核心业务的扰动降为零，我们贯彻**「依赖倒置 + 接口隔离」**：`core` 只依赖 Protocol，供应商差异收敛成**配置**。
+
+### 1. LLM：按能力拆角色，单一实现收编所有厂商
+
+LLM 不再是一个胖接口，而是**按输入能力拆成角色 Protocol**（调用方依赖最窄的那个，文本模型不可能被接进多模态调用点）：
 
 ```text
- ┌──────────────────────────────────────────────┐
- │  FastAPI Router / core.dialog.service        │
- └──────────────────────┬───────────────────────┘
-                        │ 仅依赖 Protocol 抽象契约
-                        ▼
-            ┌───────────────────────┐
-            │   LLMAdapter (Base)   │
-            └───────────┬───────────┘
-                        │
-         ┌──────────────┴──────────────┐
-         ▼                             ▼
-┌──────────────────┐         ┌──────────────────┐
-│ VolcLLMAdapter   │         │ DeepSeekAdapter  │
-│ (火山引擎/豆包)  │         │ (DeepSeek R1/V3) │
-└──────────────────┘         └──────────────────┘
+ ┌──────────────────────────────────────────────────────┐
+ │  FastAPI Router / core.dialog / core.curriculum      │
+ └───────────────┬──────────────────────┬───────────────┘
+        依赖 TextLLM          依赖 MultimodalLLM
+                 │                      │ (TextLLM + modalities)
+                 └──────────┬───────────┘
+                            ▼
+              ┌──────────────────────────────────┐
+              │   OpenAICompatibleLLMAdapter      │  ← 一个实现，满足两个协议
+              │  (api_key, base_url, model, ...)  │
+              └──────────────────────────────────┘
+                            │ 同一份 OpenAI /chat/completions 协议
+   ┌──────────┬─────────────┼─────────────┬──────────┐
+   ▼          ▼             ▼             ▼          ▼
+ DeepSeek   火山方舟      阿里百炼       小米MiMo   (腾讯…)
 ```
 
-所有的 API Key、Endpoint 等机密配置统一存放在 `.env` 文件中（该文件被 Git 严格忽略），而不同服务商的选择则通过轻量级全局单例文件 `app/app_config.py` 读取 `config.toml` 文件进行配置切换。
-即使未来某天流式协议从 HTTP SSE 迁移到双工 WebSocket，也仅需要在适配器内部进行实现修改，上层的业务编排与控制器路由完全无感。
+- `invoke_vision` 已废除——图片是 `LLMMessage.content` 里的 `ImagePart`（OpenAI content-parts 形态），文本/图片走同一个 `invoke`。
+- DeepSeek 的 `thinking`/`reasoning_effort` 只是构造参数（`extra_body`），不再是独立类。
+- 加新厂商 = `.env` 加 key + `factory._openai_llm()` 加一个 `case` + config 指过去，零新类。
+
+### 2. 按交互环节（stage）配模型
+
+`config.toml [adapter.stage.*]` 为每个 AI 环节独立指定 provider + model：高频对话用便宜模型（DeepSeek flash，缓存命中价极低），材料整理用多模态强模型。`app/adapters/factory.py` 在启动时按 stage 构建共享单例并**校验能力**（如抽取环节必须 vision-capable），fail fast。
+
+### 3. STT / TTS / BlobStorage 各自独立
+
+STT、TTS 的线协议与 chat-completions 不同，保持各自的 adapter 类别；存储则抽象成 `BlobStorage` Protocol（V1 本地盘，云后端返回签名 URL）。所有 API Key / Endpoint 等机密统一在 `.env`（Git 忽略），业务参数在 `config.toml`。即使流式协议从 HTTP SSE 迁到 WebSocket，也只需改适配器内部，上层无感。
 
 ---
 

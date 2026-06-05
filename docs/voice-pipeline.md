@@ -323,19 +323,16 @@ STTResult {
 除了火山引擎的豆包，系统在 `2026-05-02` 下午场的升级中引入了 OpenAI 兼容的 **DeepSeek LLM Adapter**，并支持以下高级特性：
 
 ### 8.1 极速非 CoT 对话配置
-在 `config.toml` 中支持按提供商细分配置，并对 DeepSeek 显式配置了 `thinking = "disabled"`。简单日常口语教学对话不需要慢思考 (CoT)，禁用 CoT 可以显著将 LLM 生成延迟从 8 秒以上压缩到 **1.1 秒** 左右：
+在 `config.toml` 中**按交互环节（stage）**配模型，并对对话环节的 DeepSeek 显式配置 `thinking = "disabled"`。简单日常口语教学对话不需要慢思考 (CoT)，禁用 CoT 可以显著将 LLM 生成延迟从 8 秒以上压缩到 **1.1 秒** 左右：
 
 ```toml
-[adapter]
-llm_provider = "deepseek"   # 一键轻松切换全局模型提供商
-
-[adapter.llm.deepseek]
+[adapter.stage.chat]          # 对话 + 工具任务
+provider = "deepseek"         # 一键切换：deepseek / volc_ark / aliyun / xiaomi
 model = "deepseek-v4-flash"
-thinking = "disabled"       # 对话禁用 CoT
-
-[adapter.llm.volc_ark]
-model = "doubao-seed-2-0-mini-260215"
+thinking = "disabled"         # 对话禁用 CoT
 ```
+
+> 历史说明：早先用全局 `llm_provider` + `[adapter.llm.<provider>]`，2026-06-05 起改为 `[adapter.stage.*]` 每环节独立配模型；所有厂商共用 `OpenAICompatibleLLMAdapter`。
 
 ---
 

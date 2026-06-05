@@ -30,10 +30,11 @@
 | Backend | Python 3.12 + FastAPI + SQLAlchemy 2.0 (async) + asyncpg |
 | Frontend | Next.js 16 App Router (**full Next paradigm, not SPA**) + React 19.2 |
 | UI | Tailwind CSS v4 + shadcn/ui (Radix primitives) + lucide-react |
-| Voice + LLM | Volcengine Ark full stack (STT + Doubao + TTS) |
+| LLM | Multiple OpenAI-compatible vendors (DeepSeek / Doubao / Aliyun Qwen / Xiaomi MiMo) via one `OpenAICompatibleLLMAdapter`; per-stage model config |
+| Voice (STT + TTS) | Volcengine Ark (STT + Tina TTS) |
 | Primary DB | PostgreSQL 16 |
 | Cache | Redis |
-| Object storage | Volcengine TOS |
+| Object storage | `BlobStorage` adapter — local disk in V1, cloud-pluggable (TOS/OSS/COS/Qiniu/MinIO) |
 | Package mgmt | backend: Poetry · frontend: pnpm |
 | DB migrations | Alembic (async template) |
 | Lint/Format (Py) | Ruff |
@@ -164,7 +165,7 @@ Deferring Docker ≠ writing Docker-hostile code. These rules apply from day one
 - All config via environment variables or config files (DB URL, API keys, ports, etc.)
 - Logs to stdout/stderr — no fixed-path local log files
 - No `__file__`-relative paths for loading runtime resources
-- Audio temp files use `tempfile` or go straight to TOS
+- Audio goes through the `BlobStorage` adapter (storage key, never an absolute path) — local disk in V1, cloud later
 - No filesystem preconditions at startup (e.g., "data/ directory must exist")
 
 **Goal: add Dockerfile + docker-compose once at release time, no regrets.**
@@ -339,7 +340,7 @@ Rules:
 - **No blocked services:** Vercel, OpenAI, Claude API, Supabase, Google Fonts (Chinese) — all off limits
 - **Child privacy (no compliance in V1, but self-disciplined):**
   - No national ID numbers / home addresses stored
-  - Audio goes to Volcengine TOS only (domestic), never leaves China
+  - Audio stays on domestic object storage only (whatever `BlobStorage` backend), never leaves China
   - COPPA / PIPL compliance before any public launch
 - **Explicitly deferred (do not implement now):**
   - Docker
@@ -390,16 +391,22 @@ Rules:
 **Done (Session & audio improvements):**
 - ✅ `Turn.sequence` — explicit integer ordering within a session (Alembic migration `c9e4f72a1d38`)
 - ✅ Backend-managed conversation history — orchestrator queries `turn` by `sequence ASC`; `history` form field removed from API and frontend
-- ✅ Audio stored per session: `AUDIO_STORAGE_DIR/{learner_id}/{session_id}/{turn_id}_{in|out}.ext`
+- ✅ Audio addressed by backend-independent storage key (`{learner_id}/{session_id}/{turn_id}_{in|out}.ext`) via the `BlobStorage` adapter
 - ✅ `GET /sessions/{session_id}/turns/{turn_id}/audio?dir=in|out` — authenticated audio endpoint (`FileResponse`)
 - ✅ Chat UI — per-message play/stop buttons; lazy-load audio via Server Action; singleton `<audio>` element
 - ✅ `TurnOut.has_audio_in` / `has_audio_out` — frontend knows which bubbles have playback
 
 **Done (Adapter factory):**
-- ✅ `config.toml [adapter]` — `llm_provider` / `stt_provider` / `tts_provider` selector
+- ✅ `config.toml [adapter]` — STT/TTS provider + per-stage LLM model selector (see overhaul below)
 - ✅ `AdapterConfig` dataclass in `app/app_config.py`
 - ✅ `app/adapters/factory.py` — reads config, creates shared singleton adapters + orchestrator
-- ✅ `session.py` / `conversation.py` import from factory; no direct vendor instantiation
+- ✅ `session.py` imports from factory; no direct vendor instantiation
+
+**Done (Adapter-layer overhaul — 2026-06-05, see `docs/2026-06-05-dev-log.md`):**
+- ✅ **`BlobStorage` abstraction** (`app/adapters/storage/`) — `put/get/exists/delete/url`; `LocalBlobStorage` (V1) + cloud-pluggable. DB stores a backend-independent **storage key**, not a path. `core` no longer touches `pathlib`/`AUDIO_STORAGE_DIR`.
+- ✅ **LLM role protocols** — fat `LLMAdapter` split into `TextLLM` + `MultimodalLLM` (interface segregation); `invoke_vision` gone (images are `ImagePart` content parts). One `OpenAICompatibleLLMAdapter` collapses `VolcLLMAdapter`+`DeepSeekLLMAdapter`; Aliyun + Xiaomi added. Vendors = config + a factory `case`, no new class.
+- ✅ **Per-stage model config** (`[adapter.stage.*]`) — `chat` (cheap, high-volume) vs `extraction` (multimodal) wired independently; capability validated at startup (fail fast).
+- ✅ **Two-stage extraction prototype** (`[adapter.ingest] extraction_mode = single|two_stage`) — `two_stage` = perception (VLM layout-aware transcription) → structuring (`deepseek-v4-pro`, single text brain). For A/B on real textbook pages.
 
 **Done (Scope Computer V1 + Prompt assembler):**
 - ✅ `core/scope/v1.py` — three modes (group / calibration / free); group mode pulls items from the session's group + descendants

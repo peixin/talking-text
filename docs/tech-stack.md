@@ -333,36 +333,34 @@
 
 **不选：** 没必要。KeyDB / Dragonfly / Valkey 性能更好但生态不如 Redis。
 
-### 对象存储：火山引擎 TOS
+### 对象存储：`BlobStorage` 抽象（V1 本地盘，云后端可插）
 
-**选择：** 火山 TOS（生产）；本地开发用 tempfile
+**选择：** 抽象成 `BlobStorage` Protocol（`put/get/exists/delete/url`）。V1 用 `LocalBlobStorage`（本地盘）；生产挑一个便宜的国内云对象存储各写一个实现即可。
 
 **为什么：**
-- 和火山方舟 / STT / TTS 同账号，减少账号切换成本
-- 国内 CDN 顺
+- DB 里存**后端无关的 storage key**（非绝对路径），换后端/上容器/迁云都不动数据
+- 对服务而言后端就是「一个带鉴权的 URL 前缀」：云后端 `url(key)` 返回签名 URL（浏览器直连），本地后端返回 `None`（走我们自己的鉴权端点吐字节）
 
-**不选：**
-- 阿里云 OSS / 腾讯云 COS：可行备选
-- 自建 MinIO：本地可以，生产不值得维护
+**备选实现（按价格/迁移成本挑）：** 火山 TOS（与方舟同账号）/ 阿里 OSS / 腾讯 COS / 七牛 / 自建 MinIO（S3 兼容）。音频须留在国内（PIPL）。
 
 ---
 
 ## 五、AI / 语音链路
 
-### 全家桶：火山方舟（Volcengine Ark）与 DeepSeek
+### LLM：多家 OpenAI 兼容，按交互环节配模型
 
-**选择：** 火山方舟的 STT + TTS，以及 DeepSeek LLM 的混合模式（通过 unified configs 随时在火山和 DeepSeek 间进行切换）
+**选择：** 所有 LLM（DeepSeek / 火山豆包 / 阿里百炼 Qwen / 小米 MiMo）都是 OpenAI 兼容端点，统一走一个 `OpenAICompatibleLLMAdapter`；`config.toml [adapter.stage.*]` 为每个**交互环节**独立选模型。
 
 **为什么：**
-- **STT**：火山实时语音识别精度高
-- **LLM**：DeepSeek 提供性价比极高且推理延迟低（`thinking=disabled` 消除 CoT）的对话服务；同时火山豆包作为高可用备选
-- **TTS**：火山提供专门的儿童音色，还原度高
-- 混合架构通过 per-provider 模块设计封装，在保持账号简单的同时实现了最高性价比与最低交互延迟
+- **对话（chat）**：DeepSeek `deepseek-v4-flash`——缓存命中价 ~¥0.02/M，而静态 system prompt（教材+人设）每轮重复，多轮几乎全缓存命中；`thinking=disabled` 消除 CoT 延迟。英文简单问答简单模型足够。
+- **材料整理（extraction）**：需多模态 + 推理，建议阿里 `qwen3-vl-plus`；可选两段式（perception 转写 → `deepseek-v4-pro` 结构化，见 `2026-06-05-dev-log.md`）。
+- **STT**：火山实时识别，容忍中英混说；备选 Qwen3-ASR（OpenAI 兼容 `/audio/transcriptions`）。
+- **TTS**：火山专门的儿童音色；小米 TTS 当前免费，可后续 A/B。
+- 加新厂商 = `.env` 加 key + 工厂加一个 `case` + config 指过去，零新类。
 
 **不选（但 adapter 接口可切）：**
 - **OpenAI / Claude**：国内不可直连
 - **讯飞 STT**：也强，但账号分离
-- **阿里云 CosyVoice TTS**：新秀，值得观察
 
 ### 范围约束策略：Prompt + 事后校验（Level 0+1）
 
