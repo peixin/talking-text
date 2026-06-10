@@ -43,7 +43,7 @@
 | Git hooks | lefthook |
 | Commit 格式 | commitlint + Conventional Commits |
 | 任务入口 | 根目录 `justfile` |
-| 容器化 | **V1 延后**，发布阶段一次性做 |
+| 容器化 | 根目录 `docker-compose.yml` 做本地全栈集成测试；生产部署发布阶段再做 |
 
 ---
 
@@ -157,9 +157,9 @@ STT / LLM / TTS 一定会换。**所有外部 SDK 调用必须写在 `backend/ap
 
 所有外部输入（文本 / PDF / 图片 / MP3）最终都转成内部 `Curriculum → Unit → (articles, vocab, grammar_points, objectives, key_points)` 数据结构。转换由 AI（LLM 结构化提取）完成，家长审阅为准。
 
-### 8. V1 不做 Docker，但代码必须"Docker-ready"
+### 8. 代码必须"Docker-ready"（compose 仅用于本地集成测试）
 
-延后 Docker 不等于可以写反 Docker 的代码。以下必须遵守：
+日常开发走原生 `just dev`；根目录 `docker-compose.yml` 是全栈集成测试，不是开发环境也不是生产部署。以下必须遵守：
 
 - 所有配置走环境变量或 config 文件（DB URL、API key、端口等）
 - 日志走 stdout/stderr，不落固定路径的本地文件
@@ -167,7 +167,7 @@ STT / LLM / TTS 一定会换。**所有外部 SDK 调用必须写在 `backend/ap
 - 音频统一走 `BlobStorage` 适配器（存 storage key，绝不存绝对路径）——V1 本地盘，后续上云
 - 启动时不预设文件系统约定（如"必须存在 data/ 文件夹"）
 
-**目标：发布前一次性补 Dockerfile + docker-compose，不反悔。**
+**目标：发布时生产容器化零代码改动落地。**
 
 ---
 
@@ -343,7 +343,7 @@ just db-history
   - 音频只存国内对象存储（无论 `BlobStorage` 用哪个后端），不出境
   - V2 准备对外推广前补 COPPA / 个保法合规
 - **延后的事项（不要现在做）：**
-  - Docker 化
+  - 生产容器化部署（本地 docker-compose 集成测试已存在）
   - PDF / 图片 / MP3 教材导入（V1 只支持粘贴文本）
   - 流式语音链路
   - 短信 / 微信登录

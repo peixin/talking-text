@@ -43,11 +43,10 @@ class Settings(BaseSettings):
     # --- Volcengine Ark (LLM) ---
     volc_ark_api_key: str = ""
     volc_ark_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
-    volc_ark_model: str = "doubao-seed-2-0-mini-260215"
     # Optional per-model endpoint (接入点) overrides, account-specific. Maps a
-    # logical model name -> Ark inference endpoint id (ep-xxxx) for traffic
-    # discounts. Absent model -> the model name is sent to the API directly.
-    # JSON in .env, e.g. VOLC_ARK_ENDPOINTS={"doubao-vision":"ep-2026..."}
+    # model name -> Ark inference endpoint id (ep-xxxx) for traffic discounts.
+    # Absent model -> the model name is sent to the API directly.
+    # JSON in .env, e.g. VOLC_ARK_ENDPOINTS={"doubao-seed-2-0-mini-260428":"ep-2026..."}
     volc_ark_endpoints: dict[str, str] = {}
 
     # --- Volcengine Speech (shared by STT + TTS) ---

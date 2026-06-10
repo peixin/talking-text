@@ -37,21 +37,22 @@ reasoning_effort = "low"    # deepseek only, when thinking = "enabled"
 
 [adapter.stage.extraction]
 # Used when ingest.extraction_mode = "single": one multimodal call does both
-# OCR and structuring. Vision-capable provider: volc_ark | aliyun | xiaomi.
-#   volc_ark : a logical model name (e.g. "doubao-vision"); map it to an Ark
-#              endpoint id in .env VOLC_ARK_ENDPOINTS for the traffic discount.
-#   aliyun   : e.g. "qwen3-vl-plus" (strong VL + reasoning)
-#   xiaomi   : e.g. "mimo-v2.5-pro" (multimodal)
+# OCR and structuring. The model must list "image" in models.toml
+# input_modalities (validated at startup). Examples:
+#   volc_ark : "doubao-seed-2-0-mini-260428" (multimodal seed; optionally map it
+#              to an Ark endpoint id in .env VOLC_ARK_ENDPOINTS for the discount)
+#   aliyun   : "qwen3-vl-plus" (strong VL + reasoning)
+#   xiaomi   : "mimo-v2.5" (multimodal; the -pro variant is text-only)
 provider = "volc_ark"
-model = "doubao-vision"
+model = "doubao-seed-2-0-mini-260428"
 
 [adapter.stage.perception]
 # Used when extraction_mode = "two_stage" (images only): a VLM that transcribes
 # the page into layout-aware Markdown (preserving image-word pairings, tables,
 # groupings). Just a good transcriber — the reasoning lives in structuring.
-# Vision-capable provider: volc_ark | aliyun | xiaomi.
+# The model must list "image" in models.toml input_modalities (validated at startup).
 provider = "volc_ark"
-model = "doubao-vision"     # volc_ark: map to an endpoint id via VOLC_ARK_ENDPOINTS (.env)
+model = "doubao-seed-2-0-mini-260428"     # volc_ark: optional endpoint id via VOLC_ARK_ENDPOINTS (.env)
 
 [adapter.stage.structuring]
 # Used when extraction_mode = "two_stage": the single "brain" that turns all
@@ -87,10 +88,13 @@ temperature = 0.2
 max_tokens = 300            # auto-name an item group
 temperature = 0.7
 [task.extraction]
-max_tokens = 2048           # curriculum item extraction / structuring
+# Curriculum item extraction / structuring. Budget must fit the FULL transcription
+# + items JSON of a dense textbook page — a truncated response is unparseable
+# (the adapter warns on finish_reason="length").
+max_tokens = 4096
 temperature = 0.2
 [task.perception]
-max_tokens = 2048           # two-stage VLM transcription
+max_tokens = 4096           # two-stage VLM transcription (full-page, layout-aware)
 temperature = 0.1
 
 [session]

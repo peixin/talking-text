@@ -16,6 +16,7 @@ import sys
 import time
 from pathlib import Path
 
+from app.adapters.stt.protocol import AudioFormat
 from app.config import settings
 
 # provider name -> (base_url, api_key) from .env. Add a row to test a new vendor.
@@ -26,7 +27,7 @@ _LLM_PROVIDERS: dict[str, tuple[str, str]] = {
     "xiaomi": (settings.xiaomi_base_url, settings.xiaomi_api_key),
 }
 
-_AUDIO_FMT = {".ogg": "ogg", ".wav": "wav", ".mp3": "mp3", ".pcm": "pcm"}
+_AUDIO_FMT: dict[str, AudioFormat] = {".ogg": "ogg", ".wav": "wav", ".mp3": "mp3", ".pcm": "pcm"}
 _TTS_OUT_EXT = {"mp3": "mp3", "ogg_opus": "ogg", "pcm": "pcm"}
 
 
@@ -112,7 +113,7 @@ async def cmd_vision(a: argparse.Namespace) -> None:
 
 
 async def cmd_asr(a: argparse.Namespace) -> None:
-    from app.adapters.stt.protocol import STTRequest
+    from app.adapters.stt.protocol import STTAdapter, STTRequest
 
     fmt = _AUDIO_FMT.get(Path(a.audio).suffix.lower())
     if not fmt:
@@ -120,10 +121,11 @@ async def cmd_asr(a: argparse.Namespace) -> None:
     audio = Path(a.audio).read_bytes()
     req = STTRequest(audio=audio, audio_format=fmt, sample_rate=a.sample_rate, language=a.language)
 
+    adapter: STTAdapter
     if a.provider == "volc":
         from app.adapters.stt.volc import VolcSTTAdapter
 
-        adapter: object = VolcSTTAdapter()
+        adapter = VolcSTTAdapter()
     elif a.provider in ("aliyun", "dashscope"):
         from app.adapters.stt.dashscope import DashScopeQwenASRAdapter
 
@@ -133,16 +135,17 @@ async def cmd_asr(a: argparse.Namespace) -> None:
 
     _header(f"ASR  {a.provider}  ({fmt}, {len(audio)} bytes)")
     t = time.monotonic()
-    r = await adapter.invoke(req)  # type: ignore[attr-defined]
+    r = await adapter.invoke(req)
     print(f"latency : {time.monotonic() - t:.2f}s")
     print(f"seconds : {r.audio_seconds}")
+    print(f"tokens  : in={r.input_tokens} out={r.output_tokens}")
     print(f"text    : {r.text}")
     if a.raw:
         _dump_raw(r.raw)
 
 
 async def cmd_tts(a: argparse.Namespace) -> None:
-    from app.adapters.tts.protocol import TTSRequest
+    from app.adapters.tts.protocol import TTSAdapter, TTSRequest
 
     req = TTSRequest(
         text=a.text,
@@ -150,10 +153,11 @@ async def cmd_tts(a: argparse.Namespace) -> None:
         audio_format=a.format,
         sample_rate=a.sample_rate,
     )
+    adapter: TTSAdapter
     if a.provider == "volc":
         from app.adapters.tts.volc import VolcTTSAdapter
 
-        adapter: object = VolcTTSAdapter()
+        adapter = VolcTTSAdapter()
     elif a.provider == "openai_compatible":
         from app.adapters.tts.openai_compatible import OpenAITTSAdapter
 
@@ -165,7 +169,7 @@ async def cmd_tts(a: argparse.Namespace) -> None:
 
     _header(f"TTS  {a.provider}  fmt={a.format}")
     t = time.monotonic()
-    r = await adapter.invoke(req)  # type: ignore[attr-defined]
+    r = await adapter.invoke(req)
     out = a.out or f"probe_tts.{_TTS_OUT_EXT.get(a.format, 'bin')}"
     Path(out).write_bytes(r.audio)
     print(f"latency : {time.monotonic() - t:.2f}s")

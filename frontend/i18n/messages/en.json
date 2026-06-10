@@ -144,7 +144,29 @@
     "kind_personal_collection": "Collection",
     "kind_quick_practice": "Quick practice",
     "kind_review_set": "Review set",
-    "kind_tag": "Tag"
+    "kind_tag": "Tag",
+    "banner_title": "All-in-one smart capture",
+    "banner_subtitle": "Snap a photo, speak, or type — AI extracts the words, phrases, and patterns. Organize them into textbooks later in the Organize workbench.",
+    "banner_button": "Capture new material",
+    "capture_section_title": "Quick captures ({count} bags)",
+    "capture_organize_link": "Organize into textbooks →",
+    "capture_section_hint": "Practice right away — no need to file into a textbook first; organize later when it is worth keeping.",
+    "capture_bag_tooltip": "View / edit this bag",
+    "capture_word_count": "{count} words",
+    "practice": "Practice",
+    "tree_section_title": "Textbook structure",
+    "tree_books_count": "{count} textbooks",
+    "tree_empty_title": "No textbooks yet",
+    "tree_empty_hint": "Capture material with smart capture first, then file it into a textbook tag tree in the Organize workbench.",
+    "archived_section_title": "Archived materials ({count})",
+    "practice_chat": "Practice chat",
+    "view_details": "View details",
+    "delete_permanently": "Delete permanently",
+    "contains_items": "Contains {count} items",
+    "items_with_total": "{count} items ({total} incl. children)",
+    "items_only": "{count} items",
+    "confirm_large_scope": "This level of the textbook contains a lot of items ({count} in total).\nFor the best practice experience, the AI teacher will prioritize up to {cap} items your child has not mastered yet.\nYou can also pick a specific unit or lesson for focused practice.\n\nContinue?",
+    "start_session_failed": "Failed to start practice: {error}"
   },
   "MaterialPickers": {
     "kind_label": "Type (type your own)",
@@ -182,7 +204,8 @@
     "ingest_new_material": "📸 Smart Ingest New Textbook",
     "close": "Close",
     "items_count_total": "{count} items (incl. sub-chapters)",
-    "too_many": "Over {cap} — AI focuses on {cap} unmastered"
+    "too_many": "Over {cap} — AI focuses on {cap} unmastered",
+    "apply_failed": "Couldn't switch scope. Please try again."
   },
   "Ingest": {
     "title_input": "Add learning material",
@@ -233,7 +256,19 @@
     "trigger_voice_coming_soon": "Voice ingestion — coming soon",
     "trigger_file": "Attach file",
     "warning_limit_reached": "You can upload up to 5 photos at a time.",
-    "warning_size_reached": "The single or cumulative image size cannot exceed 10MB."
+    "warning_size_reached": "The single or cumulative image size cannot exceed 10MB.",
+    "cefr_label": "Estimated difficulty (CEFR)",
+    "cefr_auto_option": "(AI adaptive)",
+    "cefr_option_label": "{level} (CEFR {level})",
+    "parent_note_label": "My notes · requests",
+    "parent_note_badge": "Separated from the content by AI",
+    "parent_note_placeholder": "Your notes, requests, or remarks about this material (any language). E.g. \"Unit 3 vocab, focus on the r sound.\" Used only to guide the AI teacher — never treated as learning content.",
+    "raw_text_title": "AI OCR draft & refine",
+    "raw_text_expand_hint": "Click to expand and edit",
+    "raw_text_placeholder": "Fix OCR mistakes in the raw text the vision model extracted...",
+    "re_extract": "✨ Re-extract",
+    "close_preview": "Close preview",
+    "preview_image_alt": "Material preview"
   },
   "Home": {
     "brand_title": "Talking Text",

@@ -107,6 +107,13 @@ class OpenAICompatibleLLMAdapter:
             )
         )
         choice = completion.choices[0]
+        if choice.finish_reason == "length":
+            # A truncated response is fatal for JSON tasks (extraction) — surface it.
+            log.warning(
+                "%s response truncated at max_tokens=%s; raise the [task.*] budget",
+                self._model,
+                max_tokens,
+            )
         usage = completion.usage
         return LLMResponse(
             text=choice.message.content or "",

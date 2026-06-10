@@ -22,6 +22,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SCOPE_SOFT_CAP } from "@/lib/constants";
 import type { GroupOut } from "@/lib/backend";
 import { archiveGroup, deleteGroup, startSessionFromGroupAction } from "./actions";
 import { Link } from "@/i18n/routing";
@@ -148,10 +149,8 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
   // Trigger fast chat session
   function handleStartSession(groupId: string) {
     const totalCount = descendantCounts.get(groupId) || 0;
-    if (totalCount > 100) {
-      const ok = confirm(
-        `当前选择的教材层级包含词句较多（共 ${totalCount} 个）。\n为了保证最佳对话练习效果，AI 老师将智能优先挑选您还未掌握的词句（最多 100 个）进行重点操练。\n建议您也可以选择具体单元或课次进行针对性练习。\n\n是否继续？`,
-      );
+    if (totalCount > SCOPE_SOFT_CAP) {
+      const ok = confirm(t("confirm_large_scope", { count: totalCount, cap: SCOPE_SOFT_CAP }));
       if (!ok) return;
     }
     setBusy(groupId);
@@ -161,7 +160,7 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
       if (res.ok) {
         router.push(`/chat/${res.sessionId}`);
       } else {
-        alert(`开始练习失败: ${res.error}`);
+        alert(t("start_session_failed", { error: res.error }));
       }
     });
   }
@@ -200,11 +199,9 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
         <div className="relative z-10 space-y-1">
           <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-wide">
             <Sparkles className="h-5 w-5 animate-pulse text-indigo-400" />
-            三位一体智能录入
+            {t("banner_title")}
           </h2>
-          <p className="max-w-md text-xs text-slate-300">
-            拍照、语音或手动输入，AI 识别出单词、短语和句型；之后在「整理素材」里一键归位成教材。
-          </p>
+          <p className="max-w-md text-xs text-slate-300">{t("banner_subtitle")}</p>
         </div>
 
         <Button
@@ -215,7 +212,7 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
           size="sm"
         >
           <Plus className="mr-1.5 h-4 w-4 text-indigo-600 transition-transform duration-200 group-hover:rotate-90" />
-          智能录入新教材
+          {t("banner_button")}
         </Button>
       </div>
 
@@ -225,18 +222,16 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
           <div className="flex items-center justify-between">
             <h3 className="flex items-center gap-1.5 text-sm font-bold text-amber-700">
               <Inbox className="h-4 w-4" />
-              随手采集（{captureRoots.length} 袋）
+              {t("capture_section_title", { count: captureRoots.length })}
             </h3>
             <Link
               href="/parent/organize"
               className="text-sm font-medium text-amber-700 transition hover:text-amber-900"
             >
-              去整理成教材 →
+              {t("capture_organize_link")}
             </Link>
           </div>
-          <p className="text-xs text-amber-700/70">
-            可直接开练，无需归入教材；想沉淀成教材时再去整理。
-          </p>
+          <p className="text-xs text-amber-700/70">{t("capture_section_hint")}</p>
           <div className="flex flex-wrap gap-2">
             {captureRoots.map((n) => {
               const isBusy = busy === n.group.id;
@@ -248,11 +243,13 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
                   <Link
                     href={`/parent/materials/${n.group.id}`}
                     className="font-medium transition hover:text-amber-700"
-                    title="查看 / 编辑这袋"
+                    title={t("capture_bag_tooltip")}
                   >
                     {n.group.name}
                   </Link>
-                  <span className="text-muted-foreground">{n.group.item_count} 词</span>
+                  <span className="text-muted-foreground">
+                    {t("capture_word_count", { count: n.group.item_count })}
+                  </span>
                   <Button
                     size="sm"
                     onClick={() => handleStartSession(n.group.id)}
@@ -264,7 +261,7 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
                     ) : (
                       <>
                         <MessageSquare className="mr-1 h-3 w-3" />
-                        练习
+                        {t("practice")}
                       </>
                     )}
                   </Button>
@@ -280,18 +277,18 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
         <div className="flex items-center justify-between border-b pb-2">
           <h3 className="text-foreground flex items-center gap-1.5 text-sm font-bold">
             <BookOpen className="h-4 w-4 text-slate-500" />
-            教材结构
+            {t("tree_section_title")}
           </h3>
-          <span className="text-muted-foreground text-xs">{canonicalRoots.length} 本教材</span>
+          <span className="text-muted-foreground text-xs">
+            {t("tree_books_count", { count: canonicalRoots.length })}
+          </span>
         </div>
 
         {canonicalRoots.length === 0 ? (
           <div className="text-muted-foreground bg-card/20 rounded-2xl border border-dashed p-10 text-center text-sm shadow-inner">
             <Bookmark className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-            <p className="font-semibold text-slate-400">还没有成形的教材</p>
-            <p className="mt-1 text-xs text-slate-400">
-              先「智能录入」采集素材，再去「整理素材」把它们归位成教材标签树。
-            </p>
+            <p className="font-semibold text-slate-400">{t("tree_empty_title")}</p>
+            <p className="mt-1 text-xs text-slate-400">{t("tree_empty_hint")}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -317,7 +314,7 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
         <section className="space-y-3 border-t pt-4">
           <h3 className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold">
             <Archive className="h-3.5 w-3.5" />
-            已归档素材 ({archivedGroups.length})
+            {t("archived_section_title", { count: archivedGroups.length })}
           </h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {archivedGroups.map((g) => (
@@ -328,7 +325,7 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
                 <div className="min-w-0 flex-1">
                   <p className="text-foreground truncate text-sm font-semibold">{g.name}</p>
                   <p className="text-muted-foreground text-[10px]">
-                    {g.item_count} 个学习点 · {kindLabel(g.kind)}
+                    {t("items_count", { count: g.item_count })} · {kindLabel(g.kind)}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -337,7 +334,7 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
                     size="icon-sm"
                     onClick={() => handleToggleArchive(g)}
                     disabled={busy === g.id}
-                    title="恢复"
+                    title={t("restore")}
                   >
                     <ArchiveRestore className="h-4 w-4" />
                   </Button>
@@ -347,7 +344,7 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
                     onClick={() => confirmDelete(g)}
                     disabled={busy === g.id}
                     className="hover:text-destructive text-muted-foreground"
-                    title="删除"
+                    title={t("delete")}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -391,6 +388,7 @@ function TreeViewNode({
   onArchive: (g: GroupOut) => void;
   onDelete: (g: GroupOut) => void;
 }) {
+  const t = useTranslations("Materials");
   const [expanded, setExpanded] = useState(false);
   const { group, children } = node;
 
@@ -473,17 +471,17 @@ function TreeViewNode({
                 if (group.item_count === 0 && recursiveCount > 0) {
                   return (
                     <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                      包含 {recursiveCount} 个词句
+                      {t("contains_items", { count: recursiveCount })}
                     </span>
                   );
                 } else if (recursiveCount > group.item_count) {
                   return (
                     <span>
-                      {group.item_count} 个词句（共 {recursiveCount} 个）
+                      {t("items_with_total", { count: group.item_count, total: recursiveCount })}
                     </span>
                   );
                 } else {
-                  return <span>{group.item_count} 个词句</span>;
+                  return <span>{t("items_only", { count: group.item_count })}</span>;
                 }
               })()}
               {group.source_book_hint && ` · ${group.source_book_hint}`}
@@ -505,7 +503,7 @@ function TreeViewNode({
             ) : (
               <MessageSquare className="mr-1 h-3.5 w-3.5 text-indigo-500" />
             )}
-            对话练习
+            {t("practice_chat")}
           </Button>
 
           {/* View detailed material */}
@@ -514,7 +512,7 @@ function TreeViewNode({
               variant="ghost"
               size="icon-sm"
               className="text-muted-foreground hover:text-foreground shrink-0"
-              title="查看详情"
+              title={t("view_details")}
             >
               <Eye className="h-3.5 w-3.5" />
             </Button>
@@ -527,7 +525,7 @@ function TreeViewNode({
             onClick={() => onArchive(group)}
             disabled={isBusy}
             className="text-muted-foreground hover:text-foreground shrink-0"
-            title="归档"
+            title={t("archive")}
           >
             <Archive className="h-3.5 w-3.5" />
           </Button>
@@ -539,7 +537,7 @@ function TreeViewNode({
             onClick={() => onDelete(group)}
             disabled={isBusy}
             className="hover:text-destructive text-muted-foreground shrink-0"
-            title="彻底删除"
+            title={t("delete_permanently")}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>

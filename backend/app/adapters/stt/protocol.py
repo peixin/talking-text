@@ -26,7 +26,11 @@ class STTRequest:
 @dataclass(frozen=True)
 class STTResult:
     text: str
-    audio_seconds: float
+    audio_seconds: float  # duration-billed providers (Volc); 0 for token-billed ones
+    # Token-billed providers (Qwen-ASR rides on /chat/completions); 0 for
+    # duration-billed ones. Both kinds must be captured or billing has a blind spot.
+    input_tokens: int = 0
+    output_tokens: int = 0
     raw: dict = field(default_factory=dict)
 
 

@@ -12,6 +12,8 @@ All LLM providers share one OpenAI-compatible class, so adding a provider
 
 from __future__ import annotations
 
+import logging
+
 from app.adapters.llm.openai_compatible import OpenAICompatibleLLMAdapter
 from app.adapters.llm.protocol import Modality, MultimodalLLM, TextLLM
 from app.adapters.storage.protocol import BlobStorage
@@ -20,10 +22,9 @@ from app.adapters.tts.protocol import TTSAdapter
 from app.app_config import StageConfig, app_config
 from app.core.dialog import DialogOrchestrator
 from app.core.scope import V1ScopeComputer
+from app.model_registry import model_registry
 
-# Providers whose models can accept image input (for the extraction stage).
-# Text-only providers (e.g. deepseek) must not be wired to a multimodal stage.
-_VISION_CAPABLE_PROVIDERS = frozenset({"volc_ark", "aliyun", "xiaomi"})
+log = logging.getLogger(__name__)
 
 
 def _openai_llm(
@@ -72,18 +73,43 @@ def _openai_llm(
             raise ValueError(f"Unknown OpenAI-compatible LLM provider: {other!r}")
 
 
+def _check_registered(stage: StageConfig, role: str) -> None:
+    """Warn when a stage's (provider, model) is missing from models.toml — the
+    context limit silently falls back to [defaults], which usually means a typo."""
+    if model_registry.get(stage.provider, stage.model) is None:
+        log.warning(
+            "%s stage model %s/%s is not in models.toml; "
+            "context limit falls back to the default — register it",
+            role,
+            stage.provider,
+            stage.model,
+        )
+
+
 def _make_chat() -> TextLLM:
     """Chat stage — text in, text out (dialog + utility tasks)."""
     stage = app_config.adapter.chat
+    _check_registered(stage, "chat")
     return _openai_llm(stage, stage.model, frozenset({"text"}))
 
 
 def _make_multimodal(stage: StageConfig, role: str) -> MultimodalLLM:
-    """Build a vision-capable adapter for a stage (extraction / perception)."""
-    if stage.provider not in _VISION_CAPABLE_PROVIDERS:
+    """Build a vision-capable adapter for a stage (extraction / perception).
+
+    Capability is validated per MODEL against models.toml input_modalities
+    (fail fast at startup) — e.g. xiaomi's mimo-v2.5 takes images but
+    mimo-v2.5-pro is text-only, so a provider-level check is not enough.
+    """
+    info = model_registry.get(stage.provider, stage.model)
+    if info is None:
         raise ValueError(
-            f"{role} provider {stage.provider!r} does not support image input; "
-            f"pick one of {sorted(_VISION_CAPABLE_PROVIDERS)}"
+            f"{role} stage model {stage.provider}/{stage.model} is not in models.toml; "
+            f"register it (with input_modalities) so its image capability can be validated"
+        )
+    if "image" not in info.input_modalities:
+        raise ValueError(
+            f"{role} stage model {stage.provider}/{stage.model} does not list 'image' in "
+            f"models.toml input_modalities; pick an image-capable model"
         )
     # The logical model name; volc_ark endpoint resolution happens in _openai_llm.
     return _openai_llm(stage, stage.model, frozenset({"text", "image"}))
@@ -102,6 +128,7 @@ def _make_perception() -> MultimodalLLM:
 def _make_structuring() -> TextLLM:
     """Two-stage structuring — text 'brain' that turns transcription into items."""
     stage = app_config.adapter.structuring
+    _check_registered(stage, "structuring")
     return _openai_llm(stage, stage.model, frozenset({"text"}))
 
 

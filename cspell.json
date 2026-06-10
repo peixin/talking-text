@@ -1,0 +1,26 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "aliyun",
+    "asr",
+    "bytedance",
+    "cspell",
+    "dashscope",
+    "deepseek",
+    "mimo",
+    "openspeech",
+    "qwen",
+    "seedasr",
+    "stt",
+    "tts",
+    "volc",
+    "volces",
+    "volcengine"
+  ],
+  "ignorePaths": [
+    "node_modules",
+    ".git",
+    "**/*.lock"
+  ]
+}

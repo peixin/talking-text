@@ -79,6 +79,23 @@ class AppConfig:
             raise KeyError(f"No [task.{name}] in config.toml") from None
 
 
+# Task names the code asks for via app_config.task(...) — validated at load time
+# so a missing/renamed [task.*] section fails at startup, not mid-request.
+_REQUIRED_TASKS = frozenset(
+    {
+        "dialog",
+        "greeting",
+        "title",
+        "calibration",
+        "mastery",
+        "persona",
+        "group_naming",
+        "extraction",
+        "perception",
+    }
+)
+
+
 def _load() -> AppConfig:
     with open(_CONFIG_PATH, "rb") as f:
         raw = tomllib.load(f)
@@ -102,6 +119,9 @@ def _load() -> AppConfig:
         name: TaskConfig(max_tokens=t["max_tokens"], temperature=t.get("temperature", 0.7))
         for name, t in raw.get("task", {}).items()
     }
+    missing_tasks = _REQUIRED_TASKS - tasks.keys()
+    if missing_tasks:
+        raise KeyError(f"config.toml is missing [task.*] sections: {sorted(missing_tasks)}")
 
     return AppConfig(
         adapter=AdapterConfig(

@@ -24,6 +24,9 @@ log = logging.getLogger(__name__)
 
 # Our internal formats -> data-URL media types Qwen-ASR understands.
 _MIME = {"mp3": "audio/mpeg", "wav": "audio/wav", "ogg": "audio/ogg", "pcm": "audio/wav"}
+# Our internal formats -> the required input_audio "format" value. Keep this
+# consistent with _MIME: raw pcm is labeled wav there, so it is labeled wav here too.
+_FORMAT = {"mp3": "mp3", "wav": "wav", "ogg": "ogg", "pcm": "wav"}
 
 
 class DashScopeQwenASRAdapter:
@@ -43,12 +46,23 @@ class DashScopeQwenASRAdapter:
         b64 = base64.b64encode(request.audio).decode("ascii")
         data_url = f"data:{mime};base64,{b64}"
 
+        # DashScope Qwen-ASR / OpenAI chat completions API requires the "format" parameter.
+        fmt = _FORMAT.get(request.audio_format, "wav")
+
         body: dict = {
             "model": self._model,
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "input_audio", "input_audio": {"data": data_url}}],
+                    "content": [
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "data": data_url,
+                                "format": fmt,
+                            },
+                        }
+                    ],
                 }
             ],
         }
@@ -73,9 +87,16 @@ class DashScopeQwenASRAdapter:
         except (KeyError, IndexError, TypeError) as e:
             raise RuntimeError(f"Unexpected Qwen-ASR response shape: {data!r}") from e
 
-        # Qwen-ASR is token-billed, not per-second; audio_seconds is a Volc-era
-        # billing field we leave at 0 here.
-        return STTResult(text=text, audio_seconds=0.0, raw=data)
+        # Qwen-ASR is token-billed, not per-second: audio_seconds stays 0 and the
+        # cost signal is the usage token counts instead.
+        usage = data.get("usage") or {}
+        return STTResult(
+            text=text,
+            audio_seconds=0.0,
+            input_tokens=int(usage.get("prompt_tokens", 0)),
+            output_tokens=int(usage.get("completion_tokens", 0)),
+            raw=data,
+        )
 
     def stream(
         self, audio_chunks: AsyncIterator[bytes], *, audio_format: AudioFormat, sample_rate: int

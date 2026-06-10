@@ -20,7 +20,7 @@ from app.config import settings
 log = logging.getLogger(__name__)
 
 # Our internal formats -> OpenAI /audio/speech response_format values.
-_RESPONSE_FORMAT = {"mp3": "mp3", "ogg_opus": "opus", "pcm": "pcm"}
+_RESPONSE_FORMAT = {"mp3": "mp3", "ogg": "opus", "ogg_opus": "opus", "pcm": "pcm"}
 
 
 class OpenAITTSAdapter:

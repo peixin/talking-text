@@ -44,7 +44,7 @@
 | Git hooks | lefthook |
 | Commit format | commitlint + Conventional Commits |
 | Task runner | root `justfile` |
-| Containerization | **Deferred to V1 release** |
+| Containerization | `docker-compose.yml` for local full-stack integration tests; production deployment deferred to release |
 
 ---
 
@@ -158,9 +158,10 @@ See `docs/architecture.md` §5 for the full interface.
 
 All external input (text / PDF / image / MP3) must be converted to the internal `Curriculum → Unit → (articles, vocab, grammar_points, objectives, key_points)` structure. Conversion is done by LLM (structured extraction); parent review is the source of truth.
 
-### 8. No Docker in V1 — but code must be Docker-ready
+### 8. Code must be Docker-ready (compose exists for local integration tests only)
 
-Deferring Docker ≠ writing Docker-hostile code. These rules apply from day one:
+Daily development stays native (`just dev`); the root `docker-compose.yml` is a full-stack
+integration test, not the dev loop and not production. These rules apply from day one:
 
 - All config via environment variables or config files (DB URL, API keys, ports, etc.)
 - Logs to stdout/stderr — no fixed-path local log files
@@ -168,7 +169,7 @@ Deferring Docker ≠ writing Docker-hostile code. These rules apply from day one
 - Audio goes through the `BlobStorage` adapter (storage key, never an absolute path) — local disk in V1, cloud later
 - No filesystem preconditions at startup (e.g., "data/ directory must exist")
 
-**Goal: add Dockerfile + docker-compose once at release time, no regrets.**
+**Goal: production container deployment lands at release time with no code changes.**
 
 ---
 
@@ -343,7 +344,7 @@ Rules:
   - Audio stays on domestic object storage only (whatever `BlobStorage` backend), never leaves China
   - COPPA / PIPL compliance before any public launch
 - **Explicitly deferred (do not implement now):**
-  - Docker
+  - Production container deployment (local docker-compose integration test already exists)
   - PDF / image / MP3 curriculum import (V1 text paste only)
   - Streaming voice pipeline
   - SMS / WeChat login

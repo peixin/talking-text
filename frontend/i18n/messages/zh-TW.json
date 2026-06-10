@@ -132,7 +132,29 @@
     "kind_personal_collection": "生詞本",
     "kind_quick_practice": "隨手練習",
     "kind_review_set": "複習集",
-    "kind_tag": "標籤"
+    "kind_tag": "標籤",
+    "banner_title": "三位一體智能錄入",
+    "banner_subtitle": "拍照、語音或手動輸入，AI 識別出單字、片語和句型；之後在「整理素材」裡一鍵歸位成教材。",
+    "banner_button": "智能錄入新教材",
+    "capture_section_title": "隨手採集（{count} 袋）",
+    "capture_organize_link": "去整理成教材 →",
+    "capture_section_hint": "可直接開練，無需歸入教材；想沉澱成教材時再去整理。",
+    "capture_bag_tooltip": "查看 / 編輯這袋",
+    "capture_word_count": "{count} 詞",
+    "practice": "練習",
+    "tree_section_title": "教材結構",
+    "tree_books_count": "{count} 本教材",
+    "tree_empty_title": "還沒有成形的教材",
+    "tree_empty_hint": "先「智能錄入」採集素材，再去「整理素材」把它們歸位成教材標籤樹。",
+    "archived_section_title": "已歸檔素材 ({count})",
+    "practice_chat": "對話練習",
+    "view_details": "查看詳情",
+    "delete_permanently": "徹底刪除",
+    "contains_items": "包含 {count} 個詞句",
+    "items_with_total": "{count} 個詞句（共 {total} 個）",
+    "items_only": "{count} 個詞句",
+    "confirm_large_scope": "當前選擇的教材層級包含詞句較多（共 {count} 個）。\n為了保證最佳對話練習效果，AI 老師將智能優先挑選您還未掌握的詞句（最多 {cap} 個）進行重點操練。\n建議您也可以選擇具體單元或課次進行針對性練習。\n\n是否繼續？",
+    "start_session_failed": "開始練習失敗: {error}"
   },
   "MaterialPickers": {
     "kind_label": "素材類型（可自由輸入）",
@@ -170,7 +192,8 @@
     "ingest_new_material": "📸 智能錄入新教材",
     "close": "關閉",
     "items_count_total": "共 {count} 個學習點 · 含子章節",
-    "too_many": "超過 {cap} 個 · AI 將挑選未掌握的 {cap} 個"
+    "too_many": "超過 {cap} 個 · AI 將挑選未掌握的 {cap} 個",
+    "apply_failed": "切換失敗，請重試"
   },
   "Ingest": {
     "title_input": "新增學習素材",
@@ -221,7 +244,19 @@
     "trigger_voice_coming_soon": "語音錄入 — 敬請期待",
     "trigger_file": "新增文件",
     "warning_limit_reached": "每次最多支援上傳 5 張照片哦",
-    "warning_size_reached": "單張或累計圖片大小不能超過 10MB 哦"
+    "warning_size_reached": "單張或累計圖片大小不能超過 10MB 哦",
+    "cefr_label": "推算難度等級 (CEFR)",
+    "cefr_auto_option": "(由AI自適應)",
+    "cefr_option_label": "{level}（標準 {level} 級）",
+    "parent_note_label": "我的說明 · 要求",
+    "parent_note_badge": "AI 已從內容中分離",
+    "parent_note_placeholder": "你對這份素材的說明、要求或批註（任意語言）。例如：這是第3單元生詞，重點練 r 發音。僅用於指導 AI 老師，不會被當作學習內容。",
+    "raw_text_title": "底稿與二次微調 (AI OCR Draft)",
+    "raw_text_expand_hint": "點擊展開編輯",
+    "raw_text_placeholder": "在此修改由 Vision 提取的原始教材文本，微調 OCR 錯誤...",
+    "re_extract": "✨ 重新提取 (Re-extract)",
+    "close_preview": "關閉預覽",
+    "preview_image_alt": "教材預覽"
   },
   "Home": {
     "brand_title": "字有天地",

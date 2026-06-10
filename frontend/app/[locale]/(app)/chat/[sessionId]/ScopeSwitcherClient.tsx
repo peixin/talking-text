@@ -52,6 +52,7 @@ export function ScopeSwitcherClient({
 }: Props) {
   const t = useTranslations("Scope");
   const [isPending, startTransition] = useTransition();
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   // Tree data derived once from the flat groups: parent→children map + recursive
   // descendant totals (a container's own item_count is often 0).
@@ -150,19 +151,26 @@ export function ScopeSwitcherClient({
   }, [tree, expanded]);
 
   function applyGroup(group: GroupOut | null) {
+    setApplyError(null);
     startTransition(async () => {
       try {
         await setSessionGroup(sessionId, group?.id ?? null);
         onApplied(group);
         onOpenChange(false);
       } catch {
-        // Surface a soft error inline; current scope keeps its old value.
+        // Soft inline error; current scope keeps its old value.
+        setApplyError(t("apply_failed"));
       }
     });
   }
 
+  function handleOpenChange(next: boolean) {
+    if (!next) setApplyError(null);
+    onOpenChange(next);
+  }
+
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+    <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Backdrop
           className={cn(
@@ -192,7 +200,7 @@ export function ScopeSwitcherClient({
                 type="button"
                 onClick={() => {
                   onOpenIngest?.("camera");
-                  onOpenChange(false);
+                  handleOpenChange(false);
                 }}
                 className={cn(
                   "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5",
@@ -242,6 +250,12 @@ export function ScopeSwitcherClient({
               );
             })}
           </ul>
+
+          {applyError && (
+            <p className="text-destructive border-t px-4 py-2 text-xs" role="alert">
+              {applyError}
+            </p>
+          )}
 
           <footer className="bg-muted/30 flex justify-end border-t px-4 py-2">
             <DialogPrimitive.Close

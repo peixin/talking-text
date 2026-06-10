@@ -609,7 +609,7 @@ export function IngestDrawerClient({
                 {/* CEFR Level Selection */}
                 <div className="space-y-1">
                   <label className="block text-[10px] font-bold tracking-wider text-indigo-800 uppercase">
-                    推算难度等级 (CEFR)
+                    {t("cefr_label")}
                   </label>
                   <select
                     value={inferredCefr || ""}
@@ -617,51 +617,51 @@ export function IngestDrawerClient({
                     disabled={step.kind === "saving"}
                     className="border-border bg-background focus:ring-ring w-full rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 disabled:opacity-50"
                   >
-                    <option value="">(由AI自适应)</option>
+                    <option value="">{t("cefr_auto_option")}</option>
                     {CEFR_OPTIONS.filter(Boolean).map((lvl) => (
                       <option key={lvl} value={lvl}>
-                        {lvl} (标准 {lvl} 级)
+                        {t("cefr_option_label", { level: lvl })}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* 我的说明 / 要求 — separated from the content by the AI. Saved as the
+                {/* Parent note — separated from the content by the AI. Saved as the
                     group's prompt_notes; it steers the AI teacher, never becomes items. */}
                 <div className="space-y-1.5 rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
                   <label className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-emerald-800 uppercase">
-                    我的说明 · 要求
+                    {t("parent_note_label")}
                     <span className="rounded bg-emerald-100 px-1.5 py-px text-[8px] font-bold tracking-normal text-emerald-700 normal-case dark:bg-emerald-950/40">
-                      AI 已从内容中分离
+                      {t("parent_note_badge")}
                     </span>
                   </label>
                   <textarea
                     value={parentNote}
                     onChange={(e) => setParentNote(e.target.value)}
                     disabled={step.kind === "saving"}
-                    placeholder="你对这份素材的说明、要求或批注（任意语言）。例如：这是第3单元生词，重点练 r 发音。仅用于指导 AI 老师，不会被当作学习内容。"
+                    placeholder={t("parent_note_placeholder")}
                     rows={2}
                     className="bg-background border-border w-full resize-y rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
                   />
                 </div>
 
-                {/* 📝 底稿微调与重新分析 (Start with Vision, Refine with Text) */}
+                {/* OCR draft & refine (start with vision, refine with text) */}
                 {step.kind === "preview" && (
                   <details className="group rounded-xl border border-slate-500/10 bg-slate-500/5 p-4 transition-all duration-200 open:border-slate-500/20 open:bg-slate-500/10">
                     <summary className="flex cursor-pointer items-center justify-between text-[10px] font-bold tracking-wider text-slate-700 uppercase outline-none select-none">
                       <span className="flex items-center gap-1.5">
                         <FileText className="h-3.5 w-3.5" />
-                        底稿与二次微调 (AI OCR Draft)
+                        {t("raw_text_title")}
                       </span>
                       <span className="text-[9px] font-normal text-slate-500 group-open:hidden">
-                        点击展开编辑
+                        {t("raw_text_expand_hint")}
                       </span>
                     </summary>
                     <div className="mt-3 space-y-3">
                       <textarea
                         value={rawText}
                         onChange={(e) => setRawText(e.target.value)}
-                        placeholder="在此修改由 Vision 提取的原始教材文本，微调 OCR 错误..."
+                        placeholder={t("raw_text_placeholder")}
                         rows={6}
                         className="bg-background border-border w-full resize-y rounded-lg border p-3 font-mono text-xs leading-relaxed outline-none focus:ring-1 focus:ring-slate-500"
                       />
@@ -674,7 +674,7 @@ export function IngestDrawerClient({
                           onClick={handleReExtract}
                           className="h-8 gap-1.5 border border-indigo-500/20 bg-indigo-500/5 text-xs font-medium text-indigo-700 transition-all hover:bg-indigo-500/10 active:scale-[0.98]"
                         >
-                          ✨ 重新提取 (Re-extract)
+                          {t("re_extract")}
                         </Button>
                       </div>
                     </div>
@@ -771,7 +771,7 @@ export function IngestDrawerClient({
               type="button"
               onClick={() => setPreviewImageUrl(null)}
               className="absolute top-4 right-4 z-[70] rounded-full border border-yellow-500/30 bg-black/40 p-2 text-yellow-500/80 backdrop-blur-md transition-all hover:scale-105 hover:border-yellow-500/60 hover:text-yellow-400"
-              aria-label="关闭预览"
+              aria-label={t("close_preview")}
             >
               <X className="h-6 w-6" />
             </button>
@@ -784,7 +784,7 @@ export function IngestDrawerClient({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={previewImageUrl}
-                alt="教材预览"
+                alt={t("preview_image_alt")}
                 className="max-h-[85vh] max-w-[85vw] rounded-md object-contain"
               />
             </div>
