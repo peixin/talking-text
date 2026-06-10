@@ -3,6 +3,7 @@
 > 本文件是写给 **Claude Code** 的项目上下文。每次新会话开启时会被自动读入。
 > 产品理念见 [`docs/product.cn.md`](docs/product.cn.md)。
 > 技术架构见 [`docs/architecture.cn.md`](docs/architecture.cn.md)。
+> 路线图见 [`docs/roadmap.cn.md`](docs/roadmap.cn.md)。
 
 ---
 
@@ -410,12 +411,12 @@ just db-history
 - ✅ **采集/成书拆分**（`docs/content-lifecycle.cn.md`）：抽取不再推断层级；采集产出扁平词袋；建树是刻意的 `tag_path` 动作。详见 `docs/2026-05-30-dev-log.md`
 - ✅ `_assemble_tag_path` 确定性整理时建树（节点为无类型 `kind="tag"`）；`tests/test_ingest_extraction.py` 锁定抽取契约
 
-**下一步 TODO（按优先级）：**
-- [ ] **验证核心循环**：用手工书（1–2 节）+ 一个真实孩子（见 `docs/content-lifecycle.cn.md` §9）
+**下一步 TODO（按优先级；战略与阶段闸门见 [`docs/roadmap.cn.md`](docs/roadmap.cn.md)）：**
+- [x] **验证核心循环**：用手工书（1–2 节）+ 一个真实孩子 ✅ 2026-06-10 效果不错（见 `docs/content-lifecycle.cn.md` §9、`docs/roadmap.cn.md` §0）
 - [x] 整理工作台 V1：收件箱（采集 + 练习派生）→ tag 树，点选归位/移动（`parent/organize`，端点 `/organize/*`）；待办：拖拽、AI 提议成组
-- [ ] 内置首批教材（Tot Talk 系列 — 给库下种，冷启动）
+- [ ] **阶段一：外部家庭**（`docs/roadmap.cn.md`）：compose 栈部署到国内服务器 + HTTPS；种子教材库（先录孩子真实在用的教材，Tot Talk 其次）；邀请 3–5 个非创始人家庭；音频保留策略
+- [ ] **阶段二：掌握度 + stretch**（`docs/roadmap.cn.md`）：`learner_word_stats` 表（先确认 schema）、Scope V2 stretch（下一单元词汇 ~10%）、家长侧「本周新说出的词」列表、follower 渐进解锁
 - [ ] `_assemble_tag_path` / scope V1 的 DB 集成测试（需 Postgres 测试夹具）
-- [ ] `learner_word_stats` 掌握度表（V2）
 - [ ] **录入闭环 → 抬进 `core/curriculum/`（DB-aware）**：做「重整理 / 未入库素材整理 / AI 自动归档（用 DB 已有 `ItemGroup` 把素材归到某课本某章节）」时，把抽取编排从 `app/api/ingest.py` 抬进 `core/curriculum/`。复用两段式接缝：perception 转写是可重跑的 capture 原始件（重结构化不必重新 OCR），`structuring` 环节作为 AI 归档建议器的扩展点（读已有分组结构）。
 - [ ] **语音存储生命周期（本地 → 远端）**：V1 经 `BlobStorage` 存本地盘（已完成）。下一步：加云 `BlobStorage` 后端并 push 上去。待定：本地副本保留多久、何时返回远端签名 URL 而非本地字节、本地保留/淘汰策略（上传后多久删本地）。
 

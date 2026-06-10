@@ -3,6 +3,7 @@
 > Auto-loaded at the start of every Claude Code session.
 > Product philosophy: [`docs/product.md`](docs/product.md)
 > Architecture: [`docs/architecture.md`](docs/architecture.md)
+> Roadmap: [`docs/roadmap.md`](docs/roadmap.md)
 > Chinese version: [`CLAUDE.cn.md`](CLAUDE.cn.md)
 
 ---
@@ -418,12 +419,12 @@ Rules:
 - ✅ **Capture/Canonical split** (`docs/content-lifecycle.md`): extraction no longer infers hierarchy; capture produces a flat bag; structuring is a deliberate `tag_path` action. See `docs/2026-05-30-dev-log.md`
 - ✅ `_assemble_tag_path` — deterministic, organize-time tree assembly (nodes are untyped `kind="tag"`); `tests/test_ingest_extraction.py` locks the extraction contract
 
-**Next TODO (priority order):**
-- [ ] **Validate the core loop** with a hand-made book — 1–2 lessons + 1 real child (see `docs/content-lifecycle.md` §9)
+**Next TODO (priority order — strategy and phase gates live in [`docs/roadmap.md`](docs/roadmap.md)):**
+- [x] **Validate the core loop** with a hand-made book — 1–2 lessons + 1 real child ✅ 2026-06-10, works well (see `docs/content-lifecycle.md` §9, `docs/roadmap.md` §0)
 - [x] Organize workbench V1 — inbox (capture + practice-derived) → tag tree, click-to-file/move (`parent/organize`, endpoints `/organize/*`); remaining: drag UX, AI grouping
-- [ ] First-party textbook data (Tot Talk series — seed the library, cold-start)
+- [ ] **Phase 1 — external families** (`docs/roadmap.md`): deploy compose stack to a domestic VPS + HTTPS; seed the library (child's real textbook first, Tot Talk second); invite 3–5 non-founder families; audio retention policy
+- [ ] **Phase 2 — mastery + stretch** (`docs/roadmap.md`): `learner_word_stats` table (schema confirmation first), Scope V2 stretch (~10% next-unit words), parent-facing "new words this week" list, follower progressive unlock
 - [ ] DB-backed tests for `_assemble_tag_path` / scope V1 (needs a Postgres test fixture)
-- [ ] `learner_word_stats` mastery table (V2, when mastery tracker is needed)
 - [ ] **Ingestion closed loop → lift into `core/curriculum/` (DB-aware)** — when building re-organization / inbox organizing / AI-assisted filing ("file this into the right textbook + chapter" using existing DB groups), move the extraction orchestration out of `app/api/ingest.py` into `core/curriculum/`. Reuse the two-stage seam: perception transcription is the re-runnable capture artifact (re-structure without re-OCR); the `structuring` stage becomes the extension point for an AI filing suggester that reads existing `ItemGroup`s.
 - [ ] **Voice storage lifecycle (local → remote)** — V1 keeps audio on local disk via `BlobStorage` (done). Next: add a cloud `BlobStorage` backend and push there. Open decisions: how long to keep the local copy, when to serve a remote signed URL vs local bytes, and the local retention/eviction policy (when to delete local after upload).
 
