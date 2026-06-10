@@ -44,6 +44,14 @@ class AdapterConfig:
 
 
 @dataclass(frozen=True)
+class ScopeConfig:
+    """Scope V2 stretch budget — see docs/phase2-mastery-stretch.md §3."""
+
+    stretch_ratio: float  # fraction of base words offered as next-unit stretch (0 disables)
+    stretch_max_words: int  # hard cap on the stretch list length
+
+
+@dataclass(frozen=True)
 class SessionConfig:
     max_turns: int  # UX soft limit — frontend prompts to start a new session
     context_hard_limit: float  # refuse new turn when last llm_input_tokens > context_window * this
@@ -67,6 +75,7 @@ class DebugConfig:
 @dataclass(frozen=True)
 class AppConfig:
     adapter: AdapterConfig
+    scope: ScopeConfig
     session: SessionConfig
     auth: AuthConfig
     debug: DebugConfig
@@ -100,6 +109,7 @@ def _load() -> AppConfig:
     with open(_CONFIG_PATH, "rb") as f:
         raw = tomllib.load(f)
     adapter = raw["adapter"]
+    scope = raw.get("scope", {})
     session = raw.get("session", {})
     auth = raw["auth"]
     debug = raw.get("debug", {})
@@ -132,6 +142,10 @@ def _load() -> AppConfig:
             extraction_mode=adapter.get("ingest", {}).get("extraction_mode", "single"),
             stt_provider=adapter["stt_provider"],
             tts_provider=adapter["tts_provider"],
+        ),
+        scope=ScopeConfig(
+            stretch_ratio=scope.get("stretch_ratio", 0.10),
+            stretch_max_words=scope.get("stretch_max_words", 8),
         ),
         session=SessionConfig(
             max_turns=session.get("max_turns", 1000),

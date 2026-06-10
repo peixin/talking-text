@@ -1,5 +1,6 @@
 import json
 import uuid
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,6 +12,7 @@ from app.adapters.factory import chat as llm
 from app.adapters.llm.protocol import LLMMessage
 from app.api.auth import get_current_account
 from app.app_config import app_config
+from app.core.report import weekly_new_words
 from app.storage.db import get_db
 from app.storage.models.account import Account
 from app.storage.models.learner import Learner
@@ -180,6 +182,43 @@ async def set_active_learner(
     account.last_active_learner_id = learner.id
     await db.commit()
     return _learner_out(learner)
+
+
+class NewWordOut(BaseModel):
+    text: str
+    first_said_at: datetime
+    count: int
+    tag: str  # stretch | curriculum | wild
+
+
+class WeeklyReportOut(BaseModel):
+    week_start: datetime
+    week_end: datetime
+    new_words: list[NewWordOut]
+
+
+@router.get("/{learner_id}/report/weekly")
+async def weekly_report(
+    learner_id: uuid.UUID,
+    account: Annotated[Account, Depends(get_current_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> WeeklyReportOut:
+    """New words the child produced in the last 7 days — a plain list, no charts."""
+    result = await db.execute(
+        select(Learner).where(Learner.id == learner_id, Learner.account_id == account.id)
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Learner not found")
+
+    report = await weekly_new_words(db, learner_id)
+    return WeeklyReportOut(
+        week_start=report.week_start,
+        week_end=report.week_end,
+        new_words=[
+            NewWordOut(text=w.text, first_said_at=w.first_said_at, count=w.count, tag=w.tag)
+            for w in report.new_words
+        ],
+    )
 
 
 @router.patch("/{learner_id}/persona")

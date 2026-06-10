@@ -113,9 +113,9 @@ STT / LLM / TTS 一定会换。**所有外部 SDK 调用必须写在 `backend/ap
 
 每一轮对话之前，必须先问 Scope Computer："这一轮允许用哪些词？"
 
-- **接口在 V1 就定死**，不允许破坏性变更
+- **接口在 V1 就定死**，不允许破坏性变更（允许增量字段）
 - V1 实现：返回学习者已学全部词，stretch 为空
-- V2 扩展：加入下一单元词作为 stretch
+- V2（已上线）：加入下一单元词汇的 ~10% 作为 stretch，按掌握度加权（`core/scope/v2.py`，`docs/phase2-mastery-stretch.cn.md`）
 - V3 扩展：接入 mastery tracker 动态调整
 
 详细接口见 `docs/architecture.cn.md` 第五节。
@@ -124,7 +124,7 @@ STT / LLM / TTS 一定会换。**所有外部 SDK 调用必须写在 `backend/ap
 
 `vocab_event` 已删除（2026-04-30）。词频数据随时可由 `turn.text_user` / `turn.text_ai` 经分词派生——它不是独立的真相来源。
 
-**V2 掌握度追踪计划：** 新增 `learner_word_stats (learner_id, word)`，每轮增量 upsert；功能上线时从历史 turn 文本回填。不要重新引入"每词每轮一行"的事件表。
+**已裁定 2026-06-10**（`docs/phase2-mastery-stretch.cn.md` 决策 A）：**不建** `learner_word_stats` 表。item 级 `learner_item_stats` 覆盖掌握度；周报在读取时从 turn 文本计算词差集。不要重新引入"每词每轮一行"的事件表，也不要在真实读路径瓶颈出现前物化词级统计。
 
 ### 4. 语音管道 V1 串行，架构为流式设计
 
@@ -348,7 +348,7 @@ just db-history
   - PDF / 图片 / MP3 教材导入（V1 只支持粘贴文本）
   - 流式语音链路
   - 短信 / 微信登录
-  - Scope Computer 的 V2/V3 逻辑（V1 只是空壳）
+  - Scope Computer 的 V3 逻辑（V2 stretch 已于 2026-06-10 上线；V3 = 掌握度驱动的动态裁剪）
 
 ---
 
@@ -411,11 +411,19 @@ just db-history
 - ✅ **采集/成书拆分**（`docs/content-lifecycle.cn.md`）：抽取不再推断层级；采集产出扁平词袋；建树是刻意的 `tag_path` 动作。详见 `docs/2026-05-30-dev-log.md`
 - ✅ `_assemble_tag_path` 确定性整理时建树（节点为无类型 `kind="tag"`）；`tests/test_ingest_extraction.py` 锁定抽取契约
 
+**已完成（阶段二：掌握度 + stretch — 2026-06-10，见 `docs/phase2-mastery-stretch.cn.md`）：**
+- ✅ Scope Computer V2（`core/scope/v2.py`）：stretch = 下一单元词汇的 ~10%，按掌握度加权（瞥见过未掌握优先），会话种子轮换；预算在 `config.toml [scope]`
+- ✅ `item_group.position`（可空，迁移 `8f2d4b7c1a90`）：兄弟排序 `(position NULLS LAST, 自然排序(name))`，实现在 `core/scope/siblings.py`
+- ✅ Prompt assembler 踮脚词段落：新词逃生口改为指向 stretch 列表
+- ✅ Mastery 扫描扩展到下一单元词条：stretch 曝光/使用落入 `learner_item_stats`（论题度量）
+- ✅ 周报：`core/report.py` + `GET /learners/{id}/report/weekly`（读取时词差集，stretch/课本/课外打标）+ 家长工作台区块
+- ✅ 决策 A：**不建** `learner_word_stats` 表（见规则 #3）
+
 **下一步 TODO（按优先级；战略与阶段闸门见 [`docs/roadmap.cn.md`](docs/roadmap.cn.md)）：**
 - [x] **验证核心循环**：用手工书（1–2 节）+ 一个真实孩子 ✅ 2026-06-10 效果不错（见 `docs/content-lifecycle.cn.md` §9、`docs/roadmap.cn.md` §0）
 - [x] 整理工作台 V1：收件箱（采集 + 练习派生）→ tag 树，点选归位/移动（`parent/organize`，端点 `/organize/*`）；待办：拖拽、AI 提议成组
+- [x] **阶段二：掌握度 + stretch** ✅ 2026-06-10（见上方完成块；follower 自动推进刻意推迟）
 - [ ] **阶段一：外部家庭**（`docs/roadmap.cn.md`）：compose 栈部署到国内服务器 + HTTPS；种子教材库（先录孩子真实在用的教材，Tot Talk 其次）；邀请 3–5 个非创始人家庭；音频保留策略
-- [ ] **阶段二：掌握度 + stretch**（`docs/roadmap.cn.md`）：`learner_word_stats` 表（先确认 schema）、Scope V2 stretch（下一单元词汇 ~10%）、家长侧「本周新说出的词」列表、follower 渐进解锁
 - [ ] `_assemble_tag_path` / scope V1 的 DB 集成测试（需 Postgres 测试夹具）
 - [ ] **录入闭环 → 抬进 `core/curriculum/`（DB-aware）**：做「重整理 / 未入库素材整理 / AI 自动归档（用 DB 已有 `ItemGroup` 把素材归到某课本某章节）」时，把抽取编排从 `app/api/ingest.py` 抬进 `core/curriculum/`。复用两段式接缝：perception 转写是可重跑的 capture 原始件（重结构化不必重新 OCR），`structuring` 环节作为 AI 归档建议器的扩展点（读已有分组结构）。
 - [ ] **语音存储生命周期（本地 → 远端）**：V1 经 `BlobStorage` 存本地盘（已完成）。下一步：加云 `BlobStorage` 后端并 push 上去。待定：本地副本保留多久、何时返回远端签名 URL 而非本地字节、本地保留/淘汰策略（上传后多久删本地）。

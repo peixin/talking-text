@@ -100,6 +100,33 @@ def test_no_learner_name_no_name_section():
     assert "child's name is" not in result
 
 
+def test_group_mode_stretch_words_get_their_own_section():
+    scope = ScopeResult(mode="group", words=["red", "blue"], stretch_words=["purple", "grey"])
+    result = build_system_prompt(scope)
+    assert "Stretch words" in result
+    assert "purple, grey" in result
+    assert "AT MOST one or two" in result
+
+
+def test_stretch_redirects_the_new_word_escape_hatch():
+    with_stretch = build_system_prompt(
+        ScopeResult(mode="group", words=["red"], stretch_words=["purple"])
+    )
+    assert "take it from the stretch list" in with_stretch
+    assert "one or two new words per session is fine" not in with_stretch
+
+
+def test_no_stretch_keeps_v1_escape_hatch():
+    without_stretch = build_system_prompt(ScopeResult(mode="group", words=["red"]))
+    assert "one or two new words per session is fine" in without_stretch
+    assert "Stretch words" not in without_stretch
+
+
+def test_stretch_section_comes_after_base_vocab():
+    result = build_system_prompt(ScopeResult(mode="group", words=["red"], stretch_words=["purple"]))
+    assert result.index("The child has learned") < result.index("Stretch words")
+
+
 def test_custom_persona_with_group_scope():
     scope = ScopeResult(
         mode="group",

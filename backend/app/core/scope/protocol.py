@@ -26,6 +26,10 @@ class ScopeResult:
     phrases: list[str] = field(default_factory=list)
     patterns: list[PatternItem] = field(default_factory=list)
     prompt_notes: str | None = None
+    # V2 stretch (i+1): next-unit words the LLM may quietly weave in.
+    # Empty in V1, calibration/free modes, and when there is no next unit.
+    stretch_words: list[str] = field(default_factory=list)
+    stretch_ratio: float = 0.0
 
     @property
     def is_empty(self) -> bool:
@@ -38,4 +42,5 @@ class ScopeComputer(Protocol):
         db: AsyncSession,
         learner_id: uuid.UUID,
         group_id: uuid.UUID | None,
+        session_id: uuid.UUID | None = None,
     ) -> ScopeResult: ...

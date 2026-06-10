@@ -38,8 +38,12 @@ families who don't love us.
 
 Two hard gates, then invite:
 
-1. **Deploy.** The compose stack already works (`docker-compose.yml`, full-stack
-   integration test) — rent one domestic VPS, add a domain + HTTPS, run it.
+1. **Deploy.** The production infra already exists (2026-06-10 audit): remote
+   compose (`docker-compose-remote.yml` on `stillume-net`), one-click
+   `just docker-deploy`, and a `talking-text.stillume.com` vhost in the shared
+   stillume-nginx stack (body-size + SSE-buffering fixes applied). Remaining is
+   key-turning, not building: fill `.env.deploy`, issue the cert, create
+   `.env.app` on the server (`SESSION_COOKIE_SECURE=true`), run the deploy.
    Nothing more: no CI/CD, no monitoring stack; `perf_logging` to stdout is the
    observability budget.
 2. **Seed the library** (critical-path step 4). A follower parent's first run must
@@ -65,15 +69,20 @@ sessions" — and the boundary-pushing claim itself.** This is the soul of the
 product and it is currently unimplemented. Runs in parallel with Phase 1 where
 possible.
 
-- `learner_word_stats` table — incremental upsert per turn, history backfilled
-  from `turn.text_user/text_ai` (Rule #3: derive from turn text, no event table).
-  **Schema needs explicit confirmation before any code/migration.**
-- Scope Computer V2: stretch = ~10% next-unit words, mastery-weighted.
-- Parent-facing minimal report: **"new words your child produced this week"** — a
-  plain list, no charts. This single artifact tests both the thesis (stretch words
-  showing up in the list) and the retention hook (parents returning to see it).
-- Follower progressive unlock (critical-path step 5; overlaps the subscription
-  mechanics in `learner-content-scope.md`).
+Design + decisions: [`phase2-mastery-stretch.md`](phase2-mastery-stretch.md).
+Implemented 2026-06-10:
+
+- ~~`learner_word_stats` table~~ — **dropped by design** (Decision A): item-level
+  `learner_item_stats` already existed and covers stretch weighting; the report
+  computes from turn text at read time (Rule #3: derive, don't materialize).
+- Scope Computer V2 ✅ — stretch = ~10% next-unit words, mastery-weighted,
+  session-seeded rotation. "Next unit" ordering via `item_group.position`
+  (nullable, natural-sort fallback — the phase's only schema change).
+- Parent-facing minimal report ✅ — **"new words your child produced this week"**,
+  a plain list tagged stretch/curriculum/wild, on the parent dashboard. Tests both
+  the thesis (stretch words showing up) and the retention hook (parents returning).
+- Follower progressive unlock — **deferred**: manual unit pick at session start
+  already is progressive unlock; auto-advance waits for trustworthy mastery data.
 
 **Pass bar:** stretch words actually appear in children's speech within a week of
 exposure; parents mention the report unprompted.
@@ -113,3 +122,7 @@ is proven. None of the following until the phase gates above say otherwise:
 - **2026-06-10** — Core loop validated with one real child; doc created. Next
   riskiest assumption named: week-2 retention with non-founder families (Phase 1)
   and the unimplemented stretch thesis (Phase 2).
+- **2026-06-10** — Phase 2 designed and implemented (`phase2-mastery-stretch.md`):
+  `learner_word_stats` dropped (item-level stats already existed), scope V2 stretch
+  + weekly report shipped; the stretch thesis is now measurable via
+  `learner_item_stats` on next-unit words. Pass bar unchanged.

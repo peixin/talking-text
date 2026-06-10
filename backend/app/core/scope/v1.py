@@ -28,6 +28,7 @@ class V1ScopeComputer:
         db: AsyncSession,
         learner_id: uuid.UUID,
         group_id: uuid.UUID | None,
+        session_id: uuid.UUID | None = None,
     ) -> ScopeResult:
         learner_row = await db.execute(select(Learner).where(Learner.id == learner_id))
         learner = learner_row.scalar_one_or_none()

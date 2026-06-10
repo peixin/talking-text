@@ -54,6 +54,11 @@ class ItemGroup(Base, TimestampMixin):
     )
     kind: Mapped[str] = mapped_column(sa.String(30), nullable=False)
     name: Mapped[str] = mapped_column(sa.String(200), nullable=False)
+
+    #: Explicit ordering among siblings (curriculum sequence: Unit 1 < Unit 2).
+    #: NULL = unordered; siblings sort by (position NULLS LAST, natural-sort(name)).
+    #: No index: only ever read together with parent_id, which is already indexed.
+    position: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     owner_account_id: Mapped[uuid.UUID] = mapped_column(
         sa.ForeignKey("account.id", ondelete="CASCADE"), nullable=False, index=True
     )

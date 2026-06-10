@@ -97,6 +97,13 @@ temperature = 0.2
 max_tokens = 4096           # two-stage VLM transcription (full-page, layout-aware)
 temperature = 0.1
 
+[scope]
+# Scope V2 "stretch" — next-unit words the LLM may quietly weave in (i+1).
+# Budget per session = ceil(stretch_ratio * base word count), capped at stretch_max_words.
+# stretch_ratio = 0 disables stretch entirely.
+stretch_ratio = 0.10
+stretch_max_words = 8
+
 [session]
 # UX soft limit: show "start a new topic?" prompt when turn count reaches this value.
 max_turns = 10

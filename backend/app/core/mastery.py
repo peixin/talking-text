@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters import factory
 from app.adapters.llm.protocol import LLMMessage
 from app.app_config import app_config
+from app.core.scope.siblings import next_unit_word_items
 from app.storage.db import _SessionFactory
 from app.storage.models.content import ItemGroupMember, LanguageItem, get_descendant_group_ids
 from app.storage.models.learning import LearnerItemStats
@@ -190,13 +191,25 @@ async def analyze_session(learner_id: uuid.UUID, session_id: uuid.UUID) -> None:
 
 
 async def _scope_items(db: AsyncSession, group_id: uuid.UUID) -> list[LanguageItem]:
+    """Anchored group's items plus the next unit's word items.
+
+    Widened to the next unit so a child producing a stretch word is visible in
+    ``learner_item_stats`` — the thesis measurement of scope V2 (see
+    docs/phase2-mastery-stretch.md §3.5). Deliberately the whole next unit,
+    not just the offered stretch selection.
+    """
     descendant_ids = await get_descendant_group_ids(db, group_id)
     rows = await db.execute(
         select(LanguageItem)
         .join(ItemGroupMember, ItemGroupMember.item_id == LanguageItem.id)
         .where(ItemGroupMember.group_id.in_(descendant_ids))
     )
-    return list(rows.scalars().all())
+    items = list(rows.scalars().all())
+    known_ids = {item.id for item in items}
+    for item in await next_unit_word_items(db, group_id):
+        if item.id not in known_ids:
+            items.append(item)
+    return items
 
 
 async def _build_transcript(db: AsyncSession, session_id: uuid.UUID) -> str:

@@ -52,7 +52,7 @@ def _set_session_cookie(response: Response, account_id: uuid.UUID) -> None:
         httponly=True,
         samesite="lax",
         max_age=app_config.auth.session_max_age_seconds,
-        secure=False,  # set True in production (HTTPS)
+        secure=settings.session_cookie_secure,
     )
 
 

@@ -21,6 +21,11 @@ class Settings(BaseSettings):
 
     session_secret: str = "change-me-in-production"
 
+    # Mark the session cookie Secure (HTTPS-only). Set true in production
+    # (.env.app); the browser cookie itself is set by the Next.js server
+    # action, so this only affects direct API clients.
+    session_cookie_secure: bool = False
+
     # --- DeepSeek (LLM) ---
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"

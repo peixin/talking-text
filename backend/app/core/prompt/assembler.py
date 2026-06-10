@@ -80,10 +80,30 @@ def build_system_prompt(
             vocab_lines.append(f"Words: {', '.join(scope.words)}")
         if scope.phrases:
             vocab_lines.append(f"Phrases: {', '.join(scope.phrases)}")
+        if scope.stretch_words:
+            escape_hatch = (
+                "Do not introduce vocabulary outside this list — if you "
+                "introduce a new word, take it from the stretch list below:\n"
+            )
+        else:
+            escape_hatch = (
+                "Do not introduce vocabulary outside this list "
+                "(one or two new words per session is fine):\n"
+            )
         sections.append(
             "The child has learned these vocabulary items. Use them naturally in "
-            "conversation. Do not introduce vocabulary outside this list "
-            "(one or two new words per session is fine):\n" + "\n".join(vocab_lines)
+            "conversation. " + escape_hatch + "\n".join(vocab_lines)
+        )
+
+    if scope.stretch_words:
+        sections.append(
+            "Stretch words — the child has NOT learned these yet: "
+            f"{', '.join(scope.stretch_words)}. "
+            "You may weave in AT MOST one or two per conversation, only where "
+            "context makes the meaning obvious, and casually glossing a word "
+            "once is fine. Never quiz, never list them, never make the child "
+            "feel these are test words. If the child picks one up and uses it, "
+            "celebrate briefly."
         )
 
     if scope.patterns:

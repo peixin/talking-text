@@ -21,7 +21,7 @@ from app.adapters.stt.protocol import STTAdapter
 from app.adapters.tts.protocol import TTSAdapter
 from app.app_config import StageConfig, app_config
 from app.core.dialog import DialogOrchestrator
-from app.core.scope import V1ScopeComputer
+from app.core.scope import V2ScopeComputer
 from app.model_registry import model_registry
 
 log = logging.getLogger(__name__)
@@ -185,5 +185,5 @@ stt: STTAdapter = _make_stt()
 tts: TTSAdapter = _make_tts()
 blob: BlobStorage = _make_blob()
 orchestrator: DialogOrchestrator = DialogOrchestrator(
-    stt=stt, llm=chat, tts=tts, scope=V1ScopeComputer(), blob=blob
+    stt=stt, llm=chat, tts=tts, scope=V2ScopeComputer(), blob=blob
 )

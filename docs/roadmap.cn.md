@@ -34,9 +34,12 @@
 
 两个硬门槛，然后邀请：
 
-1. **部署上线。** compose 栈已经能跑（`docker-compose.yml` 全栈集成测试）——租一台
-   国内轻量服务器，加域名 + HTTPS，跑起来。不做更多：不上 CI/CD、不上监控栈；
-   stdout 的 `perf_logging` 就是全部可观测性预算。
+1. **部署上线。** 生产基建已经存在（2026-06-10 盘点）：远程 compose
+   （`docker-compose-remote.yml`，接 `stillume-net`）、一键 `just docker-deploy`、
+   共享 stillume-nginx 栈里的 `talking-text.stillume.com` vhost（上传体积 +
+   SSE 不缓冲已修）。剩下是拧钥匙不是造车：填 `.env.deploy`、签证书、服务器上建
+   `.env.app`（`SESSION_COOKIE_SECURE=true`）、执行部署。不做更多：不上 CI/CD、
+   不上监控栈；stdout 的 `perf_logging` 就是全部可观测性预算。
 2. **种子教材库**（critical path 第 4 步）。Follower 家长的首次体验必须是
    *选书 → 选单元 → 孩子开聊*——两分钟内出价值，不需要任何采集。优先录孩子学校
    真实在用的教材，Tot Talk 其次。
@@ -54,13 +57,20 @@
 **待验证假设：「看得见的进步是家长持续安排练习的理由」——以及边界外推论点本身。**
 这是产品的灵魂，而它目前没有实现。可与阶段一并行。
 
-- `learner_word_stats` 表——每轮增量 upsert，历史从 `turn.text_user/text_ai` 回填
-  （规则 #3：从 turn 文本派生，不建事件表）。**动 schema 前需先确认设计。**
-- Scope Computer V2：stretch = 下一单元词汇的 ~10%，按掌握度加权。
-- 家长侧最朴素的呈现：**「孩子这周自己说出来的新词」**——纯列表，不做图表。这一个
-  产物同时检验论点（stretch 词出现在列表里）和留存钩子（家长为看它回来）。
-- Follower 渐进解锁（critical path 第 5 步；与 `learner-content-scope.md` 的订阅
-  机制重叠）。
+设计与决策：[`phase2-mastery-stretch.cn.md`](phase2-mastery-stretch.cn.md)。
+2026-06-10 已实施：
+
+- ~~`learner_word_stats` 表~~——**设计阶段砍掉**（决策 A）：item 级
+  `learner_item_stats` 早已存在，足以支撑 stretch 加权；周报在读取时从 turn 文本
+  计算（规则 #3：派生，不物化）。
+- Scope Computer V2 ✅——stretch = 下一单元词汇的 ~10%，按掌握度加权，会话种子
+  轮换。「下一单元」排序靠 `item_group.position`（可空，自然排序兜底——本阶段
+  唯一的 schema 变更）。
+- 家长侧最朴素的呈现 ✅——**「孩子这周自己说出来的新词」**，纯列表，按
+  stretch/课本/课外打标，落在家长工作台首页。同时检验论点（stretch 词出现在列表里）
+  和留存钩子（家长为看它回来）。
+- Follower 渐进解锁——**推迟**：会话开始时手选单元就是渐进解锁；自动推进等掌握度
+  数据可信之后再做。
 
 **及格线：** stretch 词在曝光后一周内真的出现在孩子口语里；家长主动提到这份报告。
 
@@ -90,3 +100,6 @@
 
 - **2026-06-10**——核心闭环用一个真实孩子验证通过；本文档创建。命名下一个最危险的
   假设：非创始人家庭的第二周留存（阶段一）与尚未实现的 stretch 论点（阶段二）。
+- **2026-06-10**——阶段二设计并实施完成（`phase2-mastery-stretch.cn.md`）：
+  `learner_word_stats` 砍掉（item 级统计早已存在），scope V2 stretch + 周报上线；
+  stretch 论点现在可以通过下一单元词条的 `learner_item_stats` 度量。及格线不变。

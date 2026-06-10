@@ -45,7 +45,13 @@
     "material_management": "Material Management",
     "material_management_desc": "Plan and import materials (Coming soon)",
     "learning_progress": "Learning Progress",
-    "learning_progress_desc": "View mastery status (Coming soon)"
+    "learning_progress_desc": "View mastery status (Coming soon)",
+    "report_title": "New words this week",
+    "report_desc": "Words {name} said for the first time in the last 7 days",
+    "report_empty": "No new words yet — have a chat with Tina and check back!",
+    "report_tag_stretch": "stretch",
+    "report_tag_curriculum": "from the book",
+    "report_tag_wild": "beyond the book"
   },
   "Learners": {
     "back": "Back",

@@ -45,7 +45,13 @@
     "material_management": "教材管理",
     "material_management_desc": "规划和导入学习材料 (即将上线)",
     "learning_progress": "学习进度",
-    "learning_progress_desc": "查看孩子的掌握情况 (即将上线)"
+    "learning_progress_desc": "查看孩子的掌握情况 (即将上线)",
+    "report_title": "本周新词",
+    "report_desc": "{name} 最近 7 天第一次说出的词",
+    "report_empty": "还没有新词 —— 和 Tina 聊一聊再来看吧！",
+    "report_tag_stretch": "踮脚词",
+    "report_tag_curriculum": "课本词",
+    "report_tag_wild": "课外词"
   },
   "Learners": {
     "back": "返回",

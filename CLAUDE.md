@@ -114,9 +114,9 @@ STT / LLM / TTS vendors will change. **All external SDK calls must live in `back
 
 Before every conversation turn, Scope Computer must be asked: "Which words are allowed this turn?"
 
-- **Interface is frozen at V1** — no breaking changes allowed
+- **Interface is frozen at V1** — no breaking changes allowed (additive fields OK)
 - V1: returns all words the learner has studied; stretch is empty
-- V2: adds next-unit words as stretch
+- V2 (live): adds ~10% next-unit words as stretch, mastery-weighted (`core/scope/v2.py`, `docs/phase2-mastery-stretch.md`)
 - V3: integrates mastery tracker for dynamic adjustment
 
 See `docs/architecture.md` §5 for the full interface.
@@ -125,7 +125,7 @@ See `docs/architecture.md` §5 for the full interface.
 
 `vocab_event` was removed (2026-04-30). Word frequency data is derivable from `turn.text_user` / `turn.text_ai` at any time via string splitting — it is not an independent source of truth.
 
-**V2 mastery tracker plan:** add `learner_word_stats (learner_id, word)` with incremental upsert per turn. Backfill history from turn text when the feature ships. Do not re-introduce a per-word-per-turn event table.
+**Resolved 2026-06-10** (`docs/phase2-mastery-stretch.md` Decision A): no `learner_word_stats` table. Item-level `learner_item_stats` covers mastery; the weekly report computes word diffs from turn text at read time. Do not re-introduce a per-word-per-turn event table, and do not materialize word stats until a real read-path bottleneck appears.
 
 ### 4. Voice pipeline: batch in V1, designed for streaming
 
@@ -349,7 +349,7 @@ Rules:
   - PDF / image / MP3 curriculum import (V1 text paste only)
   - Streaming voice pipeline
   - SMS / WeChat login
-  - Scope Computer V2/V3 logic (V1 is a stub)
+  - Scope Computer V3 logic (V2 stretch shipped 2026-06-10; V3 = mastery-driven dynamic trimming)
 
 ---
 
@@ -419,11 +419,19 @@ Rules:
 - ✅ **Capture/Canonical split** (`docs/content-lifecycle.md`): extraction no longer infers hierarchy; capture produces a flat bag; structuring is a deliberate `tag_path` action. See `docs/2026-05-30-dev-log.md`
 - ✅ `_assemble_tag_path` — deterministic, organize-time tree assembly (nodes are untyped `kind="tag"`); `tests/test_ingest_extraction.py` locks the extraction contract
 
+**Done (Phase 2 — mastery + stretch, 2026-06-10, see `docs/phase2-mastery-stretch.md`):**
+- ✅ Scope Computer V2 (`core/scope/v2.py`) — stretch = ~10% next-unit words, mastery-weighted (glimpsed-but-unmastered first), session-seeded rotation; `[scope]` budgets in `config.toml`
+- ✅ `item_group.position` (nullable, migration `8f2d4b7c1a90`) — sibling order `(position NULLS LAST, natural-sort(name))` via `core/scope/siblings.py`
+- ✅ Prompt assembler stretch section — new-word escape hatch now points at the stretch list
+- ✅ Mastery scan widened to next-unit words — stretch exposure/usage lands in `learner_item_stats` (the thesis measurement)
+- ✅ Weekly report — `core/report.py` + `GET /learners/{id}/report/weekly` (read-time word diff, stretch/curriculum/wild tags) + parent-dashboard section
+- ✅ Decision A: **no** `learner_word_stats` table (see Rule #3)
+
 **Next TODO (priority order — strategy and phase gates live in [`docs/roadmap.md`](docs/roadmap.md)):**
 - [x] **Validate the core loop** with a hand-made book — 1–2 lessons + 1 real child ✅ 2026-06-10, works well (see `docs/content-lifecycle.md` §9, `docs/roadmap.md` §0)
 - [x] Organize workbench V1 — inbox (capture + practice-derived) → tag tree, click-to-file/move (`parent/organize`, endpoints `/organize/*`); remaining: drag UX, AI grouping
+- [x] **Phase 2 — mastery + stretch** ✅ 2026-06-10 (see Done block above; follower auto-advance deliberately deferred)
 - [ ] **Phase 1 — external families** (`docs/roadmap.md`): deploy compose stack to a domestic VPS + HTTPS; seed the library (child's real textbook first, Tot Talk second); invite 3–5 non-founder families; audio retention policy
-- [ ] **Phase 2 — mastery + stretch** (`docs/roadmap.md`): `learner_word_stats` table (schema confirmation first), Scope V2 stretch (~10% next-unit words), parent-facing "new words this week" list, follower progressive unlock
 - [ ] DB-backed tests for `_assemble_tag_path` / scope V1 (needs a Postgres test fixture)
 - [ ] **Ingestion closed loop → lift into `core/curriculum/` (DB-aware)** — when building re-organization / inbox organizing / AI-assisted filing ("file this into the right textbook + chapter" using existing DB groups), move the extraction orchestration out of `app/api/ingest.py` into `core/curriculum/`. Reuse the two-stage seam: perception transcription is the re-runnable capture artifact (re-structure without re-OCR); the `structuring` stage becomes the extension point for an AI filing suggester that reads existing `ItemGroup`s.
 - [ ] **Voice storage lifecycle (local → remote)** — V1 keeps audio on local disk via `BlobStorage` (done). Next: add a cloud `BlobStorage` backend and push there. Open decisions: how long to keep the local copy, when to serve a remote signed URL vs local bytes, and the local retention/eviction policy (when to delete local after upload).

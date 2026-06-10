@@ -23,6 +23,7 @@ from app.adapters import factory
 from app.adapters.llm.protocol import LLMMessage
 from app.api.auth import get_current_account
 from app.app_config import app_config
+from app.core.text import tokenize_words
 from app.storage.db import get_db
 from app.storage.models.account import Account
 from app.storage.models.content import (
@@ -892,15 +893,8 @@ _STOPWORDS: frozenset[str] = frozenset(
     }
 )
 
-_WORD_RE = re.compile(r"[a-z]+(?:'[a-z]+)?")
-
 #: Cap the candidate payload; the long tail of one-off words is rarely worth filing.
 _MAX_CANDIDATES = 200
-
-
-def _tokenize_words(text: str) -> list[str]:
-    """Lowercase alphabetic word tokens (contractions kept). Pure."""
-    return _WORD_RE.findall(text.lower())
 
 
 class InboxBag(BaseModel):
@@ -1026,7 +1020,7 @@ async def organize_inbox(
         await db.execute(select(Turn.text_user).where(Turn.learner_id == learner_id))
     ).all()
     for (text_user,) in user_texts:
-        for word in _tokenize_words(text_user or ""):
+        for word in tokenize_words(text_user or ""):
             if len(word) < 2 or word in _STOPWORDS:
                 continue
             counts[word] = counts.get(word, 0) + 1

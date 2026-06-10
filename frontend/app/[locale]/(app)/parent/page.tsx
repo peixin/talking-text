@@ -3,6 +3,7 @@ import { BookOpen, FolderInput, MessageSquare, Settings, Sparkles, Users } from 
 
 import { createApi } from "@/lib/api";
 import { Link } from "@/i18n/routing";
+import type { WeeklyReportOut } from "@/lib/backend";
 
 export default async function ParentDashboard() {
   const t = await getTranslations("Parent");
@@ -15,6 +16,7 @@ export default async function ParentDashboard() {
   ]);
 
   const activeLearner = learners.find((l) => l.id === account.last_active_learner_id) ?? null;
+  const report = activeLearner ? await api.learners.weeklyReport(activeLearner.id) : null;
   const materialsCount = groups.filter(
     (g) => !g.archived && g.parent_id === null && g.kind !== "quick_practice",
   ).length;
@@ -113,6 +115,16 @@ export default async function ParentDashboard() {
         )}
       </div>
 
+      {/* Weekly report — new words the child produced (roadmap Phase 2) */}
+      {activeLearner && report && (
+        <div className="mb-8">
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold">
+            <Sparkles className="h-4 w-4" /> {t("report_title")}
+          </h2>
+          <WeeklyReportCard report={report} learnerName={activeLearner.name} />
+        </div>
+      )}
+
       {/* Secondary */}
       <div className="grid gap-4 sm:grid-cols-2">
         <Link
@@ -125,14 +137,60 @@ export default async function ParentDashboard() {
             <div className="text-muted-foreground text-xs">{t("child_management_desc")}</div>
           </div>
         </Link>
-        <div className="border-border flex items-start gap-3 rounded-xl border p-4 opacity-50">
-          <Sparkles className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div>
-            <div className="text-sm font-medium">{t("learning_progress")}</div>
-            <div className="text-muted-foreground text-xs">掌握度追踪（即将上线）</div>
-          </div>
-        </div>
       </div>
+    </div>
+  );
+}
+
+const TAG_STYLES: Record<string, string> = {
+  stretch: "border-amber-300 bg-amber-50 text-amber-800",
+  curriculum: "border-border bg-muted/50 text-foreground",
+  wild: "border-indigo-200 bg-indigo-50 text-indigo-800",
+};
+
+async function WeeklyReportCard({
+  report,
+  learnerName,
+}: {
+  report: WeeklyReportOut;
+  learnerName: string;
+}) {
+  const t = await getTranslations("Parent");
+  const tags = ["stretch", "curriculum", "wild"] as const;
+  const present = tags.filter((tag) => report.new_words.some((w) => w.tag === tag));
+
+  return (
+    <div className="border-border bg-card rounded-xl border p-4">
+      <p className="text-muted-foreground mb-3 text-xs">
+        {t("report_desc", { name: learnerName })}
+      </p>
+      {report.new_words.length === 0 ? (
+        <p className="text-muted-foreground text-sm">{t("report_empty")}</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {report.new_words.map((w) => (
+              <span
+                key={w.text}
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm ${TAG_STYLES[w.tag]}`}
+              >
+                {w.text}
+                {w.count > 1 && <span className="text-[10px] opacity-60">×{w.count}</span>}
+              </span>
+            ))}
+          </div>
+          {present.length > 0 && (
+            <div className="text-muted-foreground mt-3 flex gap-3 text-[11px]">
+              {present.map((tag) => (
+                <span key={tag} className="inline-flex items-center gap-1">
+                  <span className={`inline-block h-2 w-2 rounded-full border ${TAG_STYLES[tag]}`} />
+                  {t(`report_tag_${tag}`)}
+                </span>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

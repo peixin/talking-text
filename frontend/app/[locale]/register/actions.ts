@@ -36,7 +36,10 @@ export async function register(
       httpOnly: true,
       sameSite: "lax",
       maxAge: COOKIE_MAX_AGE,
-      secure: false,
+      // Production build runs behind HTTPS (stillume-nginx). Browsers exempt
+      // http://localhost from the Secure check, so the local docker
+      // integration test still works.
+      secure: process.env.NODE_ENV === "production",
     });
   }
 

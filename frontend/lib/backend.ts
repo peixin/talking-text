@@ -85,6 +85,19 @@ export type LearnerOut = {
   cefr_level: string | null;
 };
 
+export type NewWordOut = {
+  text: string;
+  first_said_at: string;
+  count: number;
+  tag: "stretch" | "curriculum" | "wild";
+};
+
+export type WeeklyReportOut = {
+  week_start: string;
+  week_end: string;
+  new_words: NewWordOut[];
+};
+
 export type UpdatePersonaBody = {
   ai_name?: string;
   ai_gender?: string;
@@ -329,6 +342,8 @@ export const backend = {
         body: body as Record<string, unknown>,
         headers,
       }),
+    weeklyReport: (id: string, headers?: HeadersInit) =>
+      request<WeeklyReportOut>(`/learners/${id}/report/weekly`, { headers }),
   },
   groups: {
     list: (includeArchived?: boolean, headers?: HeadersInit) =>
