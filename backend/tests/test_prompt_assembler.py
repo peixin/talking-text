@@ -1,4 +1,4 @@
-from app.core.prompt.assembler import _TINA_PERSONA, build_system_prompt
+from app.core.prompt.assembler import _SAFETY_INSTRUCTIONS, _TINA_PERSONA, build_system_prompt
 from app.core.scope.protocol import PatternItem, ScopeResult
 
 
@@ -125,6 +125,23 @@ def test_no_stretch_keeps_v1_escape_hatch():
 def test_stretch_section_comes_after_base_vocab():
     result = build_system_prompt(ScopeResult(mode="group", words=["red"], stretch_words=["purple"]))
     assert result.index("The child has learned") < result.index("Stretch words")
+
+
+def test_safety_rules_present_in_every_mode():
+    # Child-safety section is unconditional — calibration / free / group alike.
+    for scope in (
+        ScopeResult(mode="calibration"),
+        ScopeResult(mode="free", cefr_level="A1"),
+        ScopeResult(mode="group", words=["red"]),
+    ):
+        result = build_system_prompt(scope)
+        assert _SAFETY_INSTRUCTIONS in result
+
+
+def test_safety_rules_follow_persona_and_survive_custom_persona():
+    result = build_system_prompt(ScopeResult(), persona_prompt="You are Bob, a friendly tutor.")
+    assert _SAFETY_INSTRUCTIONS in result
+    assert result.index("You are Bob") < result.index("Safety rules")
 
 
 def test_custom_persona_with_group_scope():

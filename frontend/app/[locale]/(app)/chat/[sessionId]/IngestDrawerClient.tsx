@@ -16,6 +16,12 @@ import {
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
 import { Button } from "@/components/ui/button";
+import {
+  INGEST_IMAGE_MAX_MB,
+  INGEST_MAX_IMAGES,
+  INGEST_RECORDING_MAX_SECONDS,
+  INGEST_TEXT_MAX_CHARS,
+} from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { CefrLevel, ExtractedItem, GroupOut, IngestionResult, ItemType } from "@/lib/backend";
 import { createGroup, extractIngestion, setSessionGroup, transcribeIngestion } from "./actions";
@@ -105,10 +111,13 @@ export function IngestDrawerClient({
   // Voice ingestion (independent of the chat record button).
   const [recordMode, setRecordMode] = useState<"idle" | "recording" | "transcribing">("idle");
   const [recordError, setRecordError] = useState<string | null>(null);
+  const [recordRemaining, setRecordRemaining] = useState<number | null>(null);
+  const recorderTickerRef = useRef<NodeJS.Timeout | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recorderChunksRef = useRef<BlobPart[]>([]);
   const recorderStreamRef = useRef<MediaStream | null>(null);
   const recorderMimeRef = useRef<string>("");
+  const recorderTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -166,6 +175,15 @@ export function IngestDrawerClient({
   }
 
   function stopRecorderStream() {
+    if (recorderTimerRef.current) {
+      clearTimeout(recorderTimerRef.current);
+      recorderTimerRef.current = null;
+    }
+    if (recorderTickerRef.current) {
+      clearInterval(recorderTickerRef.current);
+      recorderTickerRef.current = null;
+    }
+    setRecordRemaining(null);
     recorderStreamRef.current?.getTracks().forEach((tr) => tr.stop());
     recorderStreamRef.current = null;
     recorderRef.current = null;
@@ -196,6 +214,14 @@ export function IngestDrawerClient({
       recorder.onstop = () => void finishRecording();
       recorder.start();
       setRecordMode("recording");
+      // Auto-stop so a forgotten open mic doesn't record indefinitely.
+      recorderTimerRef.current = setTimeout(stopRecording, INGEST_RECORDING_MAX_SECONDS * 1000);
+      const startedAt = Date.now();
+      setRecordRemaining(INGEST_RECORDING_MAX_SECONDS);
+      recorderTickerRef.current = setInterval(() => {
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
+        setRecordRemaining(Math.max(0, INGEST_RECORDING_MAX_SECONDS - elapsed));
+      }, 1000);
     } catch {
       setRecordError(t("error_mic_denied"));
       setRecordMode("idle");
@@ -203,6 +229,15 @@ export function IngestDrawerClient({
   }
 
   function stopRecording() {
+    if (recorderTimerRef.current) {
+      clearTimeout(recorderTimerRef.current);
+      recorderTimerRef.current = null;
+    }
+    if (recorderTickerRef.current) {
+      clearInterval(recorderTickerRef.current);
+      recorderTickerRef.current = null;
+    }
+    setRecordRemaining(null);
     if (recorderRef.current?.state === "recording") {
       recorderRef.current.stop();
       setRecordMode("transcribing");
@@ -268,16 +303,17 @@ export function IngestDrawerClient({
     const next = [...files];
     let currentTotalSize = next.reduce((sum, file) => sum + file.size, 0);
 
+    const maxBytes = INGEST_IMAGE_MAX_MB * 1024 * 1024;
     for (const f of arr) {
-      if (next.length >= 5) {
+      if (next.length >= INGEST_MAX_IMAGES) {
         limitWarning = true;
         break;
       }
-      if (f.size > 10 * 1024 * 1024) {
+      if (f.size > maxBytes) {
         sizeWarning = true;
         continue;
       }
-      if (currentTotalSize + f.size > 10 * 1024 * 1024) {
+      if (currentTotalSize + f.size > maxBytes) {
         sizeWarning = true;
         continue;
       }
@@ -287,9 +323,9 @@ export function IngestDrawerClient({
     setFiles(next);
 
     if (limitWarning) {
-      triggerWarning(t("warning_limit_reached"));
+      triggerWarning(t("warning_limit_reached", { max: INGEST_MAX_IMAGES }));
     } else if (sizeWarning) {
-      triggerWarning(t("warning_size_reached"));
+      triggerWarning(t("warning_size_reached", { max: INGEST_IMAGE_MAX_MB }));
     }
   }
 
@@ -469,19 +505,37 @@ export function IngestDrawerClient({
           <div className="flex-1 overflow-y-auto px-4 py-4">
             {step.kind === "input" && (
               <div className="space-y-4" onPaste={handlePaste}>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={files.length >= INGEST_MAX_IMAGES}
                     onClick={() => cameraInputRef.current?.click()}
                   >
                     <Camera className="mr-2 h-4 w-4" />
                     {t("take_photo")}
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={files.length >= INGEST_MAX_IMAGES}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
                     <ImageIcon className="mr-2 h-4 w-4" />
                     {t("upload_images")}
                   </Button>
+                  {files.length > 0 && (
+                    <span
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-[10px] tabular-nums",
+                        files.length >= INGEST_MAX_IMAGES
+                          ? "border-amber-300 bg-amber-500/10 font-medium text-amber-700 dark:text-amber-400"
+                          : "border-border text-muted-foreground",
+                      )}
+                    >
+                      {t("image_count", { count: files.length, max: INGEST_MAX_IMAGES })}
+                    </span>
+                  )}
                   <Button
                     variant={recordMode === "recording" ? "destructive" : "outline"}
                     size="sm"
@@ -492,6 +546,9 @@ export function IngestDrawerClient({
                       <>
                         <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-current" />
                         {t("stop_recording")}
+                        {recordRemaining != null && recordRemaining <= 10 && (
+                          <span className="ml-1 tabular-nums">({recordRemaining}s)</span>
+                        )}
                       </>
                     ) : recordMode === "transcribing" ? (
                       <>
@@ -574,9 +631,16 @@ export function IngestDrawerClient({
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder={t("description_placeholder")}
+                    maxLength={INGEST_TEXT_MAX_CHARS}
                     rows={2}
                     className="border-border bg-background focus:ring-ring w-full resize-none rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
                   />
+                  {/* Char counter — surfaces only when the limit is getting close */}
+                  {description.length >= INGEST_TEXT_MAX_CHARS * 0.8 && (
+                    <span className="text-muted-foreground block text-right text-[10px] tabular-nums">
+                      {description.length}/{INGEST_TEXT_MAX_CHARS}
+                    </span>
+                  )}
                 </label>
               </div>
             )}
@@ -662,6 +726,7 @@ export function IngestDrawerClient({
                         value={rawText}
                         onChange={(e) => setRawText(e.target.value)}
                         placeholder={t("raw_text_placeholder")}
+                        maxLength={INGEST_TEXT_MAX_CHARS}
                         rows={6}
                         className="bg-background border-border w-full resize-y rounded-lg border p-3 font-mono text-xs leading-relaxed outline-none focus:ring-1 focus:ring-slate-500"
                       />

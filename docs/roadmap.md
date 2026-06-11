@@ -1,6 +1,6 @@
 # Roadmap
 
-> Last updated: 2026-06-10 · Chinese version: [`roadmap.cn.md`](roadmap.cn.md)
+> Last updated: 2026-06-11 · Chinese version: [`roadmap.cn.md`](roadmap.cn.md)
 >
 > This is the strategy doc: what we build next and **why in this order**. Day-by-day
 > records live in the dated dev logs; the content pipeline's critical path lives in
@@ -61,6 +61,11 @@ the perf logs.
 server. The privacy self-discipline in CLAUDE.md becomes binding — define an audio
 retention policy (e.g. auto-delete raw audio after 30 days), keep all storage
 domestic, write the policy into a dev log when implemented.
+
+**Pre-invite hardening — done 2026-06-11** (`2026-06-11-dev-log.md`): always-on
+child-safety prompt rules (unsafe-topic deflection, no personal-info collection)
+and configurable input limits (`config.toml [limits]`) on every upload path.
+These were prerequisites for putting the product in front of strangers' kids.
 
 ## Phase 2 — Make the thesis real: mastery + stretch
 
@@ -126,3 +131,7 @@ is proven. None of the following until the phase gates above say otherwise:
   `learner_word_stats` dropped (item-level stats already existed), scope V2 stretch
   + weekly report shipped; the stretch thesis is now measurable via
   `learner_item_stats` on next-unit words. Pass bar unchanged.
+- **2026-06-11** — Pre-Phase-1 hardening shipped (`2026-06-11-dev-log.md`): child
+  safety as an always-on system-prompt section (vendor moderation as layer 2, a
+  moderation API deferred to public launch) and configurable input limits with
+  client-side feedback. Phase 1 gate 1 (deploy) is now the critical path.

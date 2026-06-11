@@ -16,7 +16,7 @@ import {
 import { useLocale } from "next-intl";
 
 import { GroupOut, LearnerOut, SessionOut, TurnOut } from "@/lib/backend";
-import { SCOPE_SOFT_CAP } from "@/lib/constants";
+import { CHAT_RECORDING_MAX_SECONDS, CHAT_TEXT_MAX_CHARS, SCOPE_SOFT_CAP } from "@/lib/constants";
 import { useRouter } from "@/i18n/routing";
 import { Message, createSession, deleteSession, getAudio, renameSession } from "./actions";
 import { SessionSidebarClient } from "./SessionSidebarClient";
@@ -168,6 +168,9 @@ export function ChatClient({
   const chunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const mimeRef = useRef<string>("");
+  const recordTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const recordTickerRef = useRef<NodeJS.Timeout | null>(null);
+  const [recordRemaining, setRecordRemaining] = useState<number | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
 
   // ── Unified audio (singleton <audio> owned by ChatClient) ─────────────────
@@ -182,6 +185,8 @@ export function ChatClient({
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach((tr) => tr.stop());
+      if (recordTimerRef.current) clearTimeout(recordTimerRef.current);
+      if (recordTickerRef.current) clearInterval(recordTickerRef.current);
     };
   }, []);
 
@@ -514,6 +519,15 @@ export function ChatClient({
 
       recorder.start();
       setRecordMode("recording");
+      // Auto-stop: a forgotten open mic would otherwise record indefinitely and
+      // produce an upload the backend rejects.
+      recordTimerRef.current = setTimeout(stopRecording, CHAT_RECORDING_MAX_SECONDS * 1000);
+      const startedAt = Date.now();
+      setRecordRemaining(CHAT_RECORDING_MAX_SECONDS);
+      recordTickerRef.current = setInterval(() => {
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
+        setRecordRemaining(Math.max(0, CHAT_RECORDING_MAX_SECONDS - elapsed));
+      }, 1000);
     } catch {
       setError("CHAT_MIC_DENIED");
       setRecordMode("idle");
@@ -521,6 +535,15 @@ export function ChatClient({
   }
 
   function stopRecording() {
+    if (recordTimerRef.current) {
+      clearTimeout(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    if (recordTickerRef.current) {
+      clearInterval(recordTickerRef.current);
+      recordTickerRef.current = null;
+    }
+    setRecordRemaining(null);
     if (recorderRef.current?.state === "recording") {
       recorderRef.current.stop();
       setRecordMode("uploading");
@@ -733,6 +756,7 @@ export function ChatClient({
                   mode={recordMode}
                   error={error}
                   onRecordToggle={handleRecordToggle}
+                  remainingSeconds={recordRemaining}
                 />
               ) : (
                 <div className="flex flex-col gap-2 px-4 pt-2 pb-4">
@@ -753,6 +777,7 @@ export function ChatClient({
                       }}
                       disabled={recordMode === "uploading"}
                       placeholder={t("text_placeholder")}
+                      maxLength={CHAT_TEXT_MAX_CHARS}
                       rows={2}
                       className="border-border bg-background focus:ring-ring flex-1 resize-none rounded-xl border px-3 py-2 text-sm focus:ring-1 focus:outline-none disabled:opacity-50"
                     />
@@ -770,6 +795,12 @@ export function ChatClient({
                       )}
                     </button>
                   </div>
+                  {/* Char counter — surfaces only when the limit is getting close */}
+                  {textDraft.length >= CHAT_TEXT_MAX_CHARS * 0.8 && (
+                    <span className="text-muted-foreground self-end text-[10px] tabular-nums">
+                      {textDraft.length}/{CHAT_TEXT_MAX_CHARS}
+                    </span>
+                  )}
                 </div>
               )}
             </>

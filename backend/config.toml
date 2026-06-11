@@ -113,6 +113,25 @@ max_turns = 10
 # personal vocab ledger). Users almost never hit this; it is a safety net, not a UX gate.
 context_hard_limit = 0.85
 
+[limits]
+# Input-size guards. Backend values are authoritative (enforced on every request);
+# the frontend mirrors them in lib/constants.ts as UX guards (maxLength, auto-stop)
+# — keep the two in sync when tuning.
+#
+# Chat — child practice turns.
+chat_text_max_chars = 500           # typed turn; children type short sentences
+chat_recording_max_seconds = 60     # frontend auto-stops the mic at this point
+# Ingest — parent registers study material.
+# Pasted lesson text / description per request. Must also fit a full-page OCR
+# transcription — the "re-extract" flow round-trips it through this field.
+ingest_text_max_chars = 10000
+ingest_max_images = 5               # images per /ingest/extract request
+ingest_image_max_mb = 10            # per image (frontend also caps the total at this)
+ingest_recording_max_seconds = 120  # parent voice note; may read material aloud
+# Shared backstop for any uploaded audio clip (webm/opus: 120 s ≈ 0.5 MB, so 10 MB
+# is generous; this guards against arbitrary file uploads, not normal recordings).
+audio_upload_max_mb = 10
+
 [auth]
 # Session cookie lifetime in days
 session_max_age_days = 365

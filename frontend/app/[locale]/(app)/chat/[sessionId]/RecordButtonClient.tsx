@@ -9,9 +9,11 @@ interface Props {
   mode: Mode;
   error: string | null;
   onRecordToggle: () => void;
+  /** Seconds left before the recording auto-stops; countdown shows when ≤ 10. */
+  remainingSeconds?: number | null;
 }
 
-export function RecordButtonClient({ mode, error, onRecordToggle }: Props) {
+export function RecordButtonClient({ mode, error, onRecordToggle, remainingSeconds }: Props) {
   const t = useTranslations("Chat");
   const tErr = useTranslations("Chat.errors");
 
@@ -41,7 +43,9 @@ export function RecordButtonClient({ mode, error, onRecordToggle }: Props) {
       </button>
       <span className="text-muted-foreground text-xs">
         {mode === "recording"
-          ? t("recording_hint")
+          ? remainingSeconds != null && remainingSeconds <= 10
+            ? t("recording_countdown", { seconds: remainingSeconds })
+            : t("recording_hint")
           : mode === "uploading"
             ? t("uploading_hint")
             : t("press_to_talk")}

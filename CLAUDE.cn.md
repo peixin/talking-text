@@ -419,6 +419,12 @@ just db-history
 - ✅ 周报：`core/report.py` + `GET /learners/{id}/report/weekly`（读取时词差集，stretch/课本/课外打标）+ 家长工作台区块
 - ✅ 决策 A：**不建** `learner_word_stats` 表（见规则 #3）
 
+**已完成（儿童内容安全 + 输入限制 — 2026-06-11，见 `docs/2026-06-11-dev-log.md`）：**
+- ✅ 系统提示词常驻 `_SAFETY_INSTRUCTIONS`（所有模式、自定义 persona 均注入）：不碰不当话题，孩子主动提起则一句话轻转移，孩子难过/受伤则安慰 + 建议告诉父母，不收集个人信息 / 不约见面 / 不推外部网站；测试锁定。厂商内置审核是第二层；独立审核 API 推迟到公开运营前。
+- ✅ `config.toml [limits]` + `LimitsConfig`：聊天文本 500 字符、录音自动停止 60 s/120 s、录入文本 1 万字符（容纳 OCR 重提取回灌）、5 张图 × 10 MB（原硬编码已配置化）、音频上传 10 MB 兜底。后端在全部四个上传路径权威校验；前端在 `lib/constants.ts` 镜像（调整时同步）。
+- ✅ 客户端反馈：字数达 80% 出现计数器、录音最后 10 秒倒计时、图片 `n/5` 徽章 + 满额禁用按钮；警告 toast 文案参数化
+- ✅ 抽出共享 `_read_turn_input()`，消除 batch / streaming 两端点重复的音频读取/转码代码
+
 **下一步 TODO（按优先级；战略与阶段闸门见 [`docs/roadmap.cn.md`](docs/roadmap.cn.md)）：**
 - [x] **验证核心循环**：用手工书（1–2 节）+ 一个真实孩子 ✅ 2026-06-10 效果不错（见 `docs/content-lifecycle.cn.md` §9、`docs/roadmap.cn.md` §0）
 - [x] 整理工作台 V1：收件箱（采集 + 练习派生）→ tag 树，点选归位/移动（`parent/organize`，端点 `/organize/*`）；待办：拖拽、AI 提议成组

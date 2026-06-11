@@ -32,9 +32,6 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
-_MAX_IMAGES = 5
-_MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB after frontend resize; safety cap
-
 _EXTRACTION_PROMPT = """You help parents register English study material. A single \
 capture mixes two DIFFERENT kinds of input, and your first job is to tell them apart:
 
@@ -326,6 +323,7 @@ async def extract_content(
     Either ``description`` or at least one image is required. Returns the
     parsed JSON shape the frontend renders directly in the ingest drawer.
     """
+    limits = app_config.limits
     description = (description or "").strip()
     image_files = [img for img in (images or []) if img.filename]
 
@@ -335,20 +333,26 @@ async def extract_content(
             detail="Provide at least one image or a text description.",
         )
 
-    if len(image_files) > _MAX_IMAGES:
+    if len(description) > limits.ingest_text_max_chars:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"At most {_MAX_IMAGES} images per request.",
+            detail=f"Text must be at most {limits.ingest_text_max_chars} characters.",
+        )
+
+    if len(image_files) > limits.ingest_max_images:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"At most {limits.ingest_max_images} images per request.",
         )
 
     image_bytes: list[bytes] = []
     image_mime = "image/jpeg"
     for img in image_files:
         data = await img.read()
-        if len(data) > _MAX_IMAGE_BYTES:
+        if len(data) > limits.ingest_image_max_bytes:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Each image must be ≤ 10 MB.",
+                detail=f"Each image must be ≤ {limits.ingest_image_max_mb} MB.",
             )
         image_bytes.append(data)
         if img.content_type and img.content_type.startswith("image/"):
@@ -393,6 +397,11 @@ async def transcribe_audio(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Empty audio.",
+        )
+    if len(data) > app_config.limits.audio_upload_max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Audio clip must be ≤ {app_config.limits.audio_upload_max_mb} MB.",
         )
 
     # Browser MediaRecorder emits WebM/Opus; remux to OGG so the STT adapter

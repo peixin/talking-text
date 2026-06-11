@@ -180,6 +180,48 @@ def _session_status(turn_count_after: int) -> str:
     return "soft_limit" if turn_count_after >= app_config.session.max_turns else "active"
 
 
+async def _read_turn_input(
+    audio: UploadFile | None, text: str | None, learner_id: uuid.UUID
+) -> tuple[bytes | None, str]:
+    """Validate and normalize turn input (shared by batch and streaming endpoints).
+
+    Returns (audio_bytes, text_stripped) — audio_bytes is transcoded to ogg/opus
+    when the browser sent webm. Raises HTTPException on empty/oversized input.
+    """
+    limits = app_config.limits
+    text_stripped = (text or "").strip()
+    if len(text_stripped) > limits.chat_text_max_chars:
+        raise HTTPException(status_code=422, detail="TEXT_TOO_LONG")
+
+    audio_bytes: bytes | None = None
+    if audio is not None:
+        audio_bytes = await audio.read()
+        if not audio_bytes:
+            raise HTTPException(status_code=400, detail="audio file is empty")
+        if len(audio_bytes) > limits.audio_upload_max_bytes:
+            raise HTTPException(status_code=422, detail="AUDIO_TOO_LARGE")
+        content_type = (audio.content_type or "").lower()
+        if "webm" in content_type or (audio.filename or "").endswith(".webm"):
+            t_transcode = time.monotonic()
+            try:
+                audio_bytes = await webm_opus_to_ogg(
+                    audio_bytes, sample_rate=settings.volc_stt_sample_rate
+                )
+            except RuntimeError as e:
+                log.exception("ffmpeg transcode failed for learner=%s", learner_id)
+                raise HTTPException(status_code=500, detail=f"audio transcode failed: {e}") from e
+            if app_config.debug.perf_logging:
+                log.info(
+                    "[perf] transcode webm->ogg: %.3fs (%d bytes out)",
+                    time.monotonic() - t_transcode,
+                    len(audio_bytes),
+                )
+    elif not text_stripped:
+        raise HTTPException(status_code=400, detail="Provide either an audio file or text")
+
+    return audio_bytes, text_stripped
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 
@@ -363,33 +405,8 @@ async def create_turn(
     session = await _require_session(session_id, account, db)
     learner_id = session.learner_id
 
-    text_stripped = (text or "").strip()
-
     # Read the audio bytes before acquiring the lock (I/O outside critical section).
-    audio_bytes: bytes | None = None
-    if audio is not None:
-        audio_bytes = await audio.read()
-        if not audio_bytes:
-            raise HTTPException(status_code=400, detail="audio file is empty")
-        content_type = (audio.content_type or "").lower()
-        if "webm" in content_type or (audio.filename or "").endswith(".webm"):
-            t_transcode = time.monotonic()
-            try:
-                audio_bytes = await webm_opus_to_ogg(
-                    audio_bytes, sample_rate=settings.volc_stt_sample_rate
-                )
-            except RuntimeError as e:
-                log.exception("ffmpeg transcode failed for learner=%s", learner_id)
-                raise HTTPException(status_code=500, detail=f"audio transcode failed: {e}") from e
-            if app_config.debug.perf_logging:
-                log.info(
-                    "[perf] transcode webm->ogg: %.3fs (in=%d out=%d bytes)",
-                    time.monotonic() - t_transcode,
-                    len(audio_bytes),
-                    len(audio_bytes),
-                )
-    elif not text_stripped:
-        raise HTTPException(status_code=400, detail="Provide either an audio file or text")
+    audio_bytes, text_stripped = await _read_turn_input(audio, text, learner_id)
 
     # Serialise turn creation per session: guarantees sequential history and
     # prevents duplicate turns from network retries that arrive concurrently.
@@ -463,27 +480,8 @@ async def stream_turn(
     t_req = time.monotonic()
     session = await _require_session(session_id, account, db)
     learner_id = session.learner_id
-    text_stripped = (text or "").strip()
 
-    audio_bytes: bytes | None = None
-    if audio is not None:
-        audio_bytes = await audio.read()
-        if not audio_bytes:
-            raise HTTPException(status_code=400, detail="audio file is empty")
-        content_type = (audio.content_type or "").lower()
-        if "webm" in content_type or (audio.filename or "").endswith(".webm"):
-            t_transcode = time.monotonic()
-            try:
-                audio_bytes = await webm_opus_to_ogg(
-                    audio_bytes, sample_rate=settings.volc_stt_sample_rate
-                )
-            except RuntimeError as e:
-                log.exception("ffmpeg transcode failed for learner=%s", learner_id)
-                raise HTTPException(status_code=500, detail=f"audio transcode failed: {e}") from e
-            if app_config.debug.perf_logging:
-                log.info("[perf] transcode webm->ogg: %.3fs", time.monotonic() - t_transcode)
-    elif not text_stripped:
-        raise HTTPException(status_code=400, detail="Provide either an audio file or text")
+    audio_bytes, text_stripped = await _read_turn_input(audio, text, learner_id)
 
     # Check session limits before committing to the stream (can still raise HTTPException here).
     turn_count_pre = await _check_session_limits(session_id, db)

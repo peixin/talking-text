@@ -427,6 +427,12 @@ Rules:
 - ✅ Weekly report — `core/report.py` + `GET /learners/{id}/report/weekly` (read-time word diff, stretch/curriculum/wild tags) + parent-dashboard section
 - ✅ Decision A: **no** `learner_word_stats` table (see Rule #3)
 
+**Done (Child safety + input limits — 2026-06-11, see `docs/2026-06-11-dev-log.md`):**
+- ✅ Always-on `_SAFETY_INSTRUCTIONS` in the system prompt (all modes, custom personas): no unsafe topics, deflect-and-redirect when the child raises one, comfort + "talk to your parents" for distress, no personal info / meetups / external sites; tests lock it in. Vendor moderation is layer 2; a moderation API is deferred to public launch.
+- ✅ `config.toml [limits]` + `LimitsConfig` — chat text 500 chars, recording auto-stop 60 s/120 s, ingest text 10k chars (fits OCR re-extract round-trip), 5 images × 10 MB (de-hardcoded), 10 MB audio backstop. Backend authoritative on all four upload paths; frontend mirrors in `lib/constants.ts` (keep in sync).
+- ✅ Client feedback: char counters at ≥ 80% of limit, recording countdown in last 10 s, `n/5` image badge + disabled buttons at cap; warning toasts parameterized
+- ✅ Shared `_read_turn_input()` replaces duplicated audio read/transcode in batch + streaming turn endpoints
+
 **Next TODO (priority order — strategy and phase gates live in [`docs/roadmap.md`](docs/roadmap.md)):**
 - [x] **Validate the core loop** with a hand-made book — 1–2 lessons + 1 real child ✅ 2026-06-10, works well (see `docs/content-lifecycle.md` §9, `docs/roadmap.md` §0)
 - [x] Organize workbench V1 — inbox (capture + practice-derived) → tag tree, click-to-file/move (`parent/organize`, endpoints `/organize/*`); remaining: drag UX, AI grouping

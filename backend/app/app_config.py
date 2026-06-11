@@ -58,6 +58,27 @@ class SessionConfig:
 
 
 @dataclass(frozen=True)
+class LimitsConfig:
+    """Input-size guards — backend-authoritative; mirrored in frontend lib/constants.ts."""
+
+    chat_text_max_chars: int  # typed chat turn length
+    chat_recording_max_seconds: int  # chat mic auto-stop (enforced by frontend)
+    ingest_text_max_chars: int  # ingest description / pasted text length
+    ingest_max_images: int  # images per /ingest/extract request
+    ingest_image_max_mb: int  # per uploaded image
+    ingest_recording_max_seconds: int  # ingest voice note auto-stop (frontend)
+    audio_upload_max_mb: int  # backstop for any uploaded audio clip
+
+    @property
+    def ingest_image_max_bytes(self) -> int:
+        return self.ingest_image_max_mb * 1024 * 1024
+
+    @property
+    def audio_upload_max_bytes(self) -> int:
+        return self.audio_upload_max_mb * 1024 * 1024
+
+
+@dataclass(frozen=True)
 class AuthConfig:
     session_max_age_days: int
     max_login_attempts: int
@@ -77,6 +98,7 @@ class AppConfig:
     adapter: AdapterConfig
     scope: ScopeConfig
     session: SessionConfig
+    limits: LimitsConfig
     auth: AuthConfig
     debug: DebugConfig
     tasks: dict[str, TaskConfig]  # keyed by task name (see config.toml [task.*])
@@ -111,6 +133,7 @@ def _load() -> AppConfig:
     adapter = raw["adapter"]
     scope = raw.get("scope", {})
     session = raw.get("session", {})
+    limits = raw.get("limits", {})
     auth = raw["auth"]
     debug = raw.get("debug", {})
 
@@ -150,6 +173,15 @@ def _load() -> AppConfig:
         session=SessionConfig(
             max_turns=session.get("max_turns", 1000),
             context_hard_limit=session.get("context_hard_limit", 0.85),
+        ),
+        limits=LimitsConfig(
+            chat_text_max_chars=limits.get("chat_text_max_chars", 500),
+            chat_recording_max_seconds=limits.get("chat_recording_max_seconds", 60),
+            ingest_text_max_chars=limits.get("ingest_text_max_chars", 10000),
+            ingest_max_images=limits.get("ingest_max_images", 5),
+            ingest_image_max_mb=limits.get("ingest_image_max_mb", 10),
+            ingest_recording_max_seconds=limits.get("ingest_recording_max_seconds", 120),
+            audio_upload_max_mb=limits.get("audio_upload_max_mb", 10),
         ),
         auth=AuthConfig(
             session_max_age_days=auth["session_max_age_days"],
