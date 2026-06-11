@@ -148,6 +148,8 @@ export type GroupOut = {
   source_book_hint: string | null;
   item_count: number;
   level_title: string | null;
+  // True = read-only cross-account reference (another family owns it).
+  subscribed?: boolean;
 };
 
 export type ItemType = "word" | "phrase" | "pattern";
@@ -253,6 +255,33 @@ export type GroupDetailOut = {
   prompt_notes: string | null;
   level_title: string | null;
   items: LanguageItemOut[];
+  subscribed?: boolean;
+};
+
+// ── Material sharing (docs/learner-content-scope.md §8.4) ─────────────────────
+
+export type ShareLinkOut = { code: string; expires_at: string | null; revoked: boolean };
+
+export type SharePreviewOut = {
+  name: string;
+  kind: GroupKind;
+  level_title: string | null;
+  cover_image_url: string | null;
+  owner_name: string;
+  item_count: number;
+  unit_count: number;
+};
+
+export type AdoptMode = "subscribe" | "clone";
+export type AdoptOut = { group_id: string; mode: AdoptMode };
+
+export type SubscriptionOut = {
+  id: string;
+  // null = tombstone: the source owner deleted the book.
+  source_group_id: string | null;
+  name: string | null;
+  item_count: number;
+  subscribed_at: string;
 };
 
 // ── Organize workbench (docs/content-lifecycle.md §4) ────────────────────────
@@ -379,6 +408,29 @@ export const backend = {
         method: "DELETE",
         headers,
       }),
+  },
+  share: {
+    createLink: (groupId: string, headers?: HeadersInit) =>
+      request<ShareLinkOut>(`/groups/${groupId}/share-link`, { method: "POST", headers }),
+    revokeLink: (groupId: string, headers?: HeadersInit) =>
+      request<void>(`/groups/${groupId}/share-link`, { method: "DELETE", headers }),
+    preview: (code: string, headers?: HeadersInit) =>
+      request<SharePreviewOut>(`/shares/${encodeURIComponent(code)}`, { headers }),
+    adopt: (code: string, mode: AdoptMode, headers?: HeadersInit) =>
+      request<AdoptOut>(`/shares/${encodeURIComponent(code)}/adopt`, {
+        method: "POST",
+        body: { mode },
+        headers,
+      }),
+    listSubscriptions: (headers?: HeadersInit) =>
+      request<SubscriptionOut[]>("/subscriptions", { headers }),
+    fork: (subscriptionId: string, headers?: HeadersInit) =>
+      request<{ group_id: string }>(`/subscriptions/${subscriptionId}/fork`, {
+        method: "POST",
+        headers,
+      }),
+    unsubscribe: (subscriptionId: string, headers?: HeadersInit) =>
+      request<void>(`/subscriptions/${subscriptionId}`, { method: "DELETE", headers }),
   },
   ingest: {
     extract: (formData: FormData, headers?: HeadersInit) =>

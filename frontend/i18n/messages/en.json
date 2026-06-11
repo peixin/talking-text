@@ -173,7 +173,22 @@
     "items_with_total": "{count} items ({total} incl. children)",
     "items_only": "{count} items",
     "confirm_large_scope": "This level of the textbook contains a lot of items ({count} in total).\nFor the best practice experience, the AI teacher will prioritize up to {cap} items your child has not mastered yet.\nYou can also pick a specific unit or lesson for focused practice.\n\nContinue?",
-    "start_session_failed": "Failed to start practice: {error}"
+    "start_session_failed": "Failed to start practice: {error}",
+    "share": "Share",
+    "share_link_copied": "Share link copied:\n{url}\nCode: {code}",
+    "share_failed": "Failed to create share link: {error}",
+    "subscribed_badge": "Subscribed · read-only",
+    "fork": "Make my own copy",
+    "fork_confirm": "Copy \"{name}\" into your own library? The owner's future updates will no longer sync.",
+    "fork_failed": "Copy failed: {error}",
+    "unsubscribe": "Unsubscribe",
+    "unsubscribe_confirm": "Unsubscribe from \"{name}\"? Your child's practice history is kept.",
+    "tombstone_text": "The owner deleted a book you subscribed to (subscribed {date}).",
+    "tombstone_remove": "Remove",
+    "add_shared_title": "Add a shared book",
+    "add_shared_placeholder": "Paste a share link or code",
+    "add_shared_button": "Open",
+    "subscribed_readonly_banner": "This book is subscribed from another family — read-only. To edit it, make your own copy from the materials list."
   },
   "MaterialPickers": {
     "kind_label": "Type (type your own)",
@@ -283,5 +298,18 @@
     "brand_tagline": "Words become your world.",
     "login": "Log In",
     "register": "Register"
+  },
+  "ShareLanding": {
+    "back_to_materials": "My materials",
+    "not_found_title": "This share link is invalid or has been revoked.",
+    "not_found_hint": "Ask the sharer for a new link.",
+    "from_owner": "Shared by {name}",
+    "contents_summary": "{items} learning items · {units} units",
+    "subscribe_button": "Subscribe (recommended)",
+    "subscribe_desc": "No copy is made. When the owner updates the book, you get the updates automatically. Read-only.",
+    "clone_button": "Make an independent copy",
+    "clone_desc": "A full copy under your own account, freely editable. The owner's later updates will not sync.",
+    "error_own_group": "This is your own book — no need to add it.",
+    "error_adopt_failed": "Failed to add the book; please try again."
   }
 }

@@ -69,6 +69,17 @@ export async function createApi() {
     ingest: {
       extract: (formData: FormData) => c((h) => backend.ingest.extract(formData, h)),
     },
+    share: {
+      createLink: (groupId: string) => c((h) => backend.share.createLink(groupId, h)),
+      revokeLink: (groupId: string) => c((h) => backend.share.revokeLink(groupId, h)),
+      preview: (code: string) => c((h) => backend.share.preview(code, h)),
+      adopt: (code: string, mode: import("./backend").AdoptMode) =>
+        c((h) => backend.share.adopt(code, mode, h)),
+      listSubscriptions: () => c((h) => backend.share.listSubscriptions(h)),
+      fork: (subscriptionId: string) => c((h) => backend.share.fork(subscriptionId, h)),
+      unsubscribe: (subscriptionId: string) =>
+        c((h) => backend.share.unsubscribe(subscriptionId, h)),
+    },
     organize: {
       inbox: () => c((h) => backend.organize.inbox(h)),
       file: (body: import("./backend").FileItemBody) => c((h) => backend.organize.file(body, h)),

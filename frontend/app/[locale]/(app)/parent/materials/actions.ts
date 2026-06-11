@@ -91,6 +91,61 @@ export async function updateGroup(
   }
 }
 
+// ── Material sharing (docs/learner-content-scope.md §8.4) ─────────────────────
+
+export async function createShareLinkAction(
+  groupId: string,
+): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+  const api = await createApi();
+  try {
+    const link = await api.share.createLink(groupId);
+    return { ok: true, code: link.code };
+  } catch (e) {
+    return { ok: false, error: e instanceof BackendError ? e.detail : "SHARE_LINK_FAILED" };
+  }
+}
+
+export async function adoptShareAction(
+  code: string,
+  mode: import("@/lib/backend").AdoptMode,
+): Promise<{ ok: true; groupId: string } | { ok: false; error: string }> {
+  const api = await createApi();
+  try {
+    const result = await api.share.adopt(code, mode);
+    revalidatePath("/parent/materials");
+    revalidatePath("/chat");
+    return { ok: true, groupId: result.group_id };
+  } catch (e) {
+    return { ok: false, error: e instanceof BackendError ? e.detail : "SHARE_ADOPT_FAILED" };
+  }
+}
+
+export async function forkSubscriptionAction(
+  subscriptionId: string,
+): Promise<{ ok: true; groupId: string } | { ok: false; error: string }> {
+  const api = await createApi();
+  try {
+    const result = await api.share.fork(subscriptionId);
+    revalidatePath("/parent/materials");
+    revalidatePath("/chat");
+    return { ok: true, groupId: result.group_id };
+  } catch (e) {
+    return { ok: false, error: e instanceof BackendError ? e.detail : "SHARE_FORK_FAILED" };
+  }
+}
+
+export async function unsubscribeAction(subscriptionId: string): Promise<GroupActionResult> {
+  const api = await createApi();
+  try {
+    await api.share.unsubscribe(subscriptionId);
+    revalidatePath("/parent/materials");
+    revalidatePath("/chat");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof BackendError ? e.detail : "SHARE_UNSUBSCRIBE_FAILED" };
+  }
+}
+
 export async function startSessionFromGroupAction(
   groupId: string,
 ): Promise<{ ok: true; sessionId: string } | { ok: false; error: string }> {

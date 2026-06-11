@@ -46,6 +46,11 @@ export default async function GroupDetailPage({ params }: Props) {
           ← {t("back_to_list", { defaultValue: "返回列表" })}
         </Link>
       </header>
+      {group.subscribed && (
+        <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200">
+          {t("subscribed_readonly_banner")}
+        </div>
+      )}
       <GroupDetailClient
         group={group}
         allGroups={allGroups}

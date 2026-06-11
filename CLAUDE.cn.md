@@ -425,11 +425,18 @@ just db-history
 - ✅ 客户端反馈：字数达 80% 出现计数器、录音最后 10 秒倒计时、图片 `n/5` 徽章 + 满额禁用按钮；警告 toast 文案参数化
 - ✅ 抽出共享 `_read_turn_input()`，消除 batch / streaming 两端点重复的音频读取/转码代码
 
+**已完成（教材分享 — 2026-06-11，设计 `docs/learner-content-scope.cn.md`，日志 `docs/2026-06-11-dev-log.md` §4）：**
+- ✅ 整本书（根 group）的私下链接/分享码分享（不做公共资源库——版权只在自愿分享的家长之间流转）；接收方自选 **订阅**（活引用、只读、随书主更新同步——默认推荐）或 **克隆**（独立副本）
+- ✅ `group_share_link` + `group_adoption` 表（迁移 `c62cb152ead5`）；`app/api/share.py`（建/撤链接、免登录预览、adopt、fork、退订、订阅列表）；`core/sharing.py` 深拷贝——词条全局唯一，订阅转 fork 后掌握度记录无缝保留
+- ✅ `GET /groups` 带出订阅树（`subscribed` 标记）；修复访问检查需沿 parent 链上溯到根（订阅书的子单元原本 404）
+- ✅ UI：分享按钮 + 粘贴分享码入口 + 订阅徽章 + fork/退订 + 墓碑条目（资料页）；落地页 `parent/materials/share/[code]`
+- 共建按决议推迟（订阅模型即其前向兼容的前置形态）
+
 **下一步 TODO（按优先级；战略与阶段闸门见 [`docs/roadmap.cn.md`](docs/roadmap.cn.md)）：**
 - [x] **验证核心循环**：用手工书（1–2 节）+ 一个真实孩子 ✅ 2026-06-10 效果不错（见 `docs/content-lifecycle.cn.md` §9、`docs/roadmap.cn.md` §0）
 - [x] 整理工作台 V1：收件箱（采集 + 练习派生）→ tag 树，点选归位/移动（`parent/organize`，端点 `/organize/*`）；待办：拖拽、AI 提议成组
 - [x] **阶段二：掌握度 + stretch** ✅ 2026-06-10（见上方完成块；follower 自动推进刻意推迟）
-- [ ] **阶段一：外部家庭**（`docs/roadmap.cn.md`）：compose 栈部署到国内服务器 + HTTPS；种子教材库（先录孩子真实在用的教材，Tot Talk 其次）；邀请 3–5 个非创始人家庭；音频保留策略
+- [ ] **阶段一：外部家庭**（`docs/roadmap.cn.md`）——进行中：部署 ✅（2026-06-11 上线）、教材已备好 ✅、已邀请同班同学家长（共同进度）✅、教材分享功能上线 ✅；**剩余：音频保留策略 + 观察第二周留存 / 越界率 / 延迟**
 - [ ] `_assemble_tag_path` / scope V1 的 DB 集成测试（需 Postgres 测试夹具）
 - [ ] **录入闭环 → 抬进 `core/curriculum/`（DB-aware）**：做「重整理 / 未入库素材整理 / AI 自动归档（用 DB 已有 `ItemGroup` 把素材归到某课本某章节）」时，把抽取编排从 `app/api/ingest.py` 抬进 `core/curriculum/`。复用两段式接缝：perception 转写是可重跑的 capture 原始件（重结构化不必重新 OCR），`structuring` 环节作为 AI 归档建议器的扩展点（读已有分组结构）。
 - [ ] **语音存储生命周期（本地 → 远端）**：V1 经 `BlobStorage` 存本地盘（已完成）。下一步：加云 `BlobStorage` 后端并 push 上去。待定：本地副本保留多久、何时返回远端签名 URL 而非本地字节、本地保留/淘汰策略（上传后多久删本地）。

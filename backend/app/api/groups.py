@@ -112,6 +112,8 @@ class GroupDetailOut(BaseModel):
     prompt_notes: str | None = None
     items: list[LanguageItemOut] = Field(default_factory=list)
     level_title: str | None = None
+    #: True = read-only cross-account reference (see GroupOut.subscribed).
+    subscribed: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -125,6 +127,9 @@ class GroupOut(BaseModel):
     source_book_hint: str | None
     item_count: int
     level_title: str | None = None
+    #: True when this group belongs to a tree the account follows via
+    #: ItemGroupSubscription (read-only; another account owns it).
+    subscribed: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -193,13 +198,25 @@ async def _get_accessible_group(
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
-    # Access is allowed if caller owns it OR has active subscription
+    # Access is allowed if caller owns it OR subscribes to its tree. Subscriptions
+    # attach to the ROOT group, so walk up the parent chain before checking.
     if group.owner_account_id == account.id:
         return group
 
+    root = group
+    seen: set[uuid.UUID] = set()
+    while root.parent_id is not None and root.id not in seen:
+        seen.add(root.id)
+        parent = (
+            await db.execute(select(ItemGroup).where(ItemGroup.id == root.parent_id))
+        ).scalar_one_or_none()
+        if parent is None:
+            break
+        root = parent
+
     sub_stmt = select(ItemGroupSubscription).where(
         ItemGroupSubscription.subscriber_account_id == account.id,
-        ItemGroupSubscription.source_group_id == group_id,
+        ItemGroupSubscription.source_group_id == root.id,
     )
     sub_row = await db.execute(sub_stmt)
     if sub_row.scalar_one_or_none() is not None:
@@ -334,7 +351,27 @@ async def list_groups(
     parent_id: uuid.UUID | None = None,
     include_archived: bool = False,
 ) -> list[GroupOut]:
-    stmt = select(ItemGroup).where(ItemGroup.owner_account_id == account.id)
+    # Subscribed trees (live cross-account references) are listed alongside owned
+    # groups so the scope picker and materials library see them; the `subscribed`
+    # flag tells the frontend to render them read-only.
+    from app.storage.models.content import get_descendant_group_ids
+
+    subscribed_root_ids = [
+        gid
+        for (gid,) in await db.execute(
+            select(ItemGroupSubscription.source_group_id).where(
+                ItemGroupSubscription.subscriber_account_id == account.id,
+                ItemGroupSubscription.source_group_id.is_not(None),
+            )
+        )
+    ]
+    subscribed_tree_ids: set[uuid.UUID] = set()
+    for root_id in subscribed_root_ids:
+        subscribed_tree_ids.update(await get_descendant_group_ids(db, root_id))
+
+    stmt = select(ItemGroup).where(
+        (ItemGroup.owner_account_id == account.id) | (ItemGroup.id.in_(subscribed_tree_ids))
+    )
     if parent_id is not None:
         stmt = stmt.where(ItemGroup.parent_id == parent_id)
     if not include_archived:
@@ -362,6 +399,7 @@ async def list_groups(
             source_book_hint=g.source_book_hint,
             item_count=count_by_group.get(g.id, 0),
             level_title=g.level_title,
+            subscribed=g.owner_account_id != account.id,
         )
         for g in groups
     ]
@@ -523,6 +561,7 @@ async def get_group(
         prompt_notes=group.prompt_notes,
         level_title=group.level_title,
         items=items_out,
+        subscribed=group.owner_account_id != account.id,
     )
 
 

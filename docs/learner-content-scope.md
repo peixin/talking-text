@@ -1,5 +1,6 @@
 # Multi-Learner Content Scope & Sharing
 
+> **Implementation status:** sharing (§6 UC-5/6/7, §8.4) shipped 2026-06-11 — see `2026-06-11-dev-log.md` §4.
 > Design doc — finalized on 2026-05-27, synthesizing the discussion that revised parts of [`content-model.md`](content-model.md).
 > This doc **supersedes** `content-model.md` §5 (sharing dynamics) and **amends** its §2 principle #6.
 > Chinese sibling: [`learner-content-scope.cn.md`](learner-content-scope.cn.md).

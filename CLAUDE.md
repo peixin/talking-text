@@ -433,11 +433,18 @@ Rules:
 - ✅ Client feedback: char counters at ≥ 80% of limit, recording countdown in last 10 s, `n/5` image badge + disabled buttons at cap; warning toasts parameterized
 - ✅ Shared `_read_turn_input()` replaces duplicated audio read/transcode in batch + streaming turn endpoints
 
+**Done (Material sharing — 2026-06-11, design `docs/learner-content-scope.md`, log `docs/2026-06-11-dev-log.md` §4):**
+- ✅ Private link/code sharing of root books (no public library — copyright stays between consenting parents); receiver chooses **subscribe** (live reference, read-only, owner's edits propagate — the default) or **clone** (independent copy)
+- ✅ `group_share_link` + `group_adoption` tables (migration `c62cb152ead5`); `app/api/share.py` (link create/revoke, no-auth preview, adopt, fork, unsubscribe, subscription list); `core/sharing.py` deep copy — mastery survives fork because items are canonical
+- ✅ `GET /groups` returns subscribed trees (`subscribed` flag); access check fixed to walk to the root (child units of subscribed books were 404)
+- ✅ UI: share button + paste-a-code box + subscribed badges + fork/unsubscribe + tombstones (materials page); landing page `parent/materials/share/[code]`
+- Co-building deferred by decision (subscription model is its forward-compatible precursor)
+
 **Next TODO (priority order — strategy and phase gates live in [`docs/roadmap.md`](docs/roadmap.md)):**
 - [x] **Validate the core loop** with a hand-made book — 1–2 lessons + 1 real child ✅ 2026-06-10, works well (see `docs/content-lifecycle.md` §9, `docs/roadmap.md` §0)
 - [x] Organize workbench V1 — inbox (capture + practice-derived) → tag tree, click-to-file/move (`parent/organize`, endpoints `/organize/*`); remaining: drag UX, AI grouping
 - [x] **Phase 2 — mastery + stretch** ✅ 2026-06-10 (see Done block above; follower auto-advance deliberately deferred)
-- [ ] **Phase 1 — external families** (`docs/roadmap.md`): deploy compose stack to a domestic VPS + HTTPS; seed the library (child's real textbook first, Tot Talk second); invite 3–5 non-founder families; audio retention policy
+- [ ] **Phase 1 — external families** (`docs/roadmap.md`) — in progress: deploy ✅ (live 2026-06-11), book prepared ✅, families invited ✅ (classmates' parents, shared progress), material sharing shipped ✅; **remaining: audio retention policy + watch week-2 retention / boundary leakage / latency**
 - [ ] DB-backed tests for `_assemble_tag_path` / scope V1 (needs a Postgres test fixture)
 - [ ] **Ingestion closed loop → lift into `core/curriculum/` (DB-aware)** — when building re-organization / inbox organizing / AI-assisted filing ("file this into the right textbook + chapter" using existing DB groups), move the extraction orchestration out of `app/api/ingest.py` into `core/curriculum/`. Reuse the two-stage seam: perception transcription is the re-runnable capture artifact (re-structure without re-OCR); the `structuring` stage becomes the extension point for an AI filing suggester that reads existing `ItemGroup`s.
 - [ ] **Voice storage lifecycle (local → remote)** — V1 keeps audio on local disk via `BlobStorage` (done). Next: add a cloud `BlobStorage` backend and push there. Open decisions: how long to keep the local copy, when to serve a remote signed URL vs local bytes, and the local retention/eviction policy (when to delete local after upload).

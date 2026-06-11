@@ -161,7 +161,22 @@
     "items_with_total": "{count} 個詞句（共 {total} 個）",
     "items_only": "{count} 個詞句",
     "confirm_large_scope": "當前選擇的教材層級包含詞句較多（共 {count} 個）。\n為了保證最佳對話練習效果，AI 老師將智能優先挑選您還未掌握的詞句（最多 {cap} 個）進行重點操練。\n建議您也可以選擇具體單元或課次進行針對性練習。\n\n是否繼續？",
-    "start_session_failed": "開始練習失敗: {error}"
+    "start_session_failed": "開始練習失敗: {error}",
+    "share": "分享",
+    "share_link_copied": "分享連結已複製：\n{url}\n分享碼：{code}",
+    "share_failed": "產生分享連結失敗：{error}",
+    "subscribed_badge": "已訂閱 · 唯讀",
+    "fork": "複製為我的教材",
+    "fork_confirm": "把《{name}》複製一份到自己名下？此後原作者的更新不再同步。",
+    "fork_failed": "複製失敗：{error}",
+    "unsubscribe": "取消訂閱",
+    "unsubscribe_confirm": "取消訂閱《{name}》？孩子的練習記錄會保留。",
+    "tombstone_text": "你訂閱的一本教材已被原作者刪除（訂閱於 {date}）。",
+    "tombstone_remove": "移除",
+    "add_shared_title": "新增別人分享的教材",
+    "add_shared_placeholder": "貼上分享連結或分享碼",
+    "add_shared_button": "查看",
+    "subscribed_readonly_banner": "這本教材訂閱自其他家庭，僅供學習使用（唯讀）。想修改請在資料列表中複製為自己的教材。"
   },
   "MaterialPickers": {
     "kind_label": "素材類型（可自由輸入）",
@@ -271,5 +286,18 @@
     "brand_tagline": "言出成界",
     "login": "登入",
     "register": "註冊"
+  },
+  "ShareLanding": {
+    "back_to_materials": "我的資料",
+    "not_found_title": "分享連結無效或已被撤銷。",
+    "not_found_hint": "請向分享者要一個新連結。",
+    "from_owner": "來自 {name} 的分享",
+    "contents_summary": "{items} 個學習點 · {units} 個單元",
+    "subscribe_button": "訂閱原版（推薦）",
+    "subscribe_desc": "不複製內容。對方更新教材時，你這邊自動同步。唯讀。",
+    "clone_button": "複製一份到我的庫",
+    "clone_desc": "完整複製到自己帳號下，可自由編輯。此後對方的更新不再同步。",
+    "error_own_group": "這是你自己的教材，無需新增。",
+    "error_adopt_failed": "新增失敗，請重試。"
   }
 }

@@ -7,7 +7,10 @@ import { MaterialsClient } from "./MaterialsClient";
 export default async function MaterialsPage() {
   const t = await getTranslations("Materials");
   const api = await createApi();
-  const groups = await api.groups.list(true); // include archived
+  const [groups, subscriptions] = await Promise.all([
+    api.groups.list(true), // include archived
+    api.share.listSubscriptions(),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-6">
@@ -28,7 +31,7 @@ export default async function MaterialsPage() {
       <h1 className="mb-1 text-xl font-medium">{t("title")}</h1>
       <p className="text-muted-foreground mb-6 text-sm">{t("subtitle")}</p>
 
-      <MaterialsClient groups={groups} />
+      <MaterialsClient groups={groups} subscriptions={subscriptions} />
     </div>
   );
 }

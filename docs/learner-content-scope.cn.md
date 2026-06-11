@@ -1,5 +1,6 @@
 # 多 Learner 内容范围与分享机制 · Multi-Learner Content Scope & Sharing
 
+> **实现状态：** 分享机制（§6 UC-5/6/7、§8.4）已于 2026-06-11 上线——见 `2026-06-11-dev-log.md` §4。
 > 设计文档 —— 于 2026-05-27 收敛定稿，整合了对 [`content-model.md`](content-model.md) 部分章节的修订。
 > 本文档**取代** `content-model.md` §5（分享与克隆动力学）并**修订**其 §2 第 6 条原则。
 > 英文正本：[`learner-content-scope.md`](learner-content-scope.md)。

@@ -67,6 +67,15 @@ child-safety prompt rules (unsafe-topic deflection, no personal-info collection)
 and configurable input limits (`config.toml [limits]`) on every upload path.
 These were prerequisites for putting the product in front of strangers' kids.
 
+**Status 2026-06-11 — gates passed, observation running.** Deployed to
+production; the child's real book is prepared; classmates' parents (shared
+school progress) invited. Material sharing shipped the same day
+(`learner-content-scope.md` §6/§8.4 implemented — subscribe/clone/fork via
+private link or code) so the founder-maintained book reaches every invited
+family and stays in sync. Remaining in this phase: the **audio retention
+policy**, and watching the pass bar (week-2 retention, boundary leakage,
+per-stage latency).
+
 ## Phase 2 — Make the thesis real: mastery + stretch
 
 **Assumption under test: "visible progress is why parents keep scheduling
@@ -135,3 +144,9 @@ is proven. None of the following until the phase gates above say otherwise:
   safety as an always-on system-prompt section (vendor moderation as layer 2, a
   moderation API deferred to public launch) and configurable input limits with
   client-side feedback. Phase 1 gate 1 (deploy) is now the critical path.
+- **2026-06-11** — Phase 1 gates passed: deployed to production, book prepared,
+  classmates' families invited. Material sharing implemented per
+  `learner-content-scope.md` (subscribe = live reference / clone / fork; private
+  links only, no public library — copyright). Co-building stays deferred; the
+  one-maintainer-N-subscribers model is its forward-compatible precursor.
+  Remaining: audio retention policy; pass bar under observation.

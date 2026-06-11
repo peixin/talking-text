@@ -177,6 +177,55 @@ class ItemGroupSubscription(Base, TimestampMixin):
     )
 
 
+class GroupShareLink(Base, TimestampMixin):
+    """Private share code for a root ``ItemGroup`` (docs/learner-content-scope.md §8.4).
+
+    The code travels out of band (parent → parent, e.g. WeChat). It does NOT
+    encode a mode — the receiver chooses subscribe vs clone at adoption time.
+    ``revoked`` blocks new adoptions only; existing subscriptions keep working.
+    """
+
+    __tablename__ = "group_share_link"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("item_group.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    #: Unambiguous-alphabet code (no 0/O/1/I/L); the share URL embeds it.
+    code: Mapped[str] = mapped_column(sa.String(12), nullable=False, unique=True)
+    created_by_account_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("account.id", ondelete="CASCADE"), nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    revoked: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, server_default=sa.text("false")
+    )
+
+
+class GroupAdoption(Base, TimestampMixin):
+    """Clone provenance — one row per clone/fork adoption.
+
+    The analytics-friendly normalized form ("how many families adopted this
+    book"); ``item_group.cloned_from_group_id`` is the denormalized direct
+    pointer on the clone itself. content-model.md §3.3 specified a composite
+    PK (source, target), but source is SET NULL on delete and nullable columns
+    cannot be part of a PK — so: surrogate id + UNIQUE(target).
+    """
+
+    __tablename__ = "group_adoption"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    source_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.ForeignKey("item_group.id", ondelete="SET NULL"), nullable=True
+    )
+    target_group_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("item_group.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    adopted_by_account_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("account.id", ondelete="CASCADE"), nullable=False
+    )
+
+
 async def get_descendant_group_ids(db: AsyncSession, root_group_id: uuid.UUID) -> list[uuid.UUID]:
     """Recursively collect root_group_id and all its active descendant group ids."""
 

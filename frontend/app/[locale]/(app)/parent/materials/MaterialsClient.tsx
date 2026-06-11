@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Archive,
   ArchiveRestore,
@@ -11,20 +11,31 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
+  GitFork,
   Inbox,
+  Link2,
   Loader2,
   MessageSquare,
   Plus,
+  Share2,
   Sparkles,
   Trash2,
+  Unlink,
   Zap,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SCOPE_SOFT_CAP } from "@/lib/constants";
-import type { GroupOut } from "@/lib/backend";
-import { archiveGroup, deleteGroup, startSessionFromGroupAction } from "./actions";
+import type { GroupOut, SubscriptionOut } from "@/lib/backend";
+import {
+  archiveGroup,
+  createShareLinkAction,
+  deleteGroup,
+  forkSubscriptionAction,
+  startSessionFromGroupAction,
+  unsubscribeAction,
+} from "./actions";
 import { Link } from "@/i18n/routing";
 import { useKindLabel } from "./MaterialPickersClient";
 import { IngestDrawerClient } from "@/app/[locale]/(app)/chat/[sessionId]/IngestDrawerClient";
@@ -40,6 +51,7 @@ const KIND_ICON: Record<string, typeof BookOpen> = {
 
 interface Props {
   groups: GroupOut[];
+  subscriptions: SubscriptionOut[];
 }
 
 interface GroupNode {
@@ -47,13 +59,26 @@ interface GroupNode {
   children: GroupNode[];
 }
 
-export function MaterialsClient({ groups: initialGroups }: Props) {
+export function MaterialsClient({ groups: initialGroups, subscriptions }: Props) {
   const t = useTranslations("Materials");
   const kindLabel = useKindLabel();
   const router = useRouter();
+  const locale = useLocale();
   const [groups, setGroups] = useState<GroupOut[]>(initialGroups);
   const [, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
+  const [shareCodeDraft, setShareCodeDraft] = useState("");
+
+  // subscription lookup by source group id; tombstones have no source group.
+  const subBySourceId = useMemo(
+    () =>
+      new Map(subscriptions.filter((s) => s.source_group_id).map((s) => [s.source_group_id!, s])),
+    [subscriptions],
+  );
+  const tombstones = useMemo(
+    () => subscriptions.filter((s) => !s.source_group_id),
+    [subscriptions],
+  );
 
   // Smart Ingest Dialog State
   const [isIngestOpen, setIsIngestOpen] = useState(false);
@@ -188,6 +213,62 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
     });
   }
 
+  // ── Material sharing ────────────────────────────────────────────────────────
+
+  function handleShare(g: GroupOut) {
+    setBusy(g.id);
+    startTransition(async () => {
+      const res = await createShareLinkAction(g.id);
+      setBusy(null);
+      if (!res.ok) {
+        alert(t("share_failed", { error: res.error }));
+        return;
+      }
+      const url = `${window.location.origin}/${locale}/parent/materials/share/${res.code}`;
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        // clipboard may be unavailable (non-HTTPS); the alert still shows the link
+      }
+      alert(t("share_link_copied", { url, code: res.code }));
+    });
+  }
+
+  function handleFork(g: GroupOut, sub: SubscriptionOut) {
+    if (!confirm(t("fork_confirm", { name: g.name }))) return;
+    setBusy(g.id);
+    startTransition(async () => {
+      const res = await forkSubscriptionAction(sub.id);
+      setBusy(null);
+      if (res.ok) {
+        router.refresh();
+      } else {
+        alert(t("fork_failed", { error: res.error }));
+      }
+    });
+  }
+
+  function handleUnsubscribe(name: string, sub: SubscriptionOut) {
+    if (!confirm(t("unsubscribe_confirm", { name }))) return;
+    setBusy(sub.id);
+    startTransition(async () => {
+      const res = await unsubscribeAction(sub.id);
+      setBusy(null);
+      if (res.ok) {
+        setGroups((prev) => prev.filter((x) => x.id !== sub.source_group_id));
+        router.refresh();
+      }
+    });
+  }
+
+  function handleOpenSharedCode() {
+    // Accept either a bare code or a full pasted URL (code = last path segment).
+    const raw = shareCodeDraft.trim();
+    if (!raw) return;
+    const code = (raw.split("/").pop() || raw).trim().toUpperCase();
+    router.push(`/${locale}/parent/materials/share/${encodeURIComponent(code)}`);
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Banner with Action trigger */}
@@ -213,6 +294,32 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
         >
           <Plus className="mr-1.5 h-4 w-4 text-indigo-600 transition-transform duration-200 group-hover:rotate-90" />
           {t("banner_button")}
+        </Button>
+      </div>
+
+      {/* Add a book another family shared (paste link or code) */}
+      <div className="border-border bg-card/40 flex flex-col gap-2 rounded-xl border border-dashed p-3 sm:flex-row sm:items-center">
+        <span className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-xs font-medium">
+          <Link2 className="h-3.5 w-3.5" />
+          {t("add_shared_title")}
+        </span>
+        <input
+          value={shareCodeDraft}
+          onChange={(e) => setShareCodeDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleOpenSharedCode();
+          }}
+          placeholder={t("add_shared_placeholder")}
+          className="border-border bg-background focus:ring-ring min-w-0 flex-1 rounded-md border px-3 py-1.5 text-sm focus:ring-1 focus:outline-none"
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleOpenSharedCode}
+          disabled={!shareCodeDraft.trim()}
+          className="shrink-0"
+        >
+          {t("add_shared_button")}
         </Button>
       </div>
 
@@ -303,11 +410,46 @@ export function MaterialsClient({ groups: initialGroups }: Props) {
                 onStartSession={handleStartSession}
                 onArchive={handleToggleArchive}
                 onDelete={confirmDelete}
+                subscription={subBySourceId.get(node.group.id)}
+                onShare={handleShare}
+                onFork={handleFork}
+                onUnsubscribe={handleUnsubscribe}
               />
             ))}
           </div>
         )}
       </section>
+
+      {/* Dead subscriptions — the source owner deleted the book (tombstones) */}
+      {tombstones.length > 0 && (
+        <section className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+          {tombstones.map((s) => (
+            <div key={s.id} className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-muted-foreground">
+                {t("tombstone_text", {
+                  date: new Date(s.subscribed_at).toLocaleDateString(),
+                })}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy === s.id}
+                onClick={() => {
+                  setBusy(s.id);
+                  startTransition(async () => {
+                    await unsubscribeAction(s.id);
+                    setBusy(null);
+                    router.refresh();
+                  });
+                }}
+                className="text-muted-foreground hover:text-destructive h-7 shrink-0 text-xs"
+              >
+                {t("tombstone_remove")}
+              </Button>
+            </div>
+          ))}
+        </section>
+      )}
 
       {/* Archived Section */}
       {archivedGroups.length > 0 && (
@@ -378,6 +520,10 @@ function TreeViewNode({
   onStartSession,
   onArchive,
   onDelete,
+  subscription,
+  onShare,
+  onFork,
+  onUnsubscribe,
 }: {
   node: GroupNode;
   depth: number;
@@ -387,6 +533,11 @@ function TreeViewNode({
   onStartSession: (id: string) => void;
   onArchive: (g: GroupOut) => void;
   onDelete: (g: GroupOut) => void;
+  /** Present only on the root node of a subscribed (cross-account) tree. */
+  subscription?: SubscriptionOut;
+  onShare?: (g: GroupOut) => void;
+  onFork?: (g: GroupOut, sub: SubscriptionOut) => void;
+  onUnsubscribe?: (name: string, sub: SubscriptionOut) => void;
 }) {
   const t = useTranslations("Materials");
   const [expanded, setExpanded] = useState(false);
@@ -394,6 +545,7 @@ function TreeViewNode({
 
   const Icon = KIND_ICON[group.kind] ?? Bookmark;
   const isBusy = busy === group.id;
+  const isSubscribed = group.subscribed === true;
 
   return (
     <div className="space-y-2">
@@ -464,6 +616,11 @@ function TreeViewNode({
               <span className="py-0.2 shrink-0 rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-500">
                 {kindLabel(group.kind)}
               </span>
+              {isSubscribed && (
+                <span className="shrink-0 rounded bg-sky-100 px-1 py-px text-[10px] font-semibold text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+                  {t("subscribed_badge")}
+                </span>
+              )}
             </div>
             <span className="text-muted-foreground mt-0.5 block text-[10px]">
               {(() => {
@@ -518,29 +675,72 @@ function TreeViewNode({
             </Button>
           </Link>
 
-          {/* Archive material */}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => onArchive(group)}
-            disabled={isBusy}
-            className="text-muted-foreground hover:text-foreground shrink-0"
-            title={t("archive")}
-          >
-            <Archive className="h-3.5 w-3.5" />
-          </Button>
+          {/* Owner-only: share (root) + archive + delete. Subscribed: fork + unsubscribe. */}
+          {!isSubscribed && depth === 0 && group.parent_id === null && onShare && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onShare(group)}
+              disabled={isBusy}
+              className="text-muted-foreground shrink-0 hover:text-sky-600"
+              title={t("share")}
+            >
+              <Share2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
 
-          {/* Delete material */}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => onDelete(group)}
-            disabled={isBusy}
-            className="hover:text-destructive text-muted-foreground shrink-0"
-            title={t("delete_permanently")}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          {!isSubscribed && (
+            <>
+              {/* Archive material */}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onArchive(group)}
+                disabled={isBusy}
+                className="text-muted-foreground hover:text-foreground shrink-0"
+                title={t("archive")}
+              >
+                <Archive className="h-3.5 w-3.5" />
+              </Button>
+
+              {/* Delete material */}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onDelete(group)}
+                disabled={isBusy}
+                className="hover:text-destructive text-muted-foreground shrink-0"
+                title={t("delete_permanently")}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
+
+          {isSubscribed && subscription && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onFork?.(group, subscription)}
+                disabled={isBusy}
+                className="text-muted-foreground shrink-0 hover:text-indigo-600"
+                title={t("fork")}
+              >
+                <GitFork className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onUnsubscribe?.(group.name, subscription)}
+                disabled={isBusy}
+                className="hover:text-destructive text-muted-foreground shrink-0"
+                title={t("unsubscribe")}
+              >
+                <Unlink className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
