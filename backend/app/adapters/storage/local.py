@@ -6,6 +6,7 @@ migrating to a cloud backend later is just copying the files — no key rewrite.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 
@@ -42,6 +43,16 @@ class LocalBlobStorage:
 
     async def url(self, key: str, *, expires: int = 3600) -> str | None:
         return None  # no public origin — caller serves via its own endpoint
+
+    def iter_keys(self) -> Iterator[str]:
+        """All stored keys — beyond the Protocol; used by TieredBlobStorage
+        to find local objects still awaiting replication."""
+        root = self._root.resolve()
+        if not root.exists():
+            return
+        for path in sorted(root.rglob("*")):
+            if path.is_file():
+                yield path.relative_to(root).as_posix()
 
 
 class NullBlobStorage:

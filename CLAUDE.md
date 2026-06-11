@@ -440,6 +440,13 @@ Rules:
 - ✅ UI: share button + paste-a-code box + subscribed badges + fork/unsubscribe + tombstones (materials page); landing page `parent/materials/share/[code]`
 - Co-building deferred by decision (subscription model is its forward-compatible precursor)
 
+**Done (Blob storage cloud tier — Qiniu, 2026-06-11):**
+- ✅ `QiniuBlobStorage` (`app/adapters/storage/qiniu.py`) — private Kodo bucket, plain-httpx async (no vendor SDK): form upload, signed download URLs, stat/delete. The bucket is shared by future content domains via constructor `key_prefix="audio"` — DB keys stay unprefixed (the prefix is wiring, like the local root)
+- ✅ `TieredBlobStorage` (`storage/tiered.py`) — write local → respond → background upload → verified delete of local copy; reads fall back local → remote so in-flight chats never 404; `sync_pending()` in app lifespan re-uploads blobs left behind by a crash
+- ✅ `BLOB_PROVIDER` in `.env` (`local` dev / `qiniu` prod — deployment infra, deliberately not config.toml) + `QINIU_*` settings; switching vendors (TOS when Qiniu fills up) = one adapter class + one factory case, keys unchanged
+- ✅ Direct-link ready with zero code: `url()` returns signed URLs only when `QINIU_DOWNLOAD_DOMAIN` is `https://`; while it is `http://` (free CDN tier) the endpoint proxies bytes server-side (`_serve_stored_audio` already 302s when `url()` is non-None)
+- ✅ Tests: `tests/test_blob_storage.py` (tiered lifecycle incl. failed-upload recovery; Qiniu key prefix + url gating)
+
 **Next TODO (priority order — strategy and phase gates live in [`docs/roadmap.md`](docs/roadmap.md)):**
 - [x] **Validate the core loop** with a hand-made book — 1–2 lessons + 1 real child ✅ 2026-06-10, works well (see `docs/content-lifecycle.md` §9, `docs/roadmap.md` §0)
 - [x] Organize workbench V1 — inbox (capture + practice-derived) → tag tree, click-to-file/move (`parent/organize`, endpoints `/organize/*`); remaining: drag UX, AI grouping
@@ -447,6 +454,6 @@ Rules:
 - [ ] **Phase 1 — external families** (`docs/roadmap.md`) — in progress: deploy ✅ (live 2026-06-11), book prepared ✅, families invited ✅ (classmates' parents, shared progress), material sharing shipped ✅; **remaining: audio retention policy + watch week-2 retention / boundary leakage / latency**
 - [ ] DB-backed tests for `_assemble_tag_path` / scope V1 (needs a Postgres test fixture)
 - [ ] **Ingestion closed loop → lift into `core/curriculum/` (DB-aware)** — when building re-organization / inbox organizing / AI-assisted filing ("file this into the right textbook + chapter" using existing DB groups), move the extraction orchestration out of `app/api/ingest.py` into `core/curriculum/`. Reuse the two-stage seam: perception transcription is the re-runnable capture artifact (re-structure without re-OCR); the `structuring` stage becomes the extension point for an AI filing suggester that reads existing `ItemGroup`s.
-- [ ] **Voice storage lifecycle (local → remote)** — V1 keeps audio on local disk via `BlobStorage` (done). Next: add a cloud `BlobStorage` backend and push there. Open decisions: how long to keep the local copy, when to serve a remote signed URL vs local bytes, and the local retention/eviction policy (when to delete local after upload).
+- [ ] **Voice storage lifecycle (local → remote)** — cloud tier shipped 2026-06-11 (Qiniu, see Done block: local staging → background upload → delete local; remote fallback on read). Remaining: **retention policy** — how long audio lives in Qiniu (a Kodo lifecycle rule guards the 10 GB free cap) and whether old turns should degrade gracefully (text stays, audio gone).
 
 > As of 2026-05-30: `just check` is fully green — backend `ruff` + `mypy` (0 errors, dead `conversation.py` removed), frontend `eslint` + `prettier` + `tsc`.

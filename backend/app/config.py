@@ -69,9 +69,24 @@ class Settings(BaseSettings):
     volc_stt_model_name: str = "bigmodel"
     volc_stt_sample_rate: int = 16000
 
-    # --- Audio storage (V1 local fs, V2 TOS) ---
+    # --- Blob storage (audio now; other content domains later) ---
+    # Backend choice is deployment infrastructure (dev=local, prod=qiniu), so it
+    # lives in .env rather than the shared config.toml.
+    #   "local" — filesystem only
+    #   "qiniu" — tiered: local staging -> Qiniu Kodo (background upload)
+    blob_provider: str = "local"
     audio_storage_enabled: bool = True
     audio_storage_dir: str = "./storage/audio"
+
+    # --- Qiniu Kodo (blob_provider="qiniu") ---
+    qiniu_access_key: str = ""
+    qiniu_secret_key: str = ""
+    qiniu_bucket: str = ""
+    # Bucket region: z0 华东-浙江 | cn-east-2 华东-浙江2 | z1 华北 | z2 华南
+    qiniu_region: str = "z0"
+    # Bucket-bound CDN domain, scheme included. http:// -> server-side fetch
+    # only (endpoint proxies bytes); https:// -> signed direct links (302).
+    qiniu_download_domain: str = ""
 
 
 settings = Settings()

@@ -161,8 +161,10 @@ def _make_tts() -> TTSAdapter:
 
 
 def _make_blob() -> BlobStorage:
-    """Pick the blob backend. Local disk for V1; a cloud provider switch
-    (Qiniu / Aliyun / Tencent / Volcengine TOS / MinIO) lands here later."""
+    """Pick the blob backend per BLOB_PROVIDER. Cloud providers sit behind a
+    local staging tier (write local -> background upload -> delete local), so
+    swapping vendors (Qiniu today, Volcengine TOS when Qiniu fills up) is a
+    new remote class + a case here; keys in the DB never change."""
     from app.config import settings
 
     if not settings.audio_storage_enabled:
@@ -172,7 +174,30 @@ def _make_blob() -> BlobStorage:
 
     from app.adapters.storage.local import LocalBlobStorage
 
-    return LocalBlobStorage(root=settings.audio_storage_dir)
+    local = LocalBlobStorage(root=settings.audio_storage_dir)
+    match settings.blob_provider:
+        case "local":
+            return local
+        case "qiniu":
+            from app.adapters.storage.qiniu import QiniuBlobStorage
+            from app.adapters.storage.tiered import TieredBlobStorage
+
+            return TieredBlobStorage(
+                cache=local,
+                remote=QiniuBlobStorage(
+                    access_key=settings.qiniu_access_key,
+                    secret_key=settings.qiniu_secret_key,
+                    bucket=settings.qiniu_bucket,
+                    region=settings.qiniu_region,
+                    download_domain=settings.qiniu_download_domain,
+                    # The bucket is shared by future content domains; audio
+                    # lives under this prefix (keys in the DB stay unprefixed,
+                    # mirroring how the local root never appears in keys).
+                    key_prefix="audio",
+                ),
+            )
+        case other:
+            raise ValueError(f"Unknown blob provider: {other!r}")
 
 
 # ── Shared singletons ────────────────────────────────────────────────────────

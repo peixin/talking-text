@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import logging.config
 from contextlib import asynccontextmanager
@@ -40,7 +41,16 @@ logging.config.dictConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.adapters.factory import blob
+    from app.adapters.storage.tiered import TieredBlobStorage
+
+    # Re-replicate blobs whose upload a previous shutdown interrupted.
+    sync_task: asyncio.Task[None] | None = None
+    if isinstance(blob, TieredBlobStorage):
+        sync_task = asyncio.create_task(blob.sync_pending())
     yield
+    if sync_task is not None and not sync_task.done():
+        sync_task.cancel()
 
 
 def create_app() -> FastAPI:

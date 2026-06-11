@@ -432,6 +432,13 @@ just db-history
 - ✅ UI：分享按钮 + 粘贴分享码入口 + 订阅徽章 + fork/退订 + 墓碑条目（资料页）；落地页 `parent/materials/share/[code]`
 - 共建按决议推迟（订阅模型即其前向兼容的前置形态）
 
+**已完成（Blob 存储云端层 — 七牛，2026-06-11）：**
+- ✅ `QiniuBlobStorage`（`app/adapters/storage/qiniu.py`）——私有 Kodo bucket，纯 httpx 异步实现（不引 SDK）：表单上传、签名下载 URL、stat/delete。bucket 由未来多个内容域共用，构造参数 `key_prefix="audio"` 划分命名空间——DB 里的 key 不带前缀（前缀是接线配置，等同本地 root 不出现在 key 里）
+- ✅ `TieredBlobStorage`（`storage/tiered.py`）——写本地 → 立即响应 → 后台上传 → 校验后删本地副本；读取本地优先、远端兜底,进行中的对话永不 404；应用 lifespan 里 `sync_pending()` 补传上次中断遗留的对象
+- ✅ `.env` 的 `BLOB_PROVIDER`（dev 用 `local` / prod 用 `qiniu`——部署基础设施,刻意不放 config.toml）+ `QINIU_*` 配置；换厂商（七牛满了切 TOS）= 一个 adapter 类 + factory 一个 case,key 不变
+- ✅ 直链零代码预埋：`QINIU_DOWNLOAD_DOMAIN` 为 `https://` 时 `url()` 才返回签名 URL；还是 `http://`（免费 CDN 档）时端点服务端代理字节（`_serve_stored_audio` 在 `url()` 非空时本来就会 302）
+- ✅ 测试：`tests/test_blob_storage.py`（分层生命周期含上传失败恢复；七牛 key 前缀 + url 门控）
+
 **下一步 TODO（按优先级；战略与阶段闸门见 [`docs/roadmap.cn.md`](docs/roadmap.cn.md)）：**
 - [x] **验证核心循环**：用手工书（1–2 节）+ 一个真实孩子 ✅ 2026-06-10 效果不错（见 `docs/content-lifecycle.cn.md` §9、`docs/roadmap.cn.md` §0）
 - [x] 整理工作台 V1：收件箱（采集 + 练习派生）→ tag 树，点选归位/移动（`parent/organize`，端点 `/organize/*`）；待办：拖拽、AI 提议成组
@@ -439,6 +446,6 @@ just db-history
 - [ ] **阶段一：外部家庭**（`docs/roadmap.cn.md`）——进行中：部署 ✅（2026-06-11 上线）、教材已备好 ✅、已邀请同班同学家长（共同进度）✅、教材分享功能上线 ✅；**剩余：音频保留策略 + 观察第二周留存 / 越界率 / 延迟**
 - [ ] `_assemble_tag_path` / scope V1 的 DB 集成测试（需 Postgres 测试夹具）
 - [ ] **录入闭环 → 抬进 `core/curriculum/`（DB-aware）**：做「重整理 / 未入库素材整理 / AI 自动归档（用 DB 已有 `ItemGroup` 把素材归到某课本某章节）」时，把抽取编排从 `app/api/ingest.py` 抬进 `core/curriculum/`。复用两段式接缝：perception 转写是可重跑的 capture 原始件（重结构化不必重新 OCR），`structuring` 环节作为 AI 归档建议器的扩展点（读已有分组结构）。
-- [ ] **语音存储生命周期（本地 → 远端）**：V1 经 `BlobStorage` 存本地盘（已完成）。下一步：加云 `BlobStorage` 后端并 push 上去。待定：本地副本保留多久、何时返回远端签名 URL 而非本地字节、本地保留/淘汰策略（上传后多久删本地）。
+- [ ] **语音存储生命周期（本地 → 远端）**：云端层已于 2026-06-11 上线（七牛,见上方完成块：本地暂存 → 后台上传 → 删本地；读取远端兜底）。剩余：**保留策略**——音频在七牛存多久（用 Kodo 生命周期规则守住 10 GB 免费上限）,以及老对话是否优雅降级（文字保留、音频消失）。
 
 > 截至 2026-05-30：`just check` 全绿 — 后端 `ruff` + `mypy`（0 错，已删死代码 `conversation.py`），前端 `eslint` + `prettier` + `tsc`。
