@@ -30,6 +30,13 @@ class Learner(Base, TimestampMixin):
     )
     ai_persona_prompt: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
 
+    # How aggressively the AI corrects mistakes: gentle | strict | native.
+    # gentle = interest-first (severe / current grammar point / repeated-in-session only);
+    # strict = correct every error; native = strict + idiomatic phrasing suggestions.
+    correction_level: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=sa.text("'gentle'")
+    )
+
     cefr_level: Mapped[str | None] = mapped_column(String(4), nullable=True)
 
     account: Mapped[Account] = relationship(

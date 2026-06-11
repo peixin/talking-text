@@ -1,4 +1,9 @@
-from app.core.prompt.assembler import _SAFETY_INSTRUCTIONS, _TINA_PERSONA, build_system_prompt
+from app.core.prompt.assembler import (
+    _CORRECTION_INSTRUCTIONS,
+    _SAFETY_INSTRUCTIONS,
+    _TINA_PERSONA,
+    build_system_prompt,
+)
 from app.core.scope.protocol import PatternItem, ScopeResult
 
 
@@ -142,6 +147,46 @@ def test_safety_rules_follow_persona_and_survive_custom_persona():
     result = build_system_prompt(ScopeResult(), persona_prompt="You are Bob, a friendly tutor.")
     assert _SAFETY_INSTRUCTIONS in result
     assert result.index("You are Bob") < result.index("Safety rules")
+
+
+def test_correction_policy_defaults_to_gentle():
+    result = build_system_prompt(ScopeResult())
+    assert _CORRECTION_INSTRUCTIONS["gentle"] in result
+
+
+def test_correction_policy_strict_and_native_variants():
+    strict = build_system_prompt(ScopeResult(), correction_level="strict")
+    assert _CORRECTION_INSTRUCTIONS["strict"] in strict
+    assert _CORRECTION_INSTRUCTIONS["gentle"] not in strict
+
+    native = build_system_prompt(ScopeResult(), correction_level="native")
+    assert _CORRECTION_INSTRUCTIONS["native"] in native
+    assert "idiomatic" in native
+
+
+def test_correction_policy_unknown_level_falls_back_to_gentle():
+    result = build_system_prompt(ScopeResult(), correction_level="bogus")
+    assert _CORRECTION_INSTRUCTIONS["gentle"] in result
+
+
+def test_correction_policy_present_in_every_mode():
+    for scope in (
+        ScopeResult(mode="calibration"),
+        ScopeResult(mode="free", cefr_level="A1"),
+        ScopeResult(mode="group", words=["red"]),
+    ):
+        result = build_system_prompt(scope, correction_level="strict")
+        assert _CORRECTION_INSTRUCTIONS["strict"] in result
+
+
+def test_correction_policy_survives_custom_persona_and_follows_safety():
+    result = build_system_prompt(
+        ScopeResult(),
+        persona_prompt="You are Bob, a friendly tutor.",
+        correction_level="native",
+    )
+    assert _CORRECTION_INSTRUCTIONS["native"] in result
+    assert result.index("Safety rules") < result.index("Correction policy")
 
 
 def test_custom_persona_with_group_scope():

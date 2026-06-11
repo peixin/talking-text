@@ -93,9 +93,15 @@ class DialogOrchestrator:
         learner = learner_row.scalar_one_or_none()
         learner_name = learner.name if learner else None
         persona_prompt = (learner.ai_persona_prompt if learner else None) or _TINA_PERSONA
+        correction_level = learner.correction_level if learner else "gentle"
 
         scope = await self._scope.get_scope(db, learner_id, group_id, session_id)
-        return build_system_prompt(scope, persona_prompt=persona_prompt, learner_name=learner_name)
+        return build_system_prompt(
+            scope,
+            persona_prompt=persona_prompt,
+            learner_name=learner_name,
+            correction_level=correction_level,
+        )
 
     async def _persist_audio(
         self,

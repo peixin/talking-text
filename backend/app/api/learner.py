@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -35,6 +35,7 @@ class LearnerOut(BaseModel):
     ai_name: str
     ai_gender: str
     ai_persona_prompt: str | None
+    correction_level: str
     cefr_level: str | None
 
 
@@ -42,6 +43,7 @@ class UpdatePersonaBody(BaseModel):
     ai_name: str | None = None
     ai_gender: str | None = None
     ai_persona_prompt: str | None = None
+    correction_level: Literal["gentle", "strict", "native"] | None = None
 
 
 class SyncPersonaBody(BaseModel):
@@ -91,6 +93,7 @@ def _learner_out(l: Learner) -> LearnerOut:
         ai_name=l.ai_name,
         ai_gender=l.ai_gender,
         ai_persona_prompt=l.ai_persona_prompt,
+        correction_level=l.correction_level,
         cefr_level=l.cefr_level,
     )
 
@@ -241,6 +244,8 @@ async def update_persona(
         learner.ai_gender = body.ai_gender
     if body.ai_persona_prompt is not None:
         learner.ai_persona_prompt = body.ai_persona_prompt
+    if body.correction_level is not None:
+        learner.correction_level = body.correction_level
 
     await db.commit()
     await db.refresh(learner)

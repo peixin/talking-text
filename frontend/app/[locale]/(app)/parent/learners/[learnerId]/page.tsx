@@ -21,6 +21,7 @@ export default async function LearnerSettingsPage({ params }: Props) {
       aiName={learner.ai_name}
       aiGender={learner.ai_gender}
       aiPersonaPrompt={learner.ai_persona_prompt}
+      correctionLevel={learner.correction_level}
     />
   );
 }

@@ -76,12 +76,15 @@ export type AccountOut = {
   last_active_learner_id?: string;
   session_token?: string;
 };
+export type CorrectionLevel = "gentle" | "strict" | "native";
+
 export type LearnerOut = {
   id: string;
   name: string;
   ai_name: string;
   ai_gender: string;
   ai_persona_prompt: string | null;
+  correction_level: CorrectionLevel;
   cefr_level: string | null;
 };
 
@@ -102,6 +105,7 @@ export type UpdatePersonaBody = {
   ai_name?: string;
   ai_gender?: string;
   ai_persona_prompt?: string | null;
+  correction_level?: CorrectionLevel;
 };
 
 export type SyncPersonaBody = {

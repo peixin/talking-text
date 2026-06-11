@@ -129,7 +129,6 @@ export default async function ParentDashboard() {
           <WeeklyReportCard report={report} learnerName={activeLearner.name} />
         </div>
       )}
-
     </div>
   );
 }
