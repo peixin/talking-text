@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.auth import router as auth_router
+from app.api.chat_share import router as chat_share_router
 from app.api.groups import router as groups_router
 from app.api.health import router as health_router
 from app.api.ingest import router as ingest_router
@@ -16,3 +17,4 @@ api_router.include_router(session_router)
 api_router.include_router(groups_router)
 api_router.include_router(ingest_router)
 api_router.include_router(share_router)
+api_router.include_router(chat_share_router)

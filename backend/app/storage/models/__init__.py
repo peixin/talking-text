@@ -11,7 +11,7 @@ from app.storage.models.content import (
 )
 from app.storage.models.learner import Learner
 from app.storage.models.learning import LearnerCalibrationTurn, LearnerItemStats
-from app.storage.models.session import Session
+from app.storage.models.session import Session, SessionShareLink
 from app.storage.models.turn import Turn
 
 __all__ = [
@@ -28,5 +28,6 @@ __all__ = [
     "LearnerCalibrationTurn",
     "LearnerItemStats",
     "Session",
+    "SessionShareLink",
     "Turn",
 ]

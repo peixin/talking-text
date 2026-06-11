@@ -447,6 +447,13 @@ Rules:
 - ✅ Direct-link ready with zero code: `url()` returns signed URLs only when `QINIU_DOWNLOAD_DOMAIN` is `https://`; while it is `http://` (free CDN tier) the endpoint proxies bytes server-side (`_serve_stored_audio` already 302s when `url()` is non-None)
 - ✅ Tests: `tests/test_blob_storage.py` (tiered lifecycle incl. failed-upload recovery; Qiniu key prefix + url gating)
 
+**Done (Public chat sharing — growth links, 2026-06-11):**
+- ✅ `session_share_link` table (migration `e8b3f51a2c47`) — 12-char public code per session; revoke = public page 404s immediately. DB keeps full identity (session → learner); anonymity is applied at the API layer only, so a future "show name/avatar" toggle is additive, no backfill
+- ✅ `app/api/chat_share.py` — owner create/revoke (auth) + public no-auth view `GET /shared-chats/{code}` (turns + has_audio flags, AI persona name only, no learner fields) and audio `GET /shared-chats/{code}/turns/{id}/audio`. Public audio serves STORED blobs only — the authenticated endpoint's on-demand TTS fallback is deliberately absent (strangers must not trigger paid TTS)
+- ✅ Public page `[locale]/share/chat/[code]` (proxy.ts `PUBLIC_PREFIXES`, no auth, logged-in users not redirected) — SSR conversation + per-bubble playback via Server Action + register CTA footer
+- ✅ Share button in chat title bar → dialog with explicit disclosure (link is public, audio incl. child's voice audible, revocable) before creating; copy + revoke
+- ✅ nginx rate limit (stillume-nginx `talking-text.conf`) — `map $request_uri` keyed zone, 5 r/s + burst 20 on `/api/shared-chats/*` and `/{locale}/share/chat/*` only; authenticated traffic untouched. Guards the Qiniu free-tier traffic quota against scraping
+
 **Next TODO (priority order — strategy and phase gates live in [`docs/roadmap.md`](docs/roadmap.md)):**
 - [x] **Validate the core loop** with a hand-made book — 1–2 lessons + 1 real child ✅ 2026-06-10, works well (see `docs/content-lifecycle.md` §9, `docs/roadmap.md` §0)
 - [x] Organize workbench V1 — inbox (capture + practice-derived) → tag tree, click-to-file/move (`parent/organize`, endpoints `/organize/*`); remaining: drag UX, AI grouping
@@ -454,6 +461,6 @@ Rules:
 - [ ] **Phase 1 — external families** (`docs/roadmap.md`) — in progress: deploy ✅ (live 2026-06-11), book prepared ✅, families invited ✅ (classmates' parents, shared progress), material sharing shipped ✅; **remaining: audio retention policy + watch week-2 retention / boundary leakage / latency**
 - [ ] DB-backed tests for `_assemble_tag_path` / scope V1 (needs a Postgres test fixture)
 - [ ] **Ingestion closed loop → lift into `core/curriculum/` (DB-aware)** — when building re-organization / inbox organizing / AI-assisted filing ("file this into the right textbook + chapter" using existing DB groups), move the extraction orchestration out of `app/api/ingest.py` into `core/curriculum/`. Reuse the two-stage seam: perception transcription is the re-runnable capture artifact (re-structure without re-OCR); the `structuring` stage becomes the extension point for an AI filing suggester that reads existing `ItemGroup`s.
-- [ ] **Voice storage lifecycle (local → remote)** — cloud tier shipped 2026-06-11 (Qiniu, see Done block: local staging → background upload → delete local; remote fallback on read). Remaining: **retention policy** — how long audio lives in Qiniu (a Kodo lifecycle rule guards the 10 GB free cap) and whether old turns should degrade gracefully (text stays, audio gone).
+- [ ] **Voice storage lifecycle (local → remote)** — cloud tier shipped 2026-06-11 (Qiniu, see Done block: local staging → background upload → delete local; remote fallback on read). Remaining: **retention policy** — how long audio lives in Qiniu (a Kodo lifecycle rule guards the 10 GB free cap) and whether old turns should degrade gracefully (text stays, audio gone). Note: publicly shared sessions (`session_share_link`) keep `has_audio` flags from `audio_*_path`, so lifecycle-deleted blobs should also null those columns or the share page shows dead play buttons.
 
 > As of 2026-05-30: `just check` is fully green — backend `ruff` + `mypy` (0 errors, dead `conversation.py` removed), frontend `eslint` + `prettier` + `tsc`.

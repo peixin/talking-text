@@ -10,6 +10,10 @@ const COOKIE_NAME = "session";
 // Paths that are accessible without auth (after stripping locale prefix)
 const PUBLIC_PATHS = new Set(["/", "/login", "/register"]);
 
+// Public prefixes that everyone can view — logged-in users included
+// (unlike PUBLIC_PATHS, no redirect to /chat).
+const PUBLIC_PREFIXES = ["/share/chat/"];
+
 function stripLocale(pathname: string): string {
   // Remove leading locale segment, e.g. /zh-CN/chat -> /chat
   for (const locale of routing.locales) {
@@ -29,6 +33,11 @@ export default function proxy(request: NextRequest) {
   const locale =
     routing.locales.find((l) => pathname === `/${l}` || pathname.startsWith(`/${l}/`)) ||
     routing.defaultLocale;
+
+  // Openly shared pages (e.g. anonymous chat shares) — serve for everyone
+  if (PUBLIC_PREFIXES.some((p) => pathWithoutLocale.startsWith(p))) {
+    return intlMiddleware(request);
+  }
 
   // If the user is authenticated and tries to access public pages, redirect to /chat —
   // unless ?expired=1 is set, which means the backend invalidated the session and we

@@ -124,7 +124,15 @@
     "transcribing": "识别中…",
     "scope_items": "{count} 个学习点",
     "scope_incl_sub": "含子章节",
-    "scope_too_many": "偏多 · 智能挑选 {cap}"
+    "scope_too_many": "偏多 · 智能挑选 {cap}",
+    "share_title": "分享这段对话",
+    "share_desc": "生成一个公开链接，朋友和家人都可以查看这段对话。",
+    "share_notice": "任何拿到链接的人都能阅读这段对话并播放语音（包括孩子的声音）。页面不会显示姓名等个人信息。你可以随时撤销链接。",
+    "share_create": "生成公开链接",
+    "share_copy": "复制",
+    "share_copied": "已复制",
+    "share_revoke": "撤销链接",
+    "share_failed": "操作失败，请重试。"
   },
   "Materials": {
     "title": "学习素材",
@@ -311,5 +319,14 @@
     "clone_desc": "完整复制到自己账号下，可自由编辑。此后对方的更新不再同步。",
     "error_own_group": "这是你自己的教材，无需添加。",
     "error_adopt_failed": "添加失败，请重试。"
+  },
+  "SharedChat": {
+    "default_title": "英语练习",
+    "subtitle": "和 AI 英语教练 {ai} 的真实对话",
+    "brand_link": "字有天地",
+    "play_audio": "播放语音",
+    "cta_title": "想让你的孩子也这样开口说英语吗？",
+    "cta_desc": "字有天地让孩子和 AI 教练练习口语——只用学校学过的词汇，再每次悄悄往外拓展一点点。",
+    "cta_button": "免费体验"
   }
 }

@@ -112,7 +112,15 @@
     "transcribing": "識別中…",
     "scope_items": "{count} 個學習點",
     "scope_incl_sub": "含子章節",
-    "scope_too_many": "偏多 · 智能挑選 {cap}"
+    "scope_too_many": "偏多 · 智能挑選 {cap}",
+    "share_title": "分享這段對話",
+    "share_desc": "產生一個公開連結，朋友和家人都可以查看這段對話。",
+    "share_notice": "任何拿到連結的人都能閱讀這段對話並播放語音（包括孩子的聲音）。頁面不會顯示姓名等個人資訊。你可以隨時撤銷連結。",
+    "share_create": "產生公開連結",
+    "share_copy": "複製",
+    "share_copied": "已複製",
+    "share_revoke": "撤銷連結",
+    "share_failed": "操作失敗，請重試。"
   },
   "Materials": {
     "title": "學習素材",
@@ -299,5 +307,14 @@
     "clone_desc": "完整複製到自己帳號下，可自由編輯。此後對方的更新不再同步。",
     "error_own_group": "這是你自己的教材，無需新增。",
     "error_adopt_failed": "新增失敗，請重試。"
+  },
+  "SharedChat": {
+    "default_title": "英語練習",
+    "subtitle": "和 AI 英語教練 {ai} 的真實對話",
+    "brand_link": "字有天地",
+    "play_audio": "播放語音",
+    "cta_title": "想讓你的孩子也這樣開口說英語嗎？",
+    "cta_desc": "字有天地讓孩子和 AI 教練練習口說——只用學校學過的詞彙，再每次悄悄往外拓展一點點。",
+    "cta_button": "免費體驗"
   }
 }

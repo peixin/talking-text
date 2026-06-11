@@ -56,6 +56,25 @@ export async function setSessionGroup(
   return api.sessions.setGroup(sessionId, groupId);
 }
 
+// ── Public chat sharing ──────────────────────────────────────────────────────
+
+export type ChatShareLinkResult = { ok: true; code: string } | { ok: false; error: string };
+
+export async function createChatShareLink(sessionId: string): Promise<ChatShareLinkResult> {
+  const api = await createApi();
+  try {
+    const link = await api.chatShare.createLink(sessionId);
+    return { ok: true, code: link.code };
+  } catch {
+    return { ok: false, error: "CHAT_SHARE_FAILED" };
+  }
+}
+
+export async function revokeChatShareLink(sessionId: string): Promise<void> {
+  const api = await createApi();
+  await api.chatShare.revokeLink(sessionId);
+}
+
 // ── Ingestion actions ────────────────────────────────────────────────────────
 
 export type TranscribeIngestionResult = { ok: true; text: string } | { ok: false; error: string };

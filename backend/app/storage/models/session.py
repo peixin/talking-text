@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.storage.base import Base, TimestampMixin
@@ -36,3 +37,31 @@ class Session(Base, TimestampMixin):
     group_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("item_group.id", ondelete="SET NULL"), nullable=True
     )
+
+
+class SessionShareLink(Base, TimestampMixin):
+    """Public, anonymous share code for one chat session (growth / word-of-mouth).
+
+    The share URL embeds the code; anyone holding it can read the conversation
+    and play stored audio — no auth. The PUBLIC API response hides learner
+    identity, but the underlying rows keep everything: a future "show name /
+    avatar" toggle is an API change, not a data backfill.
+
+    ``revoked`` kills the link outright (the public endpoints 404) — unlike
+    ``GroupShareLink``, there is no adoption state to preserve.
+    """
+
+    __tablename__ = "session_share_link"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("session.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    #: Unambiguous-alphabet code (no 0/O/1/I/L); 12 chars — this link is public
+    #: on the open internet, so the keyspace is larger than group share codes.
+    code: Mapped[str] = mapped_column(String(12), nullable=False, unique=True)
+    created_by_account_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("account.id", ondelete="CASCADE"), nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")

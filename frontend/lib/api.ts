@@ -69,6 +69,10 @@ export async function createApi() {
     ingest: {
       extract: (formData: FormData) => c((h) => backend.ingest.extract(formData, h)),
     },
+    chatShare: {
+      createLink: (sessionId: string) => c((h) => backend.chatShare.createLink(sessionId, h)),
+      revokeLink: (sessionId: string) => c((h) => backend.chatShare.revokeLink(sessionId, h)),
+    },
     share: {
       createLink: (groupId: string) => c((h) => backend.share.createLink(groupId, h)),
       revokeLink: (groupId: string) => c((h) => backend.share.revokeLink(groupId, h)),

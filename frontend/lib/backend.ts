@@ -284,6 +284,25 @@ export type SubscriptionOut = {
   subscribed_at: string;
 };
 
+// ── Public chat sharing (anonymous growth links) ──────────────────────────────
+
+export type ChatShareLinkOut = { code: string; expires_at: string | null; revoked: boolean };
+
+export type SharedTurnOut = {
+  id: string;
+  text_user: string;
+  text_ai: string;
+  has_audio_in: boolean;
+  has_audio_out: boolean;
+};
+
+export type SharedChatOut = {
+  title: string | null;
+  ai_name: string;
+  created_at: string;
+  turns: SharedTurnOut[];
+};
+
 // ── Organize workbench (docs/content-lifecycle.md §4) ────────────────────────
 
 // A capture bag is the UNIT of organizing — the whole bag is filed at once.
@@ -431,6 +450,20 @@ export const backend = {
       }),
     unsubscribe: (subscriptionId: string, headers?: HeadersInit) =>
       request<void>(`/subscriptions/${subscriptionId}`, { method: "DELETE", headers }),
+  },
+  chatShare: {
+    createLink: (sessionId: string, headers?: HeadersInit) =>
+      request<ChatShareLinkOut>(`/sessions/${sessionId}/share-link`, {
+        method: "POST",
+        headers,
+      }),
+    revokeLink: (sessionId: string, headers?: HeadersInit) =>
+      request<void>(`/sessions/${sessionId}/share-link`, { method: "DELETE", headers }),
+    // Public endpoints — no auth headers needed.
+    getShared: (code: string) =>
+      request<SharedChatOut>(`/shared-chats/${encodeURIComponent(code)}`),
+    getSharedAudio: (code: string, turnId: string, dir: "in" | "out") =>
+      requestRaw(`/shared-chats/${encodeURIComponent(code)}/turns/${turnId}/audio?dir=${dir}`),
   },
   ingest: {
     extract: (formData: FormData, headers?: HeadersInit) =>

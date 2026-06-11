@@ -124,7 +124,15 @@
     "transcribing": "Transcribing…",
     "scope_items": "{count} items",
     "scope_incl_sub": "incl. sub-chapters",
-    "scope_too_many": "lots · picks {cap}"
+    "scope_too_many": "lots · picks {cap}",
+    "share_title": "Share this chat",
+    "share_desc": "Create a public link so friends and family can see this conversation.",
+    "share_notice": "Anyone with the link can read this conversation and play the audio, including your child's voice. No name or other personal information is shown. You can revoke the link at any time.",
+    "share_create": "Create public link",
+    "share_copy": "Copy",
+    "share_copied": "Copied",
+    "share_revoke": "Revoke link",
+    "share_failed": "Something went wrong. Please try again."
   },
   "Materials": {
     "title": "Materials",
@@ -311,5 +319,14 @@
     "clone_desc": "A full copy under your own account, freely editable. The owner's later updates will not sync.",
     "error_own_group": "This is your own book — no need to add it.",
     "error_adopt_failed": "Failed to add the book; please try again."
+  },
+  "SharedChat": {
+    "default_title": "English practice",
+    "subtitle": "A real conversation with {ai}, the AI English coach",
+    "brand_link": "Talking Text",
+    "play_audio": "Play audio",
+    "cta_title": "Want your child to speak English like this?",
+    "cta_desc": "Talking Text lets children practice speaking with an AI coach that stays inside what they have learned at school — and gently stretches them one inch at a time.",
+    "cta_button": "Try it free"
   }
 }

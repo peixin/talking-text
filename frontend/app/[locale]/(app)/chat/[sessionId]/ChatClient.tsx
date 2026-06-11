@@ -11,6 +11,7 @@ import {
   Mic,
   Pencil,
   Send,
+  Share2,
   X,
 } from "lucide-react";
 import { useLocale } from "next-intl";
@@ -23,6 +24,7 @@ import { SessionSidebarClient } from "./SessionSidebarClient";
 import { MessageListClient, AudioState } from "./MessageListClient";
 import { RecordButtonClient, Mode } from "./RecordButtonClient";
 import { IngestDrawerClient, IngestTrigger } from "./IngestDrawerClient";
+import { ShareChatDialogClient } from "./ShareChatDialogClient";
 import { ScopeSwitcherClient } from "./ScopeSwitcherClient";
 import { ScopePath, type Crumb } from "./ScopePathClient";
 
@@ -132,6 +134,7 @@ export function ChatClient({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTrigger, setDrawerTrigger] = useState<IngestTrigger>("camera");
   const [scopeSwitchOpen, setScopeSwitchOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   useEffect(() => {
@@ -633,6 +636,13 @@ export function ChatClient({
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
+              <button
+                onClick={() => setShareOpen(true)}
+                className="text-muted-foreground/40 hover:text-muted-foreground transition"
+                title={t("share_title")}
+              >
+                <Share2 className="h-3.5 w-3.5" />
+              </button>
             </>
           )}
         </div>
@@ -807,6 +817,12 @@ export function ChatClient({
           )}
         </div>
       </div>
+
+      <ShareChatDialogClient
+        sessionId={activeSession.id}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+      />
 
       <IngestDrawerClient
         sessionId={activeSession.id}
