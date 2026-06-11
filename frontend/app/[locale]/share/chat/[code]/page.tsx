@@ -30,7 +30,7 @@ export default async function SharedChatPage({
   if (!chat) notFound();
 
   return (
-    <div className="bg-background flex min-h-screen flex-col">
+    <div className="bg-background flex h-[100dvh] flex-col overflow-y-auto">
       {/* Header — brand + session title */}
       <header className="border-border bg-background/80 sticky top-0 z-10 border-b px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center gap-3">

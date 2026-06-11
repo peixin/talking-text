@@ -53,15 +53,6 @@ export function LearnerSettingsClient({
 
       <Separator />
 
-      <div className="space-y-3">
-        <h2 className="font-medium">Materials</h2>
-        <p className="text-muted-foreground text-sm">
-          Material ingestion is coming soon. For now, chats run in free-practice mode.
-        </p>
-      </div>
-
-      <Separator />
-
       <AIPersonaSettingsClient
         initial={{ ai_name: aiName, ai_gender: aiGender, ai_persona_prompt: aiPersonaPrompt }}
         onSync={handleSyncPersona}

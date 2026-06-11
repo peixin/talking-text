@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/routing";
 import { LearnerOut } from "@/lib/backend";
 import { createLearner, deleteLearner, updateLearner } from "./actions";
 
@@ -113,6 +114,12 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
                 <>
                   <span className="font-medium">{l.name}</span>
                   <div className="flex gap-3 text-sm">
+                    <Link
+                      href={`/parent/learners/${l.id}`}
+                      className="text-primary hover:underline"
+                    >
+                      {t("persona_settings")}
+                    </Link>
                     <button
                       onClick={() => setEditingId(l.id)}
                       className="text-blue-500 hover:underline"

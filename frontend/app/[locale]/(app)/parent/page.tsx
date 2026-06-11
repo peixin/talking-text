@@ -1,5 +1,5 @@
 import { getTranslations } from "next-intl/server";
-import { BookOpen, FolderInput, MessageSquare, Settings, Sparkles, Users } from "lucide-react";
+import { BookOpen, FolderInput, MessageSquare, Sparkles, Users } from "lucide-react";
 
 import { createApi } from "@/lib/api";
 import { Link } from "@/i18n/routing";
@@ -103,7 +103,12 @@ export default async function ParentDashboard() {
                 href={`/parent/learners/${learner.id}`}
                 className="border-border hover:border-primary flex items-center justify-between rounded-xl border p-4 transition"
               >
-                <span className="font-medium">{learner.name}</span>
+                <div>
+                  <div className="font-medium">{learner.name}</div>
+                  <div className="text-muted-foreground mt-0.5 text-xs">
+                    {t("learner_card_hint")}
+                  </div>
+                </div>
                 {account.last_active_learner_id === learner.id && (
                   <span className="bg-primary/10 text-primary rounded px-2 py-1 text-xs font-medium">
                     {t("last_used")}
@@ -125,19 +130,6 @@ export default async function ParentDashboard() {
         </div>
       )}
 
-      {/* Secondary */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Link
-          href="/parent/learners"
-          className="border-border hover:border-primary flex items-start gap-3 rounded-xl border p-4 transition"
-        >
-          <Settings className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div>
-            <div className="text-sm font-medium">{t("child_management")}</div>
-            <div className="text-muted-foreground text-xs">{t("child_management_desc")}</div>
-          </div>
-        </Link>
-      </div>
     </div>
   );
 }
