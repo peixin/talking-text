@@ -59,8 +59,11 @@ the perf logs.
 
 **Obligation that activates here:** other people's children's audio lands on our
 server. The privacy self-discipline in CLAUDE.md becomes binding — define an audio
-retention policy (e.g. auto-delete raw audio after 30 days), keep all storage
-domestic, write the policy into a dev log when implemented.
+retention policy, keep all storage domestic, write the policy into a dev log when
+implemented. **Decided 2026-06-11: no automatic deletion.** Deletion is always a
+deliberate human act — a founder-run report/delete script now (publicly shared
+sessions exempt; deleted turns null their `audio_*_path` so pages degrade to
+text), an admin console with storage visibility later.
 
 **Pre-invite hardening — done 2026-06-11** (`2026-06-11-dev-log.md`): always-on
 child-safety prompt rules (unsafe-topic deflection, no personal-info collection)
@@ -72,9 +75,12 @@ production; the child's real book is prepared; classmates' parents (shared
 school progress) invited. Material sharing shipped the same day
 (`learner-content-scope.md` §6/§8.4 implemented — subscribe/clone/fork via
 private link or code) so the founder-maintained book reaches every invited
-family and stays in sync. Remaining in this phase: the **audio retention
-policy**, and watching the pass bar (week-2 retention, boundary leakage,
-per-stage latency).
+family and stays in sync. Remaining in this phase: the **audio storage admin
+script** (manual retention — see obligation above), the **boundary leakage log
+line** (the pass bar names leakage as a watch item, but nothing measures it yet —
+the flow diagram's "boundary check" was never implemented; a stdout diff of AI
+reply words vs. allowed scope at turn time closes the gap), and watching the
+pass bar (week-2 retention, boundary leakage, per-stage latency).
 
 ## Phase 2 — Make the thesis real: mastery + stretch
 
@@ -150,3 +156,10 @@ is proven. None of the following until the phase gates above say otherwise:
   links only, no public library — copyright). Co-building stays deferred; the
   one-maintainer-N-subscribers model is its forward-compatible precursor.
   Remaining: audio retention policy; pass bar under observation.
+- **2026-06-11** — Public anonymous chat sharing shipped (growth links:
+  `session_share_link`, public page, nginx rate limit on the public surface).
+  Audio retention decided: **no auto-delete** — founder-run report/delete script
+  (share-exempt, nulls `audio_*_path`), admin console later. Boundary leakage
+  named as an unmeasured pass-bar item → a derive-only stdout log line in the
+  orchestrator is queued as the instrument. Both queued in CLAUDE.md Next TODO;
+  the founder implements when time allows.
