@@ -26,7 +26,7 @@ export default async function GroupItemsPage({ params }: Props) {
           href={`/parent/materials/${groupId}`}
           className="text-muted-foreground hover:text-primary text-sm transition"
         >
-          ← {t("back_to_detail", { defaultValue: "返回教材信息" })}
+          ← {t("back_to_detail")}
         </Link>
       </header>
 
@@ -35,7 +35,7 @@ export default async function GroupItemsPage({ params }: Props) {
         groupName={group.name}
         groupKind={group.kind}
         allGroups={allGroups}
-        subtitle="为该素材定制的详细词表与核心句式大纲列表。"
+        subtitle={t("items_subtitle")}
       />
 
       <GroupItemsClient group={group} readOnly={true} />

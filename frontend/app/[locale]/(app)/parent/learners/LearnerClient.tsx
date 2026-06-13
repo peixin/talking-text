@@ -55,7 +55,7 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
 
   return (
     <div>
-      {error && <div className="mb-4 text-sm text-red-500">{error}</div>}
+      {error && <div className="text-destructive mb-4 text-sm">{error}</div>}
 
       <form onSubmit={handleCreate} className="mb-8 flex gap-2">
         <input
@@ -98,7 +98,7 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="text-sm text-green-600 hover:underline"
+                    className="text-success text-sm hover:underline"
                   >
                     {t("save")}
                   </button>
@@ -122,14 +122,14 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
                     </Link>
                     <button
                       onClick={() => setEditingId(l.id)}
-                      className="text-blue-500 hover:underline"
+                      className="text-primary hover:underline"
                     >
                       {t("edit")}
                     </button>
                     <button
                       onClick={() => handleDelete(l.id)}
                       disabled={loading}
-                      className="text-red-500 hover:underline disabled:opacity-50"
+                      className="text-destructive hover:underline disabled:opacity-50"
                     >
                       {t("delete")}
                     </button>

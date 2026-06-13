@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 
 import { Link } from "@/i18n/routing";
+import { EmptyState } from "@/components/EmptyState";
 import { BackendError, backend, type SharePreviewOut } from "@/lib/backend";
 import { ShareLandingClient } from "./ShareLandingClient";
 
@@ -34,10 +35,10 @@ export default async function ShareLandingPage({ params }: { params: Promise<{ c
       {preview ? (
         <ShareLandingClient code={code} preview={preview} />
       ) : (
-        <div className="text-muted-foreground rounded-2xl border border-dashed p-10 text-center text-sm">
-          <p className="font-semibold">{t("not_found_title")}</p>
-          <p className="mt-1 text-xs">{t("not_found_hint")}</p>
-        </div>
+        <EmptyState className="rounded-2xl p-10">
+          <span className="block font-semibold">{t("not_found_title")}</span>
+          <span className="mt-1 block text-xs">{t("not_found_hint")}</span>
+        </EmptyState>
       )}
     </div>
   );

@@ -96,8 +96,8 @@ export function KindInput({ value, onChange, groups, placeholder, className }: K
               className={cn(
                 "rounded-full border px-2 py-0.5 text-[11px] transition-colors",
                 active
-                  ? "border-indigo-300 bg-indigo-100 text-indigo-800"
-                  : "text-muted-foreground hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700",
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:border-primary/20 hover:bg-primary/5 hover:text-primary",
               )}
             >
               {s.label}
@@ -287,7 +287,7 @@ export function ParentCombobox({
                 type="button"
                 onClick={handleCreate}
                 disabled={creating}
-                className="flex w-full items-center gap-2 border-t px-3 py-2 text-left text-sm text-indigo-700 hover:bg-indigo-50"
+                className="text-primary hover:bg-primary/5 flex w-full items-center gap-2 border-t px-3 py-2 text-left text-sm"
               >
                 {creating ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -34,7 +34,7 @@ export default async function SharedChatPage({
       {/* Header — brand + session title */}
       <header className="border-border bg-background/80 sticky top-0 z-10 border-b px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/20">
+          <div className="from-primary to-primary/70 text-primary-foreground shadow-primary/20 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr shadow-md">
             <Sparkles className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">

@@ -669,6 +669,7 @@ $RECYCLE.BIN/
 # Local audio storage (V1 dev; BlobStorage LocalBlobStorage backend).
 backend/storage/audio/
 backend/tmp/
+tmp/
 
 # Model probe outputs (backend/probes/) — dev-only, written to cwd.
 backend/probe_tts.*

@@ -204,7 +204,7 @@ export function ScopeSwitcherClient({
                 }}
                 className={cn(
                   "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5",
-                  "border border-indigo-500/20 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 text-indigo-600 hover:from-indigo-500/20 hover:to-purple-500/20 dark:text-indigo-400",
+                  "border-primary/20 bg-primary/10 text-primary hover:bg-primary/20 border",
                   "text-xs font-semibold tracking-wide shadow-sm transition-all duration-300 hover:scale-[1.01] active:scale-[0.99]",
                 )}
               >
@@ -329,7 +329,7 @@ function ScopeRow({
           <div className="truncate font-medium">{label}</div>
           {hint && <div className="text-muted-foreground text-xs">{hint}</div>}
           {warnText && (
-            <div className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-500">
+            <div className="text-warning flex items-center gap-1 text-xs font-medium">
               <AlertTriangle className="h-3 w-3" />
               {warnText}
             </div>

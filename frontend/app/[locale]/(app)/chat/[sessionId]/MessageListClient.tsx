@@ -93,7 +93,7 @@ export function MessageListClient({
   if (showOnboarding) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto p-6">
-        <div className="bg-card/60 relative w-full max-w-lg overflow-hidden rounded-2xl border border-indigo-500/10 p-6 shadow-xl backdrop-blur-md transition-all duration-500 hover:shadow-indigo-500/5">
+        <div className="bg-card/60 border-primary/10 hover:shadow-primary/5 relative w-full max-w-lg overflow-hidden rounded-2xl border p-6 shadow-xl backdrop-blur-md transition-all duration-500">
           {/* Close button */}
           <button
             type="button"
@@ -106,7 +106,7 @@ export function MessageListClient({
 
           {/* Assistant Header / Logo */}
           <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 animate-pulse items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/20">
+            <div className="from-primary to-primary/80 text-primary-foreground shadow-primary/20 flex h-10 w-10 animate-pulse items-center justify-center rounded-2xl bg-gradient-to-tr shadow-md">
               <Sparkles className="h-5 w-5" />
             </div>
             <div>
@@ -127,7 +127,7 @@ export function MessageListClient({
               onClick={() => onOpenIngest?.("camera")}
               className={cn(
                 "flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-semibold",
-                "border border-indigo-500/20 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 text-indigo-600 hover:from-indigo-500/20 hover:to-purple-500/20 dark:text-indigo-400",
+                "border-primary/20 bg-primary/10 text-primary hover:bg-primary/20 border",
                 "shadow-sm transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]",
               )}
             >

@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
+import { Alert, AlertAction, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   INGEST_IMAGE_MAX_MB,
@@ -525,16 +527,17 @@ export function IngestDrawerClient({
                     {t("upload_images")}
                   </Button>
                   {files.length > 0 && (
-                    <span
+                    <Badge
+                      variant={files.length >= INGEST_MAX_IMAGES ? "warning" : "outline"}
                       className={cn(
-                        "rounded-full border px-2 py-0.5 text-[10px] tabular-nums",
+                        "rounded-full text-[10px] tabular-nums",
                         files.length >= INGEST_MAX_IMAGES
-                          ? "border-amber-300 bg-amber-500/10 font-medium text-amber-700 dark:text-amber-400"
-                          : "border-border text-muted-foreground",
+                          ? "border-warning/40 bg-warning/10"
+                          : "text-muted-foreground font-normal",
                       )}
                     >
                       {t("image_count", { count: files.length, max: INGEST_MAX_IMAGES })}
-                    </span>
+                    </Badge>
                   )}
                   <Button
                     variant={recordMode === "recording" ? "destructive" : "outline"}
@@ -566,17 +569,22 @@ export function IngestDrawerClient({
                 {recordError && <p className="text-destructive text-xs">{recordError}</p>}
 
                 {warningMessage && (
-                  <div className="animate-in fade-in slide-in-from-top-1 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 shadow-sm duration-200 dark:border-amber-500/20 dark:bg-amber-500/5 dark:text-amber-300">
-                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                    <span className="flex-1 font-medium">{warningMessage}</span>
-                    <button
-                      type="button"
-                      onClick={() => setWarningMessage(null)}
-                      className="text-amber-800/60 hover:text-amber-800 dark:text-amber-300/60 dark:hover:text-amber-300"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  <Alert
+                    variant="warning"
+                    className="animate-in fade-in slide-in-from-top-1 px-3 py-2 text-xs shadow-sm duration-200 has-data-[slot=alert-action]:pr-8"
+                  >
+                    <AlertTriangle className="size-4" />
+                    <AlertTitle>{warningMessage}</AlertTitle>
+                    <AlertAction>
+                      <button
+                        type="button"
+                        onClick={() => setWarningMessage(null)}
+                        className="text-warning/60 hover:text-warning"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </AlertAction>
+                  </Alert>
                 )}
                 <input
                   ref={cameraInputRef}
@@ -656,8 +664,8 @@ export function IngestDrawerClient({
               <div className="space-y-4">
                 {/* Capture name — a flat bag. Organizing into a textbook tree is a
                     separate step in the organize workbench. */}
-                <div className="space-y-2 rounded-xl border border-indigo-500/10 bg-indigo-500/5 p-4">
-                  <label className="block text-[10px] font-bold tracking-wider text-indigo-800 uppercase">
+                <div className="border-primary/10 bg-primary/5 space-y-2 rounded-xl border p-4">
+                  <label className="text-primary block text-[10px] font-bold tracking-wider uppercase">
                     {t("capture_name_label")}
                   </label>
                   <input
@@ -666,13 +674,13 @@ export function IngestDrawerClient({
                     onChange={(e) => setName(e.target.value)}
                     disabled={step.kind === "saving"}
                     placeholder={t("capture_name_placeholder")}
-                    className="bg-background border-border w-full rounded-lg border px-3 py-1.5 text-sm font-medium outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                    className="bg-background border-border focus:ring-ring w-full rounded-lg border px-3 py-1.5 text-sm font-medium outline-none focus:ring-1 disabled:opacity-50"
                   />
                 </div>
 
                 {/* CEFR Level Selection */}
                 <div className="space-y-1">
-                  <label className="block text-[10px] font-bold tracking-wider text-indigo-800 uppercase">
+                  <label className="text-primary block text-[10px] font-bold tracking-wider uppercase">
                     {t("cefr_label")}
                   </label>
                   <select
@@ -692,10 +700,10 @@ export function IngestDrawerClient({
 
                 {/* Parent note — separated from the content by the AI. Saved as the
                     group's prompt_notes; it steers the AI teacher, never becomes items. */}
-                <div className="space-y-1.5 rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
-                  <label className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-emerald-800 uppercase">
+                <div className="border-success/15 bg-success/5 space-y-1.5 rounded-xl border p-4">
+                  <label className="text-success flex items-center gap-1.5 text-[10px] font-bold tracking-wider uppercase">
                     {t("parent_note_label")}
-                    <span className="rounded bg-emerald-100 px-1.5 py-px text-[8px] font-bold tracking-normal text-emerald-700 normal-case dark:bg-emerald-950/40">
+                    <span className="bg-success/10 text-success rounded px-1.5 py-px text-[8px] font-bold tracking-normal normal-case">
                       {t("parent_note_badge")}
                     </span>
                   </label>
@@ -705,19 +713,19 @@ export function IngestDrawerClient({
                     disabled={step.kind === "saving"}
                     placeholder={t("parent_note_placeholder")}
                     rows={2}
-                    className="bg-background border-border w-full resize-y rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+                    className="bg-background border-border focus:ring-ring w-full resize-y rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 disabled:opacity-50"
                   />
                 </div>
 
                 {/* OCR draft & refine (start with vision, refine with text) */}
                 {step.kind === "preview" && (
-                  <details className="group rounded-xl border border-slate-500/10 bg-slate-500/5 p-4 transition-all duration-200 open:border-slate-500/20 open:bg-slate-500/10">
-                    <summary className="flex cursor-pointer items-center justify-between text-[10px] font-bold tracking-wider text-slate-700 uppercase outline-none select-none">
+                  <details className="group border-border/60 bg-muted/30 open:border-border open:bg-muted/50 rounded-xl border p-4 transition-all duration-200">
+                    <summary className="text-foreground/80 flex cursor-pointer items-center justify-between text-[10px] font-bold tracking-wider uppercase outline-none select-none">
                       <span className="flex items-center gap-1.5">
                         <FileText className="h-3.5 w-3.5" />
                         {t("raw_text_title")}
                       </span>
-                      <span className="text-[9px] font-normal text-slate-500 group-open:hidden">
+                      <span className="text-muted-foreground text-[9px] font-normal group-open:hidden">
                         {t("raw_text_expand_hint")}
                       </span>
                     </summary>
@@ -728,7 +736,7 @@ export function IngestDrawerClient({
                         placeholder={t("raw_text_placeholder")}
                         maxLength={INGEST_TEXT_MAX_CHARS}
                         rows={6}
-                        className="bg-background border-border w-full resize-y rounded-lg border p-3 font-mono text-xs leading-relaxed outline-none focus:ring-1 focus:ring-slate-500"
+                        className="bg-background border-border focus:ring-ring w-full resize-y rounded-lg border p-3 font-mono text-xs leading-relaxed outline-none focus:ring-1"
                       />
                       <div className="flex justify-end">
                         <Button
@@ -737,7 +745,7 @@ export function IngestDrawerClient({
                           size="sm"
                           disabled={!rawText.trim()}
                           onClick={handleReExtract}
-                          className="h-8 gap-1.5 border border-indigo-500/20 bg-indigo-500/5 text-xs font-medium text-indigo-700 transition-all hover:bg-indigo-500/10 active:scale-[0.98]"
+                          className="border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 h-8 gap-1.5 border text-xs font-medium transition-all active:scale-[0.98]"
                         >
                           {t("re_extract")}
                         </Button>
@@ -835,7 +843,7 @@ export function IngestDrawerClient({
             <button
               type="button"
               onClick={() => setPreviewImageUrl(null)}
-              className="absolute top-4 right-4 z-[70] rounded-full border border-yellow-500/30 bg-black/40 p-2 text-yellow-500/80 backdrop-blur-md transition-all hover:scale-105 hover:border-yellow-500/60 hover:text-yellow-400"
+              className="border-warning/30 text-warning/80 hover:border-warning/60 hover:text-warning absolute top-4 right-4 z-[70] rounded-full border bg-black/40 p-2 backdrop-blur-md transition-all hover:scale-105"
               aria-label={t("close_preview")}
             >
               <X className="h-6 w-6" />
@@ -843,7 +851,7 @@ export function IngestDrawerClient({
 
             {/* Main image container */}
             <div
-              className="animate-in zoom-in-95 relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-lg border border-yellow-500/10 shadow-2xl duration-300"
+              className="animate-in zoom-in-95 border-warning/10 relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-lg border shadow-2xl duration-300"
               onClick={(e) => e.stopPropagation()} // prevent closing when clicking the image
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -889,15 +897,17 @@ function SummaryView({
         </span>
       </div>
       {lowConfidenceCount > 0 && (
-        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>{t("low_confidence_hint", { count: lowConfidenceCount })}</span>
-        </div>
+        <Alert variant="warning" className="rounded-md px-3 py-2 text-xs">
+          <AlertTriangle className="size-3.5" />
+          <AlertTitle className="font-normal">
+            {t("low_confidence_hint", { count: lowConfidenceCount })}
+          </AlertTitle>
+        </Alert>
       )}
       {warnings.length > 0 && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <Alert variant="warning" className="rounded-md px-3 py-2 text-xs">
           {warnings.join("; ")}
-        </div>
+        </Alert>
       )}
     </div>
   );
@@ -938,7 +948,7 @@ function EditView({
                   <li key={index} className="bg-muted/30 flex items-center gap-1 rounded px-2 py-1">
                     {item.confidence === "low" && (
                       <AlertTriangle
-                        className="h-3.5 w-3.5 shrink-0 text-amber-600"
+                        className="text-warning h-3.5 w-3.5 shrink-0"
                         aria-label={t("low_confidence_item")}
                       />
                     )}

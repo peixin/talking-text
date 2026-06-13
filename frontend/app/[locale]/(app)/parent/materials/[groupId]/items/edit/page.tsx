@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import { createApi } from "@/lib/api";
 import { GroupItemsClient } from "../GroupItemsClient";
@@ -12,6 +13,7 @@ interface Props {
 
 export default async function GroupItemsEditPage({ params }: Props) {
   const { groupId } = await params;
+  const t = await getTranslations("Materials");
   const api = await createApi();
 
   // Fetch details and all groups in parallel
@@ -24,7 +26,7 @@ export default async function GroupItemsEditPage({ params }: Props) {
           href={`/parent/materials/${groupId}/items`}
           className="text-muted-foreground hover:text-primary text-sm transition"
         >
-          ← 返回词句列表
+          ← {t("back_to_items_list")}
         </Link>
       </header>
 
@@ -33,7 +35,7 @@ export default async function GroupItemsEditPage({ params }: Props) {
         groupName={group.name}
         groupKind={group.kind}
         allGroups={allGroups}
-        subtitle="专为该素材定制的详细词表与核心句式管理器。所有的单词、短语和句型修改在这里统一保存。"
+        subtitle={t("items_edit_subtitle")}
       />
 
       <GroupItemsClient group={group} readOnly={false} />

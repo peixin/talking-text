@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 
+import { EmptyState } from "@/components/EmptyState";
 import { Link } from "@/i18n/routing";
 import { createApi } from "@/lib/api";
 import type { GroupKind, GroupOut, SessionOut } from "@/lib/backend";
@@ -21,22 +22,19 @@ const KIND_EMOJI: Record<GroupKind, string> = {
 
 const FREE_EMOJI = "✨";
 
-function fmtRelative(iso: string, locale: string): string {
+type RelativeTranslator = (key: string, values?: Record<string, number>) => string;
+
+function fmtRelative(iso: string, t: RelativeTranslator): string {
   const now = Date.now();
   const then = new Date(iso).getTime();
   const diffMs = now - then;
   const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  const tag = locale.toLowerCase().startsWith("zh") ? "zh" : "en";
 
-  if (days <= 0) return tag === "zh" ? "今天" : "today";
-  if (days === 1) return tag === "zh" ? "昨天" : "yesterday";
-  if (days < 7) return tag === "zh" ? `${days} 天前` : `${days} days ago`;
-  if (days < 30) {
-    const w = Math.floor(days / 7);
-    return tag === "zh" ? `${w} 周前` : `${w} ${w === 1 ? "week" : "weeks"} ago`;
-  }
-  const m = Math.floor(days / 30);
-  return tag === "zh" ? `${m} 月前` : `${m} ${m === 1 ? "month" : "months"} ago`;
+  if (days <= 0) return t("relative_today");
+  if (days === 1) return t("relative_yesterday");
+  if (days < 7) return t("relative_days_ago", { count: days });
+  if (days < 30) return t("relative_weeks_ago", { count: Math.floor(days / 7) });
+  return t("relative_months_ago", { count: Math.floor(days / 30) });
 }
 
 export default async function ChatHomePage() {
@@ -81,17 +79,21 @@ export default async function ChatHomePage() {
       </header>
 
       {sessions.length === 0 ? (
-        <div className="border-border rounded-lg border border-dashed p-8 text-center">
-          <p className="text-muted-foreground mb-6 text-sm">{t("no_sessions_yet")}</p>
-          <form action={startNewPractice}>
-            <button
-              type="submit"
-              className="bg-primary text-primary-foreground rounded-md px-5 py-2 text-sm transition hover:opacity-90"
-            >
-              {t("start_first_practice")}
-            </button>
-          </form>
-        </div>
+        <EmptyState
+          className="rounded-lg p-8"
+          action={
+            <form action={startNewPractice}>
+              <button
+                type="submit"
+                className="bg-primary text-primary-foreground rounded-md px-5 py-2 text-sm transition hover:opacity-90"
+              >
+                {t("start_first_practice")}
+              </button>
+            </form>
+          }
+        >
+          {t("no_sessions_yet")}
+        </EmptyState>
       ) : (
         <>
           <ul className="space-y-2">
@@ -100,7 +102,7 @@ export default async function ChatHomePage() {
                 key={s.id}
                 session={s}
                 group={s.group_id ? (groupById.get(s.group_id) ?? null) : null}
-                relative={fmtRelative(s.updated_at, locale)}
+                relative={fmtRelative(s.updated_at, t)}
                 fallback_title={t("session_title_pending")}
                 free_practice_label={t("scope_free_practice_short")}
               />

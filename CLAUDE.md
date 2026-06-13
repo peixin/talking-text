@@ -267,7 +267,12 @@ just db-history
 - **Components:** PascalCase filenames; Server Component has no suffix; Client Component has `Client` suffix (e.g. `ChatClient.tsx`)
 - **Pages** follow Next.js conventions (`[locale]/page.tsx`, `actions.ts`, `proxy.ts`)
 - **No `useEffect` / `useState` in Server Components**
-- **Styling:** Tailwind v4 utility classes; use shadcn for complex components
+- **Styling:** Tailwind v4 utility classes; use shadcn for complex components. Full component & style contract: [`docs/frontend-ui.md`](docs/frontend-ui.md)
+- **Design tokens only — no raw palette classes.** Never use raw Tailwind palette colors (`bg-indigo-600`, `text-slate-500`, `border-amber-300`, …) in app code. Use semantic tokens exclusively: `primary` (brand/interactive), `muted` / `muted-foreground` / `border` / `foreground` (neutrals), `destructive` (errors/danger), `success` / `warning` (status). Tints via opacity modifiers (`bg-primary/10`, `border-success/30`), never via palette shades. New business-semantic colors are added as tokens in `globals.css` `@theme`, not inline
+- **No `dark:` variants** — V1 has no dark mode; never write `dark:` classes outside shadcn-managed `components/ui/`
+- **Component sourcing — library first, hand-write last.** Any standard UI pattern (button, dialog, popover, dropdown/select, tabs, tooltip, badge, switch, accordion, toast, …) must come from shadcn/ui. If the component isn't in `components/ui/` yet, add it via `pnpm dlx shadcn@latest add <name>` — never hand-write a parallel version of something the library already has. Restyling is done with tokens/className on the library component
+- **Hand-written components are the exception, not the default** — reserved for product-specific UI with no library equivalent (record button, chat message bubble, tag-tree row). They are built from semantic tokens + existing primitives, and the moment a second page needs the same pattern, it is extracted into `components/` and reused — no copy-paste forks
+- **Buttons specifically:** anything that *looks like* a button uses `<Button>` / `buttonVariants()`. A raw `<button>` tag is acceptable only when the element is a different visual species that merely needs to be clickable for HTML semantics/a11y (chips, tree rows, the record button) — wrapping those in `<Button>` would mean overriding all of its styles, which defeats the purpose. Visual-language consistency is the goal, not tag uniformity
 - `components/ui/` is shadcn-managed — only change styles, never the structural logic
 
 ### Commit format (Conventional Commits, enforced by commitlint)

@@ -3,6 +3,9 @@ import { BookOpen, FolderInput, MessageSquare, Sparkles, Users } from "lucide-re
 
 import { createApi } from "@/lib/api";
 import { Link } from "@/i18n/routing";
+import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/EmptyState";
+import { Panel } from "@/components/Panel";
 import type { WeeklyReportOut } from "@/lib/backend";
 
 export default async function ParentDashboard() {
@@ -27,50 +30,54 @@ export default async function ParentDashboard() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold">{t("welcome", { name: account.name })}</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          字有天地 · 言出成界 — 在孩子已学的范围里陪他开口。
-        </p>
+        <p className="text-muted-foreground mt-1 text-sm">{t("tagline")}</p>
       </div>
 
       {/* Active learner */}
-      <div className="border-border bg-card mb-6 flex items-center justify-between rounded-xl border p-4">
+      <Panel className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="bg-primary/10 text-primary flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold">
             {(activeLearner?.name ?? "?").slice(0, 1)}
           </span>
           <div>
-            <div className="text-muted-foreground text-[11px]">当前学习者</div>
-            <div className="text-sm font-medium">{activeLearner?.name ?? "未选择"}</div>
+            <div className="text-muted-foreground text-[11px]">{t("active_learner_label")}</div>
+            <div className="text-sm font-medium">
+              {activeLearner?.name ?? t("no_learner_selected")}
+            </div>
           </div>
         </div>
         <Link href="/parent/learners" className="text-primary text-sm hover:underline">
-          {learners.length > 0 ? "切换 / 管理" : t("go_add")}
+          {learners.length > 0 ? t("switch_manage") : t("go_add")}
         </Link>
-      </div>
+      </Panel>
 
       {/* Learning flow — capture → organize → chat */}
-      <h2 className="mb-3 text-sm font-semibold">学习流程</h2>
+      <h2 className="mb-3 text-sm font-semibold">{t("learning_flow")}</h2>
       <div className="mb-8 grid gap-4 sm:grid-cols-3">
         <FlowCard
           href="/parent/materials"
-          icon={<BookOpen className="h-5 w-5 text-indigo-500" />}
-          title="录入教材"
-          desc="拍照 / 粘贴，AI 提取单词与句型"
-          badge={`${materialsCount} 本教材`}
+          icon={<BookOpen className="text-primary h-5 w-5" />}
+          title={t("flow_ingest_title")}
+          desc={t("flow_ingest_desc")}
+          badge={t("flow_ingest_badge", { count: materialsCount })}
         />
         <FlowCard
           href="/parent/organize"
-          icon={<FolderInput className="h-5 w-5 text-amber-500" />}
-          title="整理素材"
-          desc="把采集的词归位成教材标签树，AI 已预判"
-          badge={pendingBags > 0 ? `${pendingBags} 袋待整理` : "已清空"}
+          icon={<FolderInput className="text-warning h-5 w-5" />}
+          title={t("flow_organize_title")}
+          desc={t("flow_organize_desc")}
+          badge={
+            pendingBags > 0
+              ? t("flow_organize_badge", { count: pendingBags })
+              : t("flow_organize_badge_empty")
+          }
           highlight={pendingBags > 0}
         />
         <FlowCard
           href="/chat"
-          icon={<MessageSquare className="h-5 w-5 text-emerald-500" />}
-          title="开始对话"
-          desc="在已学范围里陪孩子开口说"
+          icon={<MessageSquare className="text-success h-5 w-5" />}
+          title={t("flow_chat_title")}
+          desc={t("flow_chat_desc")}
         />
       </div>
 
@@ -86,15 +93,18 @@ export default async function ParentDashboard() {
         </div>
 
         {learners.length === 0 ? (
-          <div className="border-border rounded-xl border border-dashed p-6 text-center">
-            <p className="text-muted-foreground mb-4 text-sm">{t("no_children")}</p>
-            <Link
-              href="/parent/learners"
-              className="bg-primary text-primary-foreground rounded px-4 py-2 text-sm transition"
-            >
-              {t("go_add")}
-            </Link>
-          </div>
+          <EmptyState
+            action={
+              <Link
+                href="/parent/learners"
+                className="bg-primary text-primary-foreground rounded px-4 py-2 text-sm transition"
+              >
+                {t("go_add")}
+              </Link>
+            }
+          >
+            {t("no_children")}
+          </EmptyState>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {learners.map((learner) => (
@@ -110,9 +120,9 @@ export default async function ParentDashboard() {
                   </div>
                 </div>
                 {account.last_active_learner_id === learner.id && (
-                  <span className="bg-primary/10 text-primary rounded px-2 py-1 text-xs font-medium">
+                  <Badge className="bg-primary/10 text-primary h-auto rounded py-1">
                     {t("last_used")}
-                  </span>
+                  </Badge>
                 )}
               </Link>
             ))}
@@ -134,9 +144,17 @@ export default async function ParentDashboard() {
 }
 
 const TAG_STYLES: Record<string, string> = {
-  stretch: "border-amber-300 bg-amber-50 text-amber-800",
-  curriculum: "border-border bg-muted/50 text-foreground",
-  wild: "border-indigo-200 bg-indigo-50 text-indigo-800",
+  stretch: "border-warning/50 bg-warning/15 text-warning",
+  curriculum: "border-border bg-muted text-foreground",
+  wild: "border-primary/30 bg-primary/10 text-primary",
+};
+
+// Legend dots need saturated fills — the pale chip backgrounds are
+// indistinguishable at 2px.
+const TAG_DOT_STYLES: Record<string, string> = {
+  stretch: "bg-warning",
+  curriculum: "bg-muted-foreground",
+  wild: "bg-primary",
 };
 
 async function WeeklyReportCard({
@@ -151,7 +169,7 @@ async function WeeklyReportCard({
   const present = tags.filter((tag) => report.new_words.some((w) => w.tag === tag));
 
   return (
-    <div className="border-border bg-card rounded-xl border p-4">
+    <Panel>
       <p className="text-muted-foreground mb-3 text-xs">
         {t("report_desc", { name: learnerName })}
       </p>
@@ -174,7 +192,9 @@ async function WeeklyReportCard({
             <div className="text-muted-foreground mt-3 flex gap-3 text-[11px]">
               {present.map((tag) => (
                 <span key={tag} className="inline-flex items-center gap-1">
-                  <span className={`inline-block h-2 w-2 rounded-full border ${TAG_STYLES[tag]}`} />
+                  <span
+                    className={`inline-block h-2.5 w-2.5 rounded-full ${TAG_DOT_STYLES[tag]}`}
+                  />
                   {t(`report_tag_${tag}`)}
                 </span>
               ))}
@@ -182,7 +202,7 @@ async function WeeklyReportCard({
           )}
         </>
       )}
-    </div>
+    </Panel>
   );
 }
 
@@ -207,21 +227,21 @@ function FlowCard({
       className={
         "group flex flex-col rounded-xl border p-4 transition " +
         (highlight
-          ? "border-amber-300 bg-amber-50/50 hover:border-amber-400"
+          ? "border-warning/50 bg-warning/10 hover:border-warning"
           : "border-border hover:border-primary")
       }
     >
       <div className="mb-2 flex items-center justify-between">
         {icon}
         {badge && (
-          <span
+          <Badge
             className={
-              "rounded-full px-2 py-0.5 text-[10px] font-medium " +
-              (highlight ? "bg-amber-200 text-amber-800" : "bg-muted text-muted-foreground")
+              "h-auto rounded-full text-[10px] " +
+              (highlight ? "bg-warning/20 text-warning" : "bg-muted text-muted-foreground")
             }
           >
             {badge}
-          </span>
+          </Badge>
         )}
       </div>
       <div className="text-sm font-semibold">{title}</div>

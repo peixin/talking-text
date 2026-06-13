@@ -7,6 +7,7 @@ import {
   Check,
   ChevronDown,
   Keyboard,
+  Loader2,
   Menu,
   Mic,
   Pencil,
@@ -663,7 +664,7 @@ export function ChatClient({
                 <span className="text-muted-foreground/70 shrink-0">{t("scope_incl_sub")}</span>
               )}
               {currentTooMany && (
-                <span className="flex shrink-0 items-center gap-0.5 font-medium text-amber-600 dark:text-amber-500">
+                <span className="text-warning flex shrink-0 items-center gap-0.5 font-medium">
                   <AlertTriangle className="h-3 w-3" />
                   {t("scope_too_many", { cap: SCOPE_SOFT_CAP })}
                 </span>
@@ -697,21 +698,19 @@ export function ChatClient({
 
         {/* Soft-limit banner */}
         {sessionStatus === "soft_limit" && !softLimitDismissed && (
-          <div className="flex shrink-0 items-center gap-3 border-t border-amber-200 bg-amber-50 px-4 py-2.5 dark:border-amber-900 dark:bg-amber-950">
-            <span className="flex-1 text-sm text-amber-800 dark:text-amber-200">
-              {t("session_soft_limit_text")}
-            </span>
+          <div className="border-warning/40 bg-warning/10 flex shrink-0 items-center gap-3 border-t px-4 py-2.5">
+            <span className="text-warning flex-1 text-sm">{t("session_soft_limit_text")}</span>
             <button
               type="button"
               onClick={() => void handleNewSession()}
-              className="shrink-0 rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white transition hover:bg-amber-700"
+              className="bg-warning hover:bg-warning/90 shrink-0 rounded-md px-3 py-1 text-xs font-medium text-white transition"
             >
               {t("new_session")}
             </button>
             <button
               type="button"
               onClick={() => setSoftLimitDismissed(true)}
-              className="shrink-0 text-amber-600 transition hover:text-amber-800 dark:text-amber-400"
+              className="text-warning hover:text-warning/80 shrink-0 transition"
               aria-label={t("session_soft_limit_dismiss")}
             >
               <X className="h-4 w-4" />
@@ -799,7 +798,7 @@ export function ChatClient({
                       aria-label={t("send")}
                     >
                       {recordMode === "uploading" ? (
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Send className="h-4 w-4" />
                       )}

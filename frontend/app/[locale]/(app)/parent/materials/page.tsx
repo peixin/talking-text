@@ -23,9 +23,9 @@ export default async function MaterialsPage() {
         </Link>
         <Link
           href="/parent/organize"
-          className="ml-auto text-sm text-indigo-600 transition hover:text-indigo-700"
+          className="text-primary hover:text-primary/80 ml-auto text-sm transition"
         >
-          整理素材 →
+          {t("organize_link")}
         </Link>
       </header>
       <h1 className="mb-1 text-xl font-medium">{t("title")}</h1>

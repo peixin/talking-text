@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
 import { type LoginState, login } from "./actions";
@@ -24,9 +25,9 @@ export default function LoginFormClient() {
       <h1 className="mb-2 text-2xl font-semibold">{t("login_action")}</h1>
 
       {errorMessage && (
-        <p className="text-destructive bg-destructive/10 rounded-md px-3 py-2 text-sm">
+        <Alert variant="destructive" className="rounded-md border-transparent px-3">
           {errorMessage}
-        </p>
+        </Alert>
       )}
 
       <input

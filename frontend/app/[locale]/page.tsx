@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import { backend } from "@/lib/backend";
+import { buttonVariants } from "@/components/ui/button";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
 
 export const dynamic = "force-dynamic";
@@ -36,16 +37,10 @@ export default async function HomePage() {
         </p>
 
         <div className="flex flex-wrap justify-center gap-3">
-          <Link
-            href="/login"
-            className="bg-primary text-primary-foreground inline-flex items-center justify-center rounded-lg px-6 py-2.5 text-sm font-medium transition hover:opacity-85"
-          >
+          <Link href="/login" className={buttonVariants({ size: "lg" })}>
             {tHome("login")}
           </Link>
-          <Link
-            href="/register"
-            className="border-primary text-primary hover:bg-primary/5 inline-flex items-center justify-center rounded-lg border px-6 py-2.5 text-sm font-medium transition"
-          >
+          <Link href="/register" className={buttonVariants({ variant: "outline", size: "lg" })}>
             {tHome("register")}
           </Link>
         </div>
@@ -54,7 +49,7 @@ export default async function HomePage() {
       <footer className="text-muted-foreground flex items-center justify-center gap-2 pt-8 text-xs">
         <span
           className={`inline-block h-1.5 w-1.5 rounded-full ${
-            health === "ok" ? "bg-green-600" : "bg-red-500"
+            health === "ok" ? "bg-success" : "bg-destructive"
           }`}
         />
         <span>backend: {health}</span>

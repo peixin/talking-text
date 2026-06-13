@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   FolderInput,
   Loader2,
@@ -15,6 +16,8 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { EmptyState } from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
 import type { GroupOut, InboxBag, InboxCandidate, InboxOut } from "@/lib/backend";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -44,6 +47,7 @@ interface Props {
 }
 
 export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }: Props) {
+  const t = useTranslations("Organize");
   const [bags, setBags] = useState<InboxBag[]>(initialInbox.capture_bags);
   const [candidates, setCandidates] = useState<InboxCandidate[]>(initialInbox.practice_candidates);
   const [groups, setGroups] = useState<GroupOut[]>(initialGroups);
@@ -101,8 +105,9 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
     return Array.from(new Set(currentGroupNodes.map((g) => g.name)));
   }
 
-  // TODO: confirm whether this helper is still needed once the "归位后自动同步
-  // level_title 到已有节点" feature is built. Delete if still unused at that point.
+  // TODO: confirm whether this helper is still needed once the "auto-sync
+  // level_title to existing nodes after filing" feature is built. Delete if
+  // still unused at that point.
   function getMatchedGroupNode(bagId: string, idx: number): GroupOut | null {
     const currentPath = paths[bagId] || [];
     let currentGroupNodes = groups.filter(
@@ -146,7 +151,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                     ? res.level_titles[i]
                     : i === 0 && bag.level_title
                       ? bag.level_title
-                      : LEVEL_PRESETS[i] || `层级 ${i + 1}`,
+                      : LEVEL_PRESETS[i] || t("level_fallback", { n: i + 1 }),
               }))
             : [
                 {
@@ -197,7 +202,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
     const cleanParts = partsObj.map((x) => x.name.trim()).filter(Boolean);
     const levelTitles = partsObj.map((x) => x.level_title.trim()).filter(Boolean);
     if (cleanParts.length === 0) {
-      setError("请先填写归位路径");
+      setError(t("error_path_required"));
       return;
     }
     setBusy(bag.group_id);
@@ -260,7 +265,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
   }
 
   async function handleDiscardBag(groupId: string) {
-    if (!confirm("确定要丢弃这整袋录入的素材吗？丢弃后不可恢复。")) return;
+    if (!confirm(t("discard_confirm"))) return;
     setBusy(groupId);
     setError(null);
     const res = await deleteGroup(groupId);
@@ -293,7 +298,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
   async function fileAllCandidates() {
     const parts = splitPath(candPath);
     if (parts.length === 0) {
-      setError("请先填写归位路径");
+      setError(t("error_path_required"));
       return;
     }
     if (candidates.length === 0) return;
@@ -317,11 +322,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
   }
 
   if (initialInbox.learner_id === null) {
-    return (
-      <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
-        请先在顶部选择一个正在学习的 learner，再来整理素材。
-      </p>
-    );
+    return <EmptyState className="p-8">{t("no_learner_hint")}</EmptyState>;
   }
 
   const nothingLeft = bags.length === 0 && candidates.length === 0;
@@ -329,15 +330,15 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
   return (
     <div className="space-y-4">
       {error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-          操作失败：{error}
-        </div>
+        <Alert variant="destructive" className="px-3">
+          {t("action_failed", { error })}
+        </Alert>
       )}
 
       {existingPaths.length > 0 && (
         <details className="border-border bg-card/40 rounded-lg border px-3 py-2 text-xs">
           <summary className="text-muted-foreground cursor-pointer select-none">
-            现有教材结构（{existingPaths.length} 条路径，可照抄标签名复用）
+            {t("existing_structure", { count: existingPaths.length })}
           </summary>
           <ul className="text-muted-foreground mt-2 space-y-0.5">
             {existingPaths.map((p) => (
@@ -347,11 +348,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
         </details>
       )}
 
-      {nothingLeft && (
-        <p className="text-muted-foreground rounded-xl border border-dashed p-10 text-center text-sm">
-          收件箱空了 —— 所有素材都已归位 🎉
-        </p>
-      )}
+      {nothingLeft && <EmptyState className="p-10">{t("inbox_empty")}</EmptyState>}
 
       {/* ── Capture bags — one card per ingest, filed as a whole ─────────── */}
       {bags.map((bag) => {
@@ -365,9 +362,11 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
           >
             <div className="flex items-center justify-between gap-2">
               <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-                <FolderInput className="h-4 w-4 text-indigo-500" />
+                <FolderInput className="text-primary h-4 w-4" />
                 {bag.name}
-                <span className="text-muted-foreground font-normal">· {bag.items.length} 词</span>
+                <span className="text-muted-foreground font-normal">
+                  · {t("word_count", { count: bag.items.length })}
+                </span>
               </h3>
             </div>
 
@@ -389,14 +388,14 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
 
             <div className="space-y-3">
               <label className="text-muted-foreground flex items-center gap-1 pl-1 text-[11px] font-medium">
-                <Wand2 className="h-3 w-3 text-indigo-500" />
-                确定归位层级结构（AI 预判，点击胶囊可直接修改，支持无限增删层级）
+                <Wand2 className="text-primary h-3 w-3" />
+                {t("path_editor_label")}
               </label>
 
-              {/* Multi-segment Pill Editor (Point #2: 胶囊化层级可视化编辑器) */}
+              {/* Multi-segment pill editor — capsule-style visual hierarchy editing */}
               <div
                 className={cn(
-                  "flex flex-wrap items-center gap-x-2 gap-y-3 rounded-xl border border-indigo-500/10 bg-indigo-500/5 p-4",
+                  "border-primary/10 bg-primary/5 flex flex-wrap items-center gap-x-2 gap-y-3 rounded-xl border p-4",
                   isSuggesting && "animate-pulse",
                 )}
               >
@@ -409,7 +408,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                     {idx > 0 && (
                       <span className="text-muted-foreground px-0.5 font-semibold">›</span>
                     )}
-                    <div className="relative flex min-w-[150px] flex-col rounded-lg border border-slate-200 bg-white p-2 shadow-sm focus-within:ring-1 focus-within:ring-indigo-500">
+                    <div className="border-border bg-card focus-within:ring-ring relative flex min-w-[150px] flex-col rounded-lg border p-2 shadow-sm focus-within:ring-1">
                       {/* Level Title Segment Input */}
                       <div className="group/level relative mb-1.5">
                         <Popover
@@ -421,8 +420,9 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                             setActiveLevelTitlePopover(open ? { bagId: bag.group_id, idx } : null)
                           }
                         >
-                          {/* div 作为 trigger/anchor；input 用 stopPropagation 阻断 toggle，
-                              onFocus 手动控制打开状态，避免点击闪烁 */}
+                          {/* The div acts as trigger/anchor; the input uses stopPropagation
+                              to block the toggle, and onFocus controls the open state manually
+                              to avoid click flicker. */}
                           <PopoverTrigger render={<div className="w-full" />}>
                             <input
                               type="text"
@@ -442,16 +442,16 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                               onClick={(e) => e.stopPropagation()}
                               onPointerDown={(e) => e.stopPropagation()}
                               disabled={isBusy}
-                              placeholder="层级属性"
-                              className="w-full rounded border border-indigo-100 bg-indigo-50/50 py-0.5 pr-6 pl-1.5 text-[9px] font-bold tracking-wide text-indigo-700 uppercase transition duration-150 outline-none select-all hover:border-indigo-200 focus:border-indigo-300 focus:bg-white focus:ring-0"
+                              placeholder={t("level_title_placeholder")}
+                              className="border-primary/20 bg-primary/5 text-primary hover:border-primary/30 focus:border-primary/30 focus:bg-background w-full rounded border py-0.5 pr-6 pl-1.5 text-[9px] font-bold tracking-wide uppercase transition duration-150 outline-none select-all focus:ring-0"
                             />
                           </PopoverTrigger>
                           <PopoverContent
                             align="start"
-                            className="z-50 max-h-60 w-40 overflow-y-auto rounded-xl border border-slate-100 bg-white p-1 shadow-xl focus:outline-none"
+                            className="border-border bg-popover z-50 max-h-60 w-40 overflow-y-auto rounded-xl border p-1 shadow-xl focus:outline-none"
                           >
-                            <div className="mb-1 border-b px-2 py-1 text-[9px] font-bold tracking-wider text-slate-400 uppercase">
-                              常用层级属性
+                            <div className="text-muted-foreground/70 mb-1 border-b px-2 py-1 text-[9px] font-bold tracking-wider uppercase">
+                              {t("level_presets_header")}
                             </div>
                             <div className="space-y-0.5">
                               {LEVEL_PRESETS.filter((opt) =>
@@ -468,7 +468,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                                     });
                                     setActiveLevelTitlePopover(null);
                                   }}
-                                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition hover:bg-indigo-50 hover:text-indigo-600"
+                                  className="hover:bg-primary/5 hover:text-primary flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition"
                                 >
                                   {opt}
                                 </button>
@@ -476,7 +476,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                             </div>
                           </PopoverContent>
                         </Popover>
-                        <Edit3 className="pointer-events-none absolute top-1/2 right-1 h-2 w-2 -translate-y-1/2 text-indigo-400 opacity-60 transition group-focus-within/level:text-indigo-600" />
+                        <Edit3 className="text-primary/60 group-focus-within/level:text-primary pointer-events-none absolute top-1/2 right-1 h-2 w-2 -translate-y-1/2 opacity-60 transition" />
                       </div>
 
                       {/* Tag Name Segment Input with Popover Autocomplete */}
@@ -487,7 +487,8 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                             setActivePopover(open ? { bagId: bag.group_id, idx } : null)
                           }
                         >
-                          {/* div 作为 trigger/anchor；input 用 stopPropagation 阻断 toggle */}
+                          {/* The div acts as trigger/anchor; the input uses stopPropagation
+                              to block the toggle. */}
                           <PopoverTrigger render={<div className="w-full" />}>
                             <input
                               type="text"
@@ -505,16 +506,18 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                               onClick={(e) => e.stopPropagation()}
                               onPointerDown={(e) => e.stopPropagation()}
                               disabled={isBusy}
-                              placeholder={isSuggesting ? "预判中…" : "无"}
-                              className="text-foreground w-full rounded border border-slate-100 bg-slate-50/30 py-0.5 pr-8 pl-1.5 text-xs font-semibold transition outline-none hover:border-slate-200 focus:border-indigo-300 focus:bg-white focus:ring-0"
+                              placeholder={
+                                isSuggesting ? t("suggesting_placeholder") : t("none_placeholder")
+                              }
+                              className="text-foreground border-border bg-muted/30 hover:border-input focus:border-primary/30 focus:bg-background w-full rounded border py-0.5 pr-8 pl-1.5 text-xs font-semibold transition outline-none focus:ring-0"
                             />
                           </PopoverTrigger>
                           <PopoverContent
                             align="start"
-                            className="z-50 max-h-60 w-64 overflow-y-auto rounded-xl border border-slate-100 bg-white p-1 shadow-xl focus:outline-none"
+                            className="border-border bg-popover z-50 max-h-60 w-64 overflow-y-auto rounded-xl border p-1 shadow-xl focus:outline-none"
                           >
-                            <div className="mb-1 border-b px-2.5 py-1 text-[9px] font-bold tracking-wider text-slate-400 uppercase">
-                              选择已有目录 (可点击匹配)
+                            <div className="text-muted-foreground/70 mb-1 border-b px-2.5 py-1 text-[9px] font-bold tracking-wider uppercase">
+                              {t("autocomplete_header")}
                             </div>
                             {(() => {
                               // Cache result to avoid traversing the group tree twice.
@@ -523,7 +526,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                               );
                               return opts.length === 0 ? (
                                 <div className="text-muted-foreground px-3 py-2.5 text-xs italic">
-                                  无匹配的已有同级层级
+                                  {t("autocomplete_empty")}
                                 </div>
                               ) : (
                                 <div className="space-y-0.5">
@@ -539,11 +542,11 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                                         });
                                         setActivePopover(null);
                                       }}
-                                      className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition hover:bg-slate-50 hover:text-indigo-600"
+                                      className="hover:bg-muted/50 hover:text-primary flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition"
                                     >
                                       <span>{opt}</span>
-                                      <span className="py-0.2 shrink-0 rounded border border-emerald-100 bg-emerald-50 px-1 text-[9px] font-semibold text-emerald-600">
-                                        已存
+                                      <span className="py-0.2 border-success/30 bg-success/10 text-success shrink-0 rounded border px-1 text-[9px] font-semibold">
+                                        {t("existing_badge")}
                                       </span>
                                     </button>
                                   ))}
@@ -552,14 +555,14 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                             })()}
                           </PopoverContent>
                         </Popover>
-                        <Edit3 className="pointer-events-none absolute top-1/2 right-6 h-2.5 w-2.5 -translate-y-1/2 text-slate-400 transition group-focus-within/value-title:text-indigo-500" />
+                        <Edit3 className="text-muted-foreground/70 group-focus-within/value-title:text-primary pointer-events-none absolute top-1/2 right-6 h-2.5 w-2.5 -translate-y-1/2 transition" />
                         <div className="ml-1 flex shrink-0 items-center gap-0.5">
                           {idx > 0 && !isBusy && (
                             <button
                               type="button"
                               onClick={() => moveLevel(bag.group_id, idx, "left")}
-                              className="text-muted-foreground/40 p-0.5 transition hover:text-indigo-600"
-                              title="左移"
+                              className="text-muted-foreground/40 hover:text-primary p-0.5 transition"
+                              title={t("move_left")}
                             >
                               <ArrowLeft className="h-3.5 w-3.5" />
                             </button>
@@ -568,8 +571,8 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                             <button
                               type="button"
                               onClick={() => moveLevel(bag.group_id, idx, "right")}
-                              className="text-muted-foreground/40 p-0.5 transition hover:text-indigo-600"
-                              title="右移"
+                              className="text-muted-foreground/40 hover:text-primary p-0.5 transition"
+                              title={t("move_right")}
                             >
                               <ArrowRight className="h-3.5 w-3.5" />
                             </button>
@@ -586,7 +589,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                                 }));
                               }}
                               className="text-muted-foreground/40 hover:text-destructive shrink-0 p-0.5 transition"
-                              title="删除层级"
+                              title={t("remove_level")}
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
@@ -610,16 +613,17 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                             ...current,
                             {
                               name: "",
-                              level_title: LEVEL_PRESETS[nextIdx] || `层级 ${nextIdx + 1}`,
+                              level_title:
+                                LEVEL_PRESETS[nextIdx] || t("level_fallback", { n: nextIdx + 1 }),
                             },
                           ],
                         };
                       });
                     }}
-                    className="flex h-[46px] items-center justify-center rounded-lg border border-dashed border-indigo-200 px-3 text-xs font-semibold text-indigo-600 shadow-sm transition hover:bg-indigo-50/50"
+                    className="border-primary/20 text-primary hover:bg-primary/5 flex h-[46px] items-center justify-center rounded-lg border border-dashed px-3 text-xs font-semibold shadow-sm transition"
                   >
                     <Plus className="mr-1 h-3.5 w-3.5" />
-                    添加层级
+                    {t("add_level")}
                   </button>
                 )}
               </div>
@@ -630,30 +634,30 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                   type="button"
                   onClick={() => doFileBag(bag)}
                   disabled={isBusy || isSuggesting || extractingBags[bag.group_id]}
-                  className="w-full shrink-0 bg-indigo-600 text-white hover:bg-indigo-700 sm:w-auto"
+                  className="w-full shrink-0 sm:w-auto"
                 >
                   {isBusy ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <FolderInput className="h-4 w-4" />
                   )}
-                  整袋归位
+                  {t("file_bag")}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => handleDiscardBag(bag.group_id)}
                   disabled={isBusy || isSuggesting || extractingBags[bag.group_id]}
-                  className="w-full shrink-0 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 sm:w-auto"
+                  className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive w-full shrink-0 sm:w-auto"
                 >
-                  丢弃整袋
+                  {t("discard_bag")}
                 </Button>
               </div>
 
               {/* Tap to reuse an existing path — avoids typing on mobile. */}
               {existingPaths.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-muted-foreground text-[11px]">复用现有教材：</span>
+                  <span className="text-muted-foreground text-[11px]">{t("reuse_existing")}</span>
                   {existingPaths.slice(0, 6).map((p) => (
                     <button
                       key={p}
@@ -663,11 +667,11 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                           ...prev,
                           [bag.group_id]: p.split(" › ").map((val, i) => ({
                             name: val,
-                            level_title: LEVEL_PRESETS[i] || `层级 ${i + 1}`,
+                            level_title: LEVEL_PRESETS[i] || t("level_fallback", { n: i + 1 }),
                           })),
                         }))
                       }
-                      className="border-border bg-background text-muted-foreground rounded-full border px-2.5 py-1 text-[11px] transition hover:border-indigo-300 hover:text-indigo-600"
+                      className="border-border bg-background text-muted-foreground hover:border-primary/30 hover:text-primary rounded-full border px-2.5 py-1 text-[11px] transition"
                     >
                       {p}
                     </button>
@@ -675,15 +679,15 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                 </div>
               )}
 
-              {/* 📝 底稿微调与重新分析 (Start with Vision, Refine with Text) */}
-              <details className="group rounded-lg border border-slate-500/10 bg-slate-500/5 p-3 transition-all duration-200 open:border-slate-500/15 open:bg-slate-500/10">
-                <summary className="flex cursor-pointer items-center justify-between text-[10px] font-bold tracking-wider text-slate-700 uppercase outline-none select-none">
+              {/* Draft tweak & re-analysis (start with vision, refine with text) */}
+              <details className="group border-border bg-muted/30 open:border-input open:bg-muted/50 rounded-lg border p-3 transition-all duration-200">
+                <summary className="text-foreground/80 flex cursor-pointer items-center justify-between text-[10px] font-bold tracking-wider uppercase outline-none select-none">
                   <span className="flex items-center gap-1.5">
                     <FileText className="h-3.5 w-3.5" />
-                    原始底稿与二次微调 (AI OCR Draft)
+                    {t("raw_draft_title")}
                   </span>
-                  <span className="text-[9px] font-normal text-slate-500 group-open:hidden">
-                    点击展开编辑
+                  <span className="text-muted-foreground text-[9px] font-normal group-open:hidden">
+                    {t("raw_draft_expand_hint")}
                   </span>
                 </summary>
                 <div className="mt-2 space-y-2">
@@ -693,9 +697,9 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                       const val = e.target.value;
                       setBagRawTexts((prev) => ({ ...prev, [bag.group_id]: val }));
                     }}
-                    placeholder="在此编辑采集的原始英文教材底稿..."
+                    placeholder={t("raw_draft_placeholder")}
                     rows={4}
-                    className="bg-background border-border w-full resize-y rounded-lg border p-2.5 font-mono text-xs leading-relaxed outline-none focus:ring-1 focus:ring-slate-500"
+                    className="bg-background border-border focus:ring-ring w-full resize-y rounded-lg border p-2.5 font-mono text-xs leading-relaxed outline-none focus:ring-1"
                   />
                   <div className="flex justify-end">
                     <Button
@@ -706,10 +710,10 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
                         !(bagRawTexts[bag.group_id] || "").trim() || extractingBags[bag.group_id]
                       }
                       onClick={() => handleReExtractBag(bag.group_id)}
-                      className="h-7 gap-1.5 border border-indigo-500/20 bg-indigo-500/5 text-xs font-medium text-indigo-700 transition-all hover:bg-indigo-500/10 active:scale-[0.98]"
+                      className="border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 h-7 gap-1.5 border text-xs font-medium transition-all active:scale-[0.98]"
                     >
                       {extractingBags[bag.group_id] && <Loader2 className="h-3 w-3 animate-spin" />}
-                      ✨ 重新分析
+                      {t("re_extract")}
                     </Button>
                   </div>
                 </div>
@@ -721,19 +725,19 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
 
       {/* ── Practice-derived candidates — filed in bulk into one path ────── */}
       {candidates.length > 0 && (
-        <section className="border-border bg-card space-y-3 rounded-xl border border-amber-200/60 p-4">
+        <section className="border-border bg-card border-warning/40 space-y-3 rounded-xl border p-4">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-            <Sparkles className="h-4 w-4 text-amber-500" />
-            练习里冒出的新词
+            <Sparkles className="text-warning h-4 w-4" />
+            {t("candidates_title")}
             <span className="text-muted-foreground font-normal">
-              · {candidates.length} 词（孩子说过、还没收录）
+              · {t("candidates_count", { count: candidates.length })}
             </span>
           </h3>
           <div className="flex flex-wrap gap-1.5">
             {candidates.slice(0, 30).map((c) => (
               <span
                 key={c.text}
-                className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs text-amber-800"
+                className="border-warning/40 bg-warning/10 text-warning inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs"
               >
                 {c.text}
                 <span className="text-[10px] opacity-60">×{c.count}</span>
@@ -748,8 +752,8 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
               value={candPath}
               onChange={(e) => setCandPath(e.target.value)}
               disabled={busy === "candidates"}
-              placeholder="全部归位到，如 生词本 / 口语新词"
-              className="bg-background border-border min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-50"
+              placeholder={t("candidates_path_placeholder")}
+              className="bg-background border-border focus:ring-warning min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 disabled:opacity-50"
             />
             <Button
               type="button"
@@ -763,7 +767,7 @@ export function OrganizeWorkbenchClient({ initialInbox, groups: initialGroups }:
               ) : (
                 <FolderInput className="h-4 w-4" />
               )}
-              全部归位
+              {t("file_all")}
             </Button>
           </div>
         </section>

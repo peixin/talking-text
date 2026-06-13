@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import { createApi } from "@/lib/api";
 import { GroupDetailClient } from "../GroupDetailClient";
@@ -11,6 +12,7 @@ interface Props {
 
 export default async function GroupEditPage({ params }: Props) {
   const { groupId } = await params;
+  const t = await getTranslations("Materials");
   const api = await createApi();
 
   // Fetch details, all groups, and learners in parallel
@@ -41,7 +43,7 @@ export default async function GroupEditPage({ params }: Props) {
           href={`/parent/materials/${groupId}`}
           className="text-muted-foreground hover:text-primary text-sm transition"
         >
-          ← 返回详情
+          ← {t("back_to_details")}
         </Link>
       </header>
 

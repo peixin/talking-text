@@ -35,7 +35,7 @@ export function ShareLandingClient({ code, preview }: { code: string; preview: S
     <div className="space-y-5">
       {/* Book preview card */}
       <div className="bg-card rounded-2xl border p-6 text-center shadow-sm">
-        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-700">
+        <div className="border-primary/20 bg-primary/5 text-primary mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-xl border">
           <BookOpen className="h-7 w-7" />
         </div>
         <h1 className="text-lg font-bold">{preview.name}</h1>
@@ -75,7 +75,7 @@ export function ShareLandingClient({ code, preview }: { code: string; preview: S
           type="button"
           disabled={busy !== null}
           onClick={() => handleAdopt("clone")}
-          className="border-border bg-card w-full rounded-xl border p-4 text-left transition hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-900"
+          className="border-border bg-card hover:bg-muted/50 w-full rounded-xl border p-4 text-left transition disabled:opacity-50"
         >
           <span className="flex items-center gap-2 text-sm font-semibold">
             {busy === "clone" ? (

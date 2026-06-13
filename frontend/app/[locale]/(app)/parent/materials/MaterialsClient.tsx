@@ -25,6 +25,9 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/EmptyState";
+import { Panel } from "@/components/Panel";
 import { cn } from "@/lib/utils";
 import { SCOPE_SOFT_CAP } from "@/lib/constants";
 import type { GroupOut, SubscriptionOut } from "@/lib/backend";
@@ -272,33 +275,33 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
   return (
     <div className="space-y-6">
       {/* Top Banner with Action trigger */}
-      <div className="relative flex flex-col items-start justify-between gap-4 overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950 p-6 text-white shadow-lg sm:flex-row sm:items-center">
+      <div className="from-foreground to-primary text-primary-foreground relative flex flex-col items-start justify-between gap-4 overflow-hidden rounded-2xl bg-gradient-to-r p-6 shadow-lg sm:flex-row sm:items-center">
         {/* Subtle decorative background bubbles */}
-        <div className="pointer-events-none absolute top-0 right-0 h-44 w-44 rounded-full bg-indigo-500/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-10 left-10 h-24 w-24 rounded-full bg-pink-500/10 blur-2xl" />
+        <div className="bg-primary/10 pointer-events-none absolute top-0 right-0 h-44 w-44 rounded-full blur-3xl" />
+        <div className="bg-primary/10 pointer-events-none absolute -bottom-10 left-10 h-24 w-24 rounded-full blur-2xl" />
 
         <div className="relative z-10 space-y-1">
           <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-wide">
-            <Sparkles className="h-5 w-5 animate-pulse text-indigo-400" />
+            <Sparkles className="text-primary/60 h-5 w-5 animate-pulse" />
             {t("banner_title")}
           </h2>
-          <p className="max-w-md text-xs text-slate-300">{t("banner_subtitle")}</p>
+          <p className="text-primary-foreground/70 max-w-md text-xs">{t("banner_subtitle")}</p>
         </div>
 
         <Button
           onClick={() => {
             handleOpenChange(true);
           }}
-          className="group relative z-10 shrink-0 border border-slate-200 bg-white font-semibold text-slate-950 shadow-md hover:bg-slate-100"
+          className="group border-border bg-card text-foreground hover:bg-muted relative z-10 shrink-0 border font-semibold shadow-md"
           size="sm"
         >
-          <Plus className="mr-1.5 h-4 w-4 text-indigo-600 transition-transform duration-200 group-hover:rotate-90" />
+          <Plus className="text-primary mr-1.5 h-4 w-4 transition-transform duration-200 group-hover:rotate-90" />
           {t("banner_button")}
         </Button>
       </div>
 
       {/* Add a book another family shared (paste link or code) */}
-      <div className="border-border bg-card/40 flex flex-col gap-2 rounded-xl border border-dashed p-3 sm:flex-row sm:items-center">
+      <Panel className="bg-card/40 flex flex-col gap-2 border-dashed p-3 sm:flex-row sm:items-center">
         <span className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-xs font-medium">
           <Link2 className="h-3.5 w-3.5" />
           {t("add_shared_title")}
@@ -321,24 +324,24 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
         >
           {t("add_shared_button")}
         </Button>
-      </div>
+      </Panel>
 
       {/* Un-organized capture bags → practice straight away, or organize later */}
       {captureRoots.length > 0 && (
-        <section className="space-y-3 rounded-2xl border border-amber-300/60 bg-amber-50/40 p-4">
+        <section className="border-warning/40 bg-warning/10 space-y-3 rounded-2xl border p-4">
           <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-1.5 text-sm font-bold text-amber-700">
+            <h3 className="text-warning flex items-center gap-1.5 text-sm font-bold">
               <Inbox className="h-4 w-4" />
               {t("capture_section_title", { count: captureRoots.length })}
             </h3>
             <Link
               href="/parent/organize"
-              className="text-sm font-medium text-amber-700 transition hover:text-amber-900"
+              className="text-warning hover:text-warning/80 text-sm font-medium transition"
             >
               {t("capture_organize_link")}
             </Link>
           </div>
-          <p className="text-xs text-amber-700/70">{t("capture_section_hint")}</p>
+          <p className="text-warning/70 text-xs">{t("capture_section_hint")}</p>
           <div className="flex flex-wrap gap-2">
             {captureRoots.map((n) => {
               const isBusy = busy === n.group.id;
@@ -349,7 +352,7 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
                 >
                   <Link
                     href={`/parent/materials/${n.group.id}`}
-                    className="font-medium transition hover:text-amber-700"
+                    className="hover:text-warning font-medium transition"
                     title={t("capture_bag_tooltip")}
                   >
                     {n.group.name}
@@ -361,7 +364,7 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
                     size="sm"
                     onClick={() => handleStartSession(n.group.id)}
                     disabled={isBusy}
-                    className="h-6 rounded-full bg-amber-500 px-2.5 text-[11px] font-semibold text-white hover:bg-amber-600"
+                    className="bg-warning hover:bg-warning/90 h-6 rounded-full px-2.5 text-[11px] font-semibold text-white"
                   >
                     {isBusy ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
@@ -383,7 +386,7 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
       <section className="space-y-3">
         <div className="flex items-center justify-between border-b pb-2">
           <h3 className="text-foreground flex items-center gap-1.5 text-sm font-bold">
-            <BookOpen className="h-4 w-4 text-slate-500" />
+            <BookOpen className="text-muted-foreground h-4 w-4" />
             {t("tree_section_title")}
           </h3>
           <span className="text-muted-foreground text-xs">
@@ -392,11 +395,15 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
         </div>
 
         {canonicalRoots.length === 0 ? (
-          <div className="text-muted-foreground bg-card/20 rounded-2xl border border-dashed p-10 text-center text-sm shadow-inner">
-            <Bookmark className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-            <p className="font-semibold text-slate-400">{t("tree_empty_title")}</p>
-            <p className="mt-1 text-xs text-slate-400">{t("tree_empty_hint")}</p>
-          </div>
+          <EmptyState className="bg-card/20 rounded-2xl p-10 shadow-inner">
+            <Bookmark className="text-muted-foreground/50 mx-auto mb-2 h-8 w-8" />
+            <span className="text-muted-foreground/70 block font-semibold">
+              {t("tree_empty_title")}
+            </span>
+            <span className="text-muted-foreground/70 mt-1 block text-xs">
+              {t("tree_empty_hint")}
+            </span>
+          </EmptyState>
         ) : (
           <div className="space-y-4">
             {canonicalRoots.map((node) => (
@@ -422,7 +429,7 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
 
       {/* Dead subscriptions — the source owner deleted the book (tombstones) */}
       {tombstones.length > 0 && (
-        <section className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+        <section className="border-border bg-muted/50 space-y-2 rounded-xl border p-3">
           {tombstones.map((s) => (
             <div key={s.id} className="flex items-center justify-between gap-3 text-xs">
               <span className="text-muted-foreground">
@@ -550,27 +557,27 @@ function TreeViewNode({
   return (
     <div className="space-y-2">
       {/* Container card */}
-      <div
+      <Panel
         className={cn(
-          "group flex flex-col gap-3 rounded-xl border p-4 transition-all duration-200 sm:flex-row sm:items-center sm:justify-between",
+          "group flex flex-col gap-3 transition-all duration-200 sm:flex-row sm:items-center sm:justify-between",
           depth === 0
-            ? "bg-card border-slate-200/80 shadow-sm hover:border-slate-300"
+            ? "hover:border-input shadow-sm"
             : depth === 1
-              ? "bg-card/75 relative ml-3 border-slate-100 hover:border-indigo-100 hover:bg-indigo-50/10 sm:ml-6"
-              : "bg-card/40 relative ml-6 border-dashed border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/20 sm:ml-12",
+              ? "bg-card/75 hover:border-primary/20 hover:bg-primary/5 relative ml-3 sm:ml-6"
+              : "bg-card/40 hover:border-primary/20 hover:bg-primary/5 relative ml-6 border-dashed sm:ml-12",
           isBusy ? "pointer-events-none opacity-50" : "",
         )}
       >
         {/* Visual guide line */}
         {depth > 0 && (
           <div
-            className="pointer-events-none absolute top-1/2 -left-3 h-[2px] w-3 bg-slate-200"
+            className="bg-border pointer-events-none absolute top-1/2 -left-3 h-[2px] w-3"
             style={{ transform: "translateY(-50%)" }}
           />
         )}
         {depth > 0 && (
           <div
-            className="pointer-events-none absolute top-0 -left-3 h-full w-[2px] bg-slate-200"
+            className="bg-border pointer-events-none absolute top-0 -left-3 h-full w-[2px]"
             style={{ height: children.length > 0 && expanded ? "50%" : "100%" }}
           />
         )}
@@ -597,10 +604,10 @@ function TreeViewNode({
             className={cn(
               "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border shadow-sm",
               depth === 0
-                ? "border-slate-200 bg-slate-100 text-slate-800"
+                ? "border-border bg-muted text-foreground"
                 : depth === 1
-                  ? "border-indigo-100 bg-indigo-50 text-indigo-800"
-                  : "border-emerald-100 bg-emerald-50 text-emerald-800",
+                  ? "border-primary/20 bg-primary/5 text-primary"
+                  : "border-success/30 bg-success/10 text-success",
             )}
           >
             <Icon className="h-4 w-4" />
@@ -609,17 +616,23 @@ function TreeViewNode({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Link href={`/parent/materials/${group.id}`}>
-                <span className="text-foreground cursor-pointer truncate text-sm leading-tight font-bold transition-colors hover:text-indigo-600 hover:underline">
+                <span className="text-foreground hover:text-primary cursor-pointer truncate text-sm leading-tight font-bold transition-colors hover:underline">
                   {group.name}
                 </span>
               </Link>
-              <span className="py-0.2 shrink-0 rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-500">
+              <Badge
+                variant="secondary"
+                className="py-0.2 bg-muted text-muted-foreground h-auto shrink-0 rounded border-0 px-1 text-[10px] font-semibold"
+              >
                 {kindLabel(group.kind)}
-              </span>
+              </Badge>
               {isSubscribed && (
-                <span className="shrink-0 rounded bg-sky-100 px-1 py-px text-[10px] font-semibold text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+                <Badge
+                  variant="success"
+                  className="h-auto shrink-0 rounded border-0 px-1 py-px text-[10px] font-semibold"
+                >
                   {t("subscribed_badge")}
-                </span>
+                </Badge>
               )}
             </div>
             <span className="text-muted-foreground mt-0.5 block text-[10px]">
@@ -627,7 +640,7 @@ function TreeViewNode({
                 const recursiveCount = descendantCounts.get(group.id) || group.item_count;
                 if (group.item_count === 0 && recursiveCount > 0) {
                   return (
-                    <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                    <span className="text-primary font-semibold">
                       {t("contains_items", { count: recursiveCount })}
                     </span>
                   );
@@ -653,12 +666,12 @@ function TreeViewNode({
             size="sm"
             onClick={() => onStartSession(group.id)}
             disabled={isBusy}
-            className="flex h-8 shrink-0 items-center border-indigo-100 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-50 hover:text-indigo-800"
+            className="border-primary/20 text-primary hover:bg-primary/5 hover:text-primary flex h-8 shrink-0 items-center text-xs font-semibold shadow-sm"
           >
             {isBusy ? (
               <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
             ) : (
-              <MessageSquare className="mr-1 h-3.5 w-3.5 text-indigo-500" />
+              <MessageSquare className="text-primary mr-1 h-3.5 w-3.5" />
             )}
             {t("practice_chat")}
           </Button>
@@ -682,7 +695,7 @@ function TreeViewNode({
               size="icon-sm"
               onClick={() => onShare(group)}
               disabled={isBusy}
-              className="text-muted-foreground shrink-0 hover:text-sky-600"
+              className="text-muted-foreground hover:text-primary shrink-0"
               title={t("share")}
             >
               <Share2 className="h-3.5 w-3.5" />
@@ -724,7 +737,7 @@ function TreeViewNode({
                 size="icon-sm"
                 onClick={() => onFork?.(group, subscription)}
                 disabled={isBusy}
-                className="text-muted-foreground shrink-0 hover:text-indigo-600"
+                className="text-muted-foreground hover:text-primary shrink-0"
                 title={t("fork")}
               >
                 <GitFork className="h-3.5 w-3.5" />
@@ -742,7 +755,7 @@ function TreeViewNode({
             </>
           )}
         </div>
-      </div>
+      </Panel>
 
       {/* Recurse children */}
       {children.length > 0 && expanded && (

@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/routing";
 import { ArrowUpRight, Bookmark, BookOpen, ChevronDown, Sparkles, Zap } from "lucide-react";
 import type { GroupOut } from "@/lib/backend";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { LEVEL_PRESETS } from "@/lib/constants";
 
@@ -16,13 +18,13 @@ interface TagPathHeaderProps {
   subtitle?: React.ReactNode;
 }
 
-const KIND_LABEL: Record<string, string> = {
-  textbook_book: "教材",
-  textbook_unit: "单元",
-  textbook_lesson: "课次",
-  personal_collection: "生词本",
-  quick_practice: "随手练习",
-  review_set: "复习集",
+const KIND_LABEL_KEY: Record<string, string> = {
+  textbook_book: "kind_textbook_book",
+  textbook_unit: "kind_textbook_unit",
+  textbook_lesson: "kind_textbook_lesson",
+  personal_collection: "kind_personal_collection",
+  quick_practice: "kind_quick_practice",
+  review_set: "kind_review_set",
 };
 
 const KIND_ICON: Record<string, typeof BookOpen> = {
@@ -41,6 +43,7 @@ export function TagPathHeader({
   allGroups,
   subtitle,
 }: TagPathHeaderProps) {
+  const t = useTranslations("TagPath");
   // The REAL ancestor chain (root → current). We never fabricate path segments.
   const breadcrumbPath = useMemo(() => {
     const nodes: GroupOut[] = [];
@@ -109,16 +112,17 @@ export function TagPathHeader({
     <div className="mb-6 flex flex-col gap-3">
       {/* Full-chain breadcrumb — ancestors + current + auto-extended downstream crumbs,
           a branch popover where it forks, and a total-depth badge. */}
-      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-3 rounded-2xl border border-slate-100 bg-slate-50/50 p-4 shadow-sm dark:border-slate-800/40 dark:bg-slate-950/20">
+      <div className="border-border bg-muted/30 flex flex-wrap items-center gap-x-1.5 gap-y-3 rounded-2xl border p-4 shadow-sm">
         {fullChain.crumbs.length === 0 ? (
-          <div className="relative flex items-center gap-2 rounded-lg border border-indigo-500 bg-indigo-50/70 px-3.5 py-1.5 shadow-sm ring-2 ring-indigo-500/10 dark:bg-indigo-950/40">
-            <span className="text-sm leading-none font-bold text-indigo-950 dark:text-white">
-              {groupName || "未分类"}
+          <div className="border-primary bg-primary/5 ring-ring/10 relative flex items-center gap-2 rounded-lg border px-3.5 py-1.5 shadow-sm ring-2">
+            <span className="text-primary text-sm leading-none font-bold">
+              {groupName || t("uncategorized")}
             </span>
           </div>
         ) : (
           fullChain.crumbs.map((node, idx) => {
-            const title = node.level_title || LEVEL_PRESETS[idx] || `层级 ${idx + 1}`;
+            const title =
+              node.level_title || LEVEL_PRESETS[idx] || t("level_fallback", { n: idx + 1 });
             const isCurrent = idx === fullChain.currentIdx;
             const isAncestor = idx < fullChain.currentIdx;
 
@@ -126,13 +130,12 @@ export function TagPathHeader({
               <div
                 className={cn(
                   "relative flex items-center gap-2 rounded-lg border px-3.5 py-1.5 shadow-sm transition-all duration-200",
-                  isCurrent &&
-                    "border-indigo-500 bg-indigo-50/70 ring-2 ring-indigo-500/10 dark:bg-indigo-950/40",
+                  isCurrent && "border-primary bg-primary/5 ring-ring/10 ring-2",
                   isAncestor &&
-                    "group cursor-pointer border-slate-100 bg-white hover:border-indigo-300 hover:bg-indigo-50/30 hover:shadow dark:border-slate-800/40 dark:bg-slate-950/20",
+                    "border-border bg-card hover:border-primary/30 hover:bg-primary/5 group cursor-pointer hover:shadow",
                   !isCurrent &&
                     !isAncestor &&
-                    "group cursor-pointer border-dashed border-indigo-200 bg-indigo-50/10 hover:border-indigo-300 hover:bg-indigo-50/30 dark:border-indigo-900/50 dark:bg-indigo-950/10",
+                    "border-primary/20 bg-primary/5 hover:border-primary/30 hover:bg-primary/10 group cursor-pointer border-dashed",
                 )}
               >
                 <div className="flex flex-col items-start leading-none">
@@ -140,16 +143,16 @@ export function TagPathHeader({
                     className={cn(
                       "mb-1 flex items-center gap-1 text-[10px] leading-none font-bold tracking-wide uppercase transition-colors",
                       isCurrent
-                        ? "text-indigo-600 dark:text-indigo-400"
+                        ? "text-primary"
                         : isAncestor
-                          ? "text-indigo-500 group-hover:text-indigo-600"
-                          : "text-indigo-400/80 group-hover:text-indigo-600",
+                          ? "text-primary/80 group-hover:text-primary"
+                          : "text-primary/60 group-hover:text-primary",
                     )}
                   >
                     {title}
                     {isCurrent && (
-                      <span className="rounded-sm bg-indigo-600 px-1 py-px text-[8px] leading-none font-bold tracking-normal text-white normal-case">
-                        当前
+                      <span className="bg-primary text-primary-foreground rounded-sm px-1 py-px text-[8px] leading-none font-bold tracking-normal normal-case">
+                        {t("current_marker")}
                       </span>
                     )}
                   </span>
@@ -157,13 +160,13 @@ export function TagPathHeader({
                     className={cn(
                       "text-sm leading-none font-bold transition-colors",
                       isCurrent
-                        ? "text-indigo-950 dark:text-white"
+                        ? "text-primary"
                         : isAncestor
-                          ? "text-slate-800 group-hover:text-indigo-600 dark:text-slate-200"
-                          : "text-slate-500 group-hover:text-indigo-700 dark:text-slate-400",
+                          ? "text-foreground group-hover:text-primary"
+                          : "text-muted-foreground group-hover:text-primary",
                     )}
                   >
-                    {node.name || "无"}
+                    {node.name || t("none")}
                   </span>
                 </div>
               </div>
@@ -172,9 +175,7 @@ export function TagPathHeader({
             return (
               <div key={node.id} className="flex items-center gap-1">
                 {idx > 0 && (
-                  <span className="px-0.5 text-sm font-extrabold text-slate-300 dark:text-slate-700">
-                    ›
-                  </span>
+                  <span className="text-muted-foreground/50 px-0.5 text-sm font-extrabold">›</span>
                 )}
                 {isCurrent ? crumb : <Link href={`/parent/materials/${node.id}`}>{crumb}</Link>}
               </div>
@@ -185,16 +186,15 @@ export function TagPathHeader({
         {/* Branch point: fork → list children in a popover instead of picking one. */}
         {fullChain.branchChildren && (
           <div className="flex items-center gap-1">
-            <span className="px-0.5 text-sm font-extrabold text-slate-300 dark:text-slate-700">
-              ›
-            </span>
+            <span className="text-muted-foreground/50 px-0.5 text-sm font-extrabold">›</span>
             <Popover>
-              <PopoverTrigger className="flex items-center gap-1.5 rounded-lg border border-dashed border-indigo-300 bg-indigo-50/20 px-3 py-1.5 text-[11px] font-bold text-indigo-600 transition-all hover:border-indigo-400 hover:bg-indigo-100/30 hover:text-indigo-800">
-                <ChevronDown className="h-3.5 w-3.5" />含 {fullChain.branchChildren.length} 个下级
+              <PopoverTrigger className="border-primary/30 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10 flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-1.5 text-[11px] font-bold transition-all">
+                <ChevronDown className="h-3.5 w-3.5" />
+                {t("branch_children", { count: fullChain.branchChildren.length })}
               </PopoverTrigger>
               <PopoverContent align="start" className="w-64 gap-1 p-1.5">
-                <div className="px-2 py-1 text-[9px] font-bold tracking-wider text-slate-400 uppercase">
-                  下级章节（{fullChain.branchChildren.length}）
+                <div className="text-muted-foreground/70 px-2 py-1 text-[9px] font-bold tracking-wider uppercase">
+                  {t("branch_children_header", { count: fullChain.branchChildren.length })}
                 </div>
                 <div className="max-h-64 space-y-0.5 overflow-y-auto">
                   {fullChain.branchChildren.map((child) => {
@@ -203,20 +203,20 @@ export function TagPathHeader({
                       <Link
                         key={child.id}
                         href={`/parent/materials/${child.id}`}
-                        className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+                        className="hover:bg-primary/5 flex items-center gap-2 rounded-lg px-2 py-1.5 transition"
                       >
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-100 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-950">
+                        <span className="border-border bg-card text-muted-foreground flex h-6 w-6 shrink-0 items-center justify-center rounded-md border">
                           <ChildIcon className="h-3.5 w-3.5" />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-semibold text-slate-800 dark:text-slate-200">
+                          <span className="text-foreground block truncate text-xs font-semibold">
                             {child.name}
                           </span>
                           <span className="text-muted-foreground block text-[10px]">
-                            {child.item_count} 个学习点
+                            {t("items_count", { count: child.item_count })}
                           </span>
                         </span>
-                        <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+                        <ArrowUpRight className="text-primary/60 h-3.5 w-3.5 shrink-0" />
                       </Link>
                     );
                   })}
@@ -227,18 +227,24 @@ export function TagPathHeader({
         )}
 
         {/* Total-depth badge — how deep the whole hierarchy goes. */}
-        <span className="px-0.5 text-sm font-extrabold text-slate-300 dark:text-slate-700">·</span>
-        <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-          共 {totalDepth} 层
-        </span>
+        <span className="text-muted-foreground/50 px-0.5 text-sm font-extrabold">·</span>
+        <Badge
+          variant="secondary"
+          className="bg-muted text-muted-foreground h-auto rounded-md py-1 text-[11px] font-bold"
+        >
+          {t("depth_badge", { count: totalDepth })}
+        </Badge>
       </div>
 
       {/* Page Title / Subtitle segment */}
       {subtitle && (
         <div className="flex items-center gap-2 pl-2">
-          <span className="rounded border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-400">
-            {KIND_LABEL[groupKind] || "素材"}
-          </span>
+          <Badge
+            variant="outline"
+            className="border-primary/20 bg-primary/5 text-primary h-auto rounded text-[10px] font-bold"
+          >
+            {t(KIND_LABEL_KEY[groupKind] ?? "kind_fallback")}
+          </Badge>
           <p className="text-muted-foreground text-xs font-medium">{subtitle}</p>
         </div>
       )}

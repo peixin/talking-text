@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/routing";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { createApi } from "@/lib/api";
 import { GroupDetailClient } from "./GroupDetailClient";
 
@@ -43,13 +44,13 @@ export default async function GroupDetailPage({ params }: Props) {
           href="/parent/materials"
           className="text-muted-foreground hover:text-primary text-sm transition"
         >
-          ← {t("back_to_list", { defaultValue: "返回列表" })}
+          ← {t("back_to_list")}
         </Link>
       </header>
       {group.subscribed && (
-        <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200">
-          {t("subscribed_readonly_banner")}
-        </div>
+        <Alert variant="success" className="mb-4 px-4 py-2.5">
+          <AlertDescription className="text-xs">{t("subscribed_readonly_banner")}</AlertDescription>
+        </Alert>
       )}
       <GroupDetailClient
         group={group}

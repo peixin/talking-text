@@ -265,7 +265,12 @@ just db-history
 - **组件** PascalCase 文件名；Server Component 不加后缀，Client Component 文件名加 `Client` 后缀（如 `ChatClient.tsx`）
 - **页面** 走 Next 约定（`[locale]/page.tsx`、`actions.ts`、`proxy.ts`）
 - **不在 Server Component 里调 useEffect / useState**
-- **样式** 用 Tailwind v4 utility classes；需要复杂组件时用 shadcn
+- **样式** 用 Tailwind v4 utility classes；需要复杂组件时用 shadcn。完整组件与样式契约见 [`docs/frontend-ui.cn.md`](docs/frontend-ui.cn.md)
+- **只用 design token，禁止裸 palette 色。** 业务代码里禁止出现 Tailwind 原始色板类（`bg-indigo-600`、`text-slate-500`、`border-amber-300` 等）。只能用语义 token：`primary`（品牌/可交互）、`muted` / `muted-foreground` / `border` / `foreground`（中性灰）、`destructive`（错误/危险）、`success` / `warning`（状态）。深浅一律用透明度修饰（`bg-primary/10`、`border-success/30`），不用色板号。新的业务语义色加到 `globals.css` 的 `@theme` 里，不许内联
+- **禁止 `dark:` 变体** —— V1 没有暗色模式；shadcn 管理的 `components/ui/` 之外不许写 `dark:`
+- **组件来源：库优先，手写垫底。** 任何标准 UI 模式（按钮、对话框、popover、下拉/select、tabs、tooltip、badge、switch、手风琴、toast……）必须来自 shadcn/ui；`components/ui/` 里还没有的就 `pnpm dlx shadcn@latest add <name>` 加进来——库里已有的东西绝不手写平行版本。改外观只通过 token / className 调库组件
+- **手写组件是例外，不是默认** —— 只留给库里没有对应物的产品特有 UI（录音键、聊天气泡、标签树行）。手写组件必须用语义 token + 既有 primitive 搭建；一旦第二个页面需要同样的模式，立刻提取到 `components/` 复用——禁止复制粘贴出分叉
+- **按钮专项：**"长得像按钮的"一律用 `<Button>` / `buttonVariants()`。裸 `<button>` 标签只在元素是另一个视觉物种、仅因 HTML 语义/无障碍需要可点击时才允许（词条 chip、树节点行、录音键）——这类元素若硬套 `<Button>`，等于把它的全部样式覆盖一遍，违背初衷。目标是视觉语言统一，不是标签统一
 - `components/ui/` 是 shadcn 管理，手动修改只改样式不改结构逻辑
 
 ### Commit 信息（Conventional Commits，commitlint 会强制）

@@ -64,7 +64,7 @@ export function LearnerSettingsClient({
           href="/parent"
           className="text-muted-foreground hover:text-primary text-sm transition"
         >
-          ← 家长中心
+          ← {t("back_to_parent")}
         </Link>
       </div>
 
