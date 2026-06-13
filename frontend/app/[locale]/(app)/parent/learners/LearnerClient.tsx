@@ -4,13 +4,20 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/routing";
 import { LearnerOut } from "@/lib/backend";
-import { createLearner, deleteLearner, updateLearner } from "./actions";
+import { createLearner, deleteLearner, updateLearner, setActiveLearner } from "./actions";
 
-export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
+export function LearnerClient({
+  learners,
+  activeLearnerId,
+}: {
+  learners: LearnerOut[];
+  activeLearnerId: string | null;
+}) {
   const t = useTranslations("Learners");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [currentActiveId, setCurrentActiveId] = useState<string | null>(activeLearnerId);
 
   function translateError(code: string): string {
     const key = `errors.${code}` as Parameters<typeof t>[0];
@@ -53,6 +60,18 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
     setLoading(false);
   }
 
+  async function handleSetActive(id: string) {
+    setLoading(true);
+    setError("");
+    const res = await setActiveLearner(id);
+    if (res.error) {
+      setError(translateError(res.error));
+    } else {
+      setCurrentActiveId(id);
+    }
+    setLoading(false);
+  }
+
   return (
     <div>
       {error && <div className="text-destructive mb-4 text-sm">{error}</div>}
@@ -81,7 +100,9 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
           {learners.map((l) => (
             <div
               key={l.id}
-              className="border-border flex items-center justify-between rounded border p-4"
+              className={`border-border flex items-center justify-between rounded border p-4 transition ${
+                l.id === currentActiveId ? "bg-primary/5 border-primary/30" : ""
+              }`}
             >
               {editingId === l.id ? (
                 <form
@@ -112,8 +133,24 @@ export function LearnerClient({ learners }: { learners: LearnerOut[] }) {
                 </form>
               ) : (
                 <>
-                  <span className="font-medium">{l.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{l.name}</span>
+                    {l.id === currentActiveId && (
+                      <span className="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-xs font-medium">
+                        {t("current_badge")}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-3 text-sm">
+                    {l.id !== currentActiveId && (
+                      <button
+                        onClick={() => handleSetActive(l.id)}
+                        disabled={loading}
+                        className="text-primary hover:underline disabled:opacity-50"
+                      >
+                        {t("switch_current")}
+                      </button>
+                    )}
                     <Link
                       href={`/parent/learners/${l.id}`}
                       className="text-primary hover:underline"

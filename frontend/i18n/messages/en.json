@@ -86,9 +86,11 @@
       "LEARNER_NAME_REQUIRED": "Name is required",
       "LEARNER_CREATE_FAILED": "Failed to add",
       "LEARNER_UPDATE_FAILED": "Failed to update",
-      "LEARNER_DELETE_FAILED": "Failed to delete"
+      "LEARNER_DELETE_FAILED": "Failed to delete",
+      "LEARNER_SET_ACTIVE_FAILED": "Failed to switch learner"
     },
-    "back_to_parent": "Parent dashboard"
+    "back_to_parent": "Parent dashboard",
+    "current_badge": "Active"
   },
   "Chat": {
     "title": "Chat",
@@ -361,7 +363,13 @@
     "prompt_notes_placeholder": "Extra teaching points, e.g. drill the present continuous; focus on correcting /r/ pronunciation.",
     "kind_placeholder": "Choose a kind",
     "start_practice_chat": "Start practice chat",
-    "organize_link": "Organize materials →"
+    "organize_link": "Organize materials →",
+    "quick_access": "Quick access",
+    "assign_failed": "Assignment failed: {error}",
+    "unassign_failed": "Unassignment failed: {error}",
+    "share_copied_title": "Link copied",
+    "share_code_hint": "Share code: {code}",
+    "share_fallback_title": "Share link ready — copy it below"
   },
   "MaterialPickers": {
     "kind_label": "Type (type your own)",

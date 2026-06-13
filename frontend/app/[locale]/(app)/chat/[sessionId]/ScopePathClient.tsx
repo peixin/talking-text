@@ -40,7 +40,8 @@ export function ScopePath({ chain }: { chain: Crumb[] }) {
       const w = crumbEls.map((el) => el.offsetWidth);
       const sep = sepEl?.offsetWidth ?? 16;
       const ell = ellEl?.offsetWidth ?? 12;
-      const avail = container.clientWidth;
+      // Measure available width from the parent — ScopePath itself is shrunk to content width
+      const avail = container.parentElement?.clientWidth ?? container.clientWidth;
 
       const full = w.reduce((a, b) => a + b, 0) + (n - 1) * sep;
       if (full <= avail) {
@@ -64,8 +65,10 @@ export function ScopePath({ chain }: { chain: Crumb[] }) {
       setShown([...keep].sort((a, b) => a - b));
     };
 
+    // Observe the parent element so we react to changes in available width
+    const observeTarget = container.parentElement ?? container;
     const ro = new ResizeObserver(compute);
-    ro.observe(container);
+    ro.observe(observeTarget);
     // ResizeObserver fires once on observe, so the initial measurement runs without a
     // synchronous setState in the effect body.
     return () => ro.disconnect();
@@ -109,7 +112,7 @@ export function ScopePath({ chain }: { chain: Crumb[] }) {
       {/* Visible, responsive path. */}
       <div
         ref={containerRef}
-        className="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap"
+        className="flex min-w-0 shrink items-center overflow-hidden whitespace-nowrap"
       >
         {effective.map((idx, k) => {
           const gapBefore = k > 0 && idx !== effective[k - 1] + 1;

@@ -30,18 +30,23 @@ import { EmptyState } from "@/components/EmptyState";
 import { Panel } from "@/components/Panel";
 import { cn } from "@/lib/utils";
 import { SCOPE_SOFT_CAP } from "@/lib/constants";
-import type { GroupOut, SubscriptionOut } from "@/lib/backend";
+import { toast } from "sonner";
+import type { GroupOut, LearnerOut, SubscriptionOut } from "@/lib/backend";
 import {
   archiveGroup,
+  assignLearnerToGroup,
   createShareLinkAction,
   deleteGroup,
   forkSubscriptionAction,
   startSessionFromGroupAction,
+  unassignLearnerFromGroup,
   unsubscribeAction,
 } from "./actions";
 import { Link } from "@/i18n/routing";
 import { useKindLabel } from "./MaterialPickersClient";
 import { IngestDrawerClient } from "@/app/[locale]/(app)/chat/[sessionId]/IngestDrawerClient";
+
+type LearnerRef = { id: string; name: string };
 
 const KIND_ICON: Record<string, typeof BookOpen> = {
   textbook_book: BookOpen,
@@ -55,6 +60,9 @@ const KIND_ICON: Record<string, typeof BookOpen> = {
 interface Props {
   groups: GroupOut[];
   subscriptions: SubscriptionOut[];
+  allLearners?: LearnerOut[];
+  /** groupId → list of assigned learners (only root groups with ≥1 learner) */
+  rootBookLearners?: Record<string, LearnerRef[]>;
 }
 
 interface GroupNode {
@@ -62,7 +70,7 @@ interface GroupNode {
   children: GroupNode[];
 }
 
-export function MaterialsClient({ groups: initialGroups, subscriptions }: Props) {
+export function MaterialsClient({ groups: initialGroups, subscriptions, allLearners = [], rootBookLearners = {} }: Props) {
   const t = useTranslations("Materials");
   const kindLabel = useKindLabel();
   const router = useRouter();
@@ -188,7 +196,7 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
       if (res.ok) {
         router.push(`/chat/${res.sessionId}`);
       } else {
-        alert(t("start_session_failed", { error: res.error }));
+        toast.error(t("start_session_failed", { error: res.error }));
       }
     });
   }
@@ -224,16 +232,17 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
       const res = await createShareLinkAction(g.id);
       setBusy(null);
       if (!res.ok) {
-        alert(t("share_failed", { error: res.error }));
+        toast.error(t("share_failed", { error: res.error }));
         return;
       }
       const url = `${window.location.origin}/${locale}/parent/materials/share/${res.code}`;
       try {
         await navigator.clipboard.writeText(url);
+        toast.success(t("share_copied_title"), { description: t("share_code_hint", { code: res.code }) });
       } catch {
-        // clipboard may be unavailable (non-HTTPS); the alert still shows the link
+        // clipboard unavailable (non-HTTPS) — show the URL so user can copy manually
+        toast.info(t("share_fallback_title"), { description: `${url}` });
       }
-      alert(t("share_link_copied", { url, code: res.code }));
     });
   }
 
@@ -246,7 +255,7 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
       if (res.ok) {
         router.refresh();
       } else {
-        alert(t("fork_failed", { error: res.error }));
+        toast.error(t("fork_failed", { error: res.error }));
       }
     });
   }
@@ -272,8 +281,51 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
     router.push(`/${locale}/parent/materials/share/${encodeURIComponent(code)}`);
   }
 
+  // Quick-access root books: root-level, non-archived groups with ≥1 learner assigned
+  const quickBooks = useMemo(() => {
+    return groups.filter(
+      (g) => !g.archived && g.parent_id === null && g.kind !== "quick_practice" && rootBookLearners[g.id],
+    );
+  }, [groups, rootBookLearners]);
+
   return (
     <div className="space-y-6">
+      {/* Quick Book Access — root books with learners assigned */}
+      {quickBooks.length > 0 && (
+        <section className="space-y-2">
+          <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold">
+            <BookOpen className="h-3.5 w-3.5" />
+            {t("quick_access")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {quickBooks.map((g) => {
+              const learnerRefs = rootBookLearners[g.id] ?? [];
+              return (
+                <Link
+                  key={g.id}
+                  href={`/parent/materials/${g.id}`}
+                  className="border-border bg-card hover:border-primary hover:bg-primary/5 hover:text-primary group inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition"
+                >
+                  <BookOpen className="text-primary h-3.5 w-3.5 shrink-0" />
+                  <span className="font-semibold">{g.name}</span>
+                  {learnerRefs.length > 0 && (
+                    <span className="text-muted-foreground border-border flex items-center gap-1 border-l pl-2">
+                      {learnerRefs.map((lr) => (
+                        <span
+                          key={lr.id}
+                          className="bg-primary/10 text-primary rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                        >
+                          {lr.name}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
       {/* Top Banner with Action trigger */}
       <div className="from-foreground to-primary text-primary-foreground relative flex flex-col items-start justify-between gap-4 overflow-hidden rounded-2xl bg-gradient-to-r p-6 shadow-lg sm:flex-row sm:items-center">
         {/* Subtle decorative background bubbles */}
@@ -421,6 +473,8 @@ export function MaterialsClient({ groups: initialGroups, subscriptions }: Props)
                 onShare={handleShare}
                 onFork={handleFork}
                 onUnsubscribe={handleUnsubscribe}
+                learnerRefs={rootBookLearners[node.group.id]}
+                allLearners={allLearners}
               />
             ))}
           </div>
@@ -531,6 +585,8 @@ function TreeViewNode({
   onShare,
   onFork,
   onUnsubscribe,
+  learnerRefs,
+  allLearners = [],
 }: {
   node: GroupNode;
   depth: number;
@@ -545,14 +601,45 @@ function TreeViewNode({
   onShare?: (g: GroupOut) => void;
   onFork?: (g: GroupOut, sub: SubscriptionOut) => void;
   onUnsubscribe?: (name: string, sub: SubscriptionOut) => void;
+  /** Learners currently assigned (only passed for root/depth=0 nodes) */
+  learnerRefs?: LearnerRef[];
+  /** All learners — used to render assign buttons for unassigned ones */
+  allLearners?: LearnerOut[];
 }) {
   const t = useTranslations("Materials");
+  const [, startTransitionNode] = useTransition();
   const [expanded, setExpanded] = useState(false);
+  // Optimistic local assignment state for instant UI feedback
+  const [assignedIds, setAssignedIds] = useState<Set<string>>(
+    () => new Set((learnerRefs ?? []).map((l) => l.id)),
+  );
   const { group, children } = node;
 
   const Icon = KIND_ICON[group.kind] ?? Bookmark;
   const isBusy = busy === group.id;
   const isSubscribed = group.subscribed === true;
+
+  function handleAssign(learnerId: string) {
+    setAssignedIds((prev) => new Set([...prev, learnerId]));
+    startTransitionNode(async () => {
+      const res = await assignLearnerToGroup(group.id, learnerId);
+      if (!res.ok) {
+        setAssignedIds((prev) => { const next = new Set(prev); next.delete(learnerId); return next; });
+        toast.error(t("assign_failed", { error: res.error }));
+      }
+    });
+  }
+
+  function handleUnassign(learnerId: string) {
+    setAssignedIds((prev) => { const next = new Set(prev); next.delete(learnerId); return next; });
+    startTransitionNode(async () => {
+      const res = await unassignLearnerFromGroup(group.id, learnerId);
+      if (!res.ok) {
+        setAssignedIds((prev) => new Set([...prev, learnerId]));
+        toast.error(t("unassign_failed", { error: res.error }));
+      }
+    });
+  }
 
   return (
     <div className="space-y-2">
@@ -634,6 +721,30 @@ function TreeViewNode({
                   {t("subscribed_badge")}
                 </Badge>
               )}
+              {/* Learner assign/unassign — only on root nodes */}
+              {depth === 0 && allLearners.length > 0 && allLearners.map((l) => {
+                const isAssigned = assignedIds.has(l.id);
+                return isAssigned ? (
+                  <button
+                    key={l.id}
+                    onClick={() => handleUnassign(l.id)}
+                    title={`取消将此教材指定给 ${l.name}`}
+                    className="bg-primary/10 text-primary hover:bg-destructive/10 hover:text-destructive group/lb inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition"
+                  >
+                    👤 {l.name}
+                    <span className="opacity-0 group-hover/lb:opacity-100 transition">×</span>
+                  </button>
+                ) : (
+                  <button
+                    key={l.id}
+                    onClick={() => handleAssign(l.id)}
+                    title={`将此教材指定给 ${l.name}`}
+                    className="text-muted-foreground/50 hover:bg-primary/10 hover:text-primary inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[10px] transition"
+                  >
+                    + {l.name}
+                  </button>
+                );
+              })}
             </div>
             <span className="text-muted-foreground mt-0.5 block text-[10px]">
               {(() => {

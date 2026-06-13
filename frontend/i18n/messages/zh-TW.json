@@ -86,9 +86,11 @@
       "LEARNER_NAME_REQUIRED": "名稱不能為空",
       "LEARNER_CREATE_FAILED": "添加失敗",
       "LEARNER_UPDATE_FAILED": "修改失敗",
-      "LEARNER_DELETE_FAILED": "刪除失敗"
+      "LEARNER_DELETE_FAILED": "刪除失敗",
+      "LEARNER_SET_ACTIVE_FAILED": "切換失敗"
     },
-    "back_to_parent": "家長中心"
+    "back_to_parent": "家長中心",
+    "current_badge": "目前"
   },
   "Chat": {
     "title": "對話",
@@ -361,7 +363,13 @@
     "prompt_notes_placeholder": "補充教學要點。例如：重點操練現在進行時、孩子發音不好時重點糾正 /r/ 發音。",
     "kind_placeholder": "選擇類型",
     "start_practice_chat": "開始對話練習",
-    "organize_link": "整理素材 →"
+    "organize_link": "整理素材 →",
+    "quick_access": "快速存取",
+    "assign_failed": "指定失敗：{error}",
+    "unassign_failed": "取消失敗：{error}",
+    "share_copied_title": "分享連結已複製",
+    "share_code_hint": "分享碼：{code}",
+    "share_fallback_title": "分享連結已生成，請手動複製"
   },
   "MaterialPickers": {
     "kind_label": "素材類型（可自由輸入）",

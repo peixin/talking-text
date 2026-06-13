@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -416,7 +417,7 @@ export function GroupDetailClient({ group, allGroups, learnerCount, readOnly = f
         prev.map((g) => (g.id === childId ? { ...g, archived: true } : g)),
       );
     } else {
-      alert(t("archive_failed", { error: res.error }));
+      toast.error(t("archive_failed", { error: res.error }));
     }
   }
 
@@ -448,7 +449,7 @@ export function GroupDetailClient({ group, allGroups, learnerCount, readOnly = f
       setGroupsLocalState((prev) => [res.group, ...prev]);
       router.refresh();
     } else {
-      alert(t("add_child_failed", { error: res.error }));
+      toast.error(t("add_child_failed", { error: res.error }));
     }
   }
 
@@ -601,7 +602,7 @@ export function GroupDetailClient({ group, allGroups, learnerCount, readOnly = f
       )}
 
       {/* Floating Toolbar */}
-      <div className="border-border/80 bg-background/90 sticky top-14 z-10 flex flex-col justify-between gap-3 rounded-xl border p-4 shadow-md backdrop-blur-md sm:flex-row sm:items-center sm:gap-4">
+      <div className="border-border/80 bg-background/90 sticky top-0 z-10 flex flex-col justify-between gap-3 rounded-xl border p-4 shadow-md backdrop-blur-md sm:flex-row sm:items-center sm:gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           {readOnly ? (
             /* View Mode: Render clean header */
@@ -995,7 +996,7 @@ export function GroupDetailClient({ group, allGroups, learnerCount, readOnly = f
                                           ),
                                         );
                                       } else {
-                                        alert(t("rename_failed", { error: res.error }));
+                                        toast.error(t("rename_failed", { error: res.error }));
                                       }
                                     }
                                   }}

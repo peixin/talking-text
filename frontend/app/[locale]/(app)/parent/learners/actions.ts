@@ -49,3 +49,15 @@ export async function deleteLearner(id: string) {
     return { error: "LEARNER_DELETE_FAILED" };
   }
 }
+
+export async function setActiveLearner(id: string) {
+  try {
+    await backend.learners.setActive(id, await getHeaders());
+    revalidatePath("/parent");
+    revalidatePath("/parent/learners");
+    revalidatePath("/chat");
+    return { success: true };
+  } catch {
+    return { error: "LEARNER_SET_ACTIVE_FAILED" };
+  }
+}

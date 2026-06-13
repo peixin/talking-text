@@ -171,3 +171,31 @@ export async function startSessionFromGroupAction(
     return { ok: false, error: e instanceof BackendError ? e.detail : "SESSION_CREATE_FAILED" };
   }
 }
+
+export async function assignLearnerToGroup(
+  groupId: string,
+  learnerId: string,
+): Promise<GroupActionResult> {
+  const api = await createApi();
+  try {
+    await api.groups.assignLearner(groupId, learnerId);
+    revalidatePath("/parent/materials");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof BackendError ? e.detail : "ASSIGN_LEARNER_FAILED" };
+  }
+}
+
+export async function unassignLearnerFromGroup(
+  groupId: string,
+  learnerId: string,
+): Promise<GroupActionResult> {
+  const api = await createApi();
+  try {
+    await api.groups.unassignLearner(groupId, learnerId);
+    revalidatePath("/parent/materials");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof BackendError ? e.detail : "UNASSIGN_LEARNER_FAILED" };
+  }
+}

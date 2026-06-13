@@ -53,13 +53,13 @@ export default async function GroupLearnerAssignPage({ params }: Props) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-6">
+    <div className="mx-auto w-full max-w-2xl px-6 py-8">
       <header className="mb-6 flex items-center gap-4">
         <Link
           href={`/parent/materials/${groupId}`}
           className="text-muted-foreground hover:text-primary text-sm transition"
         >
-          ← {t("back_to_group")}
+          {t("back_to_group")}
         </Link>
       </header>
 

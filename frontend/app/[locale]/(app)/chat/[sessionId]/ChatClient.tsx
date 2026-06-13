@@ -657,24 +657,28 @@ export function ChatClient({
           {currentGroup ? (
             <>
               <span className="shrink-0">📕</span>
-              {/* full root → current path, collapsing the middle when space is tight */}
-              <ScopePath chain={currentChain} />
-              <span className="shrink-0">· {t("scope_items", { count: currentGroupTotal })}</span>
-              {currentIsContainer && (
-                <span className="text-muted-foreground/70 shrink-0">{t("scope_incl_sub")}</span>
-              )}
-              {currentTooMany && (
-                <span className="text-warning flex shrink-0 items-center gap-0.5 font-medium">
-                  <AlertTriangle className="h-3 w-3" />
-                  {t("scope_too_many", { cap: SCOPE_SOFT_CAP })}
-                </span>
-              )}
+              {/* Left-aligned: path + metadata all in one flex container */}
+              <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+                {/* full root → current path, collapsing the middle when space is tight */}
+                <ScopePath chain={currentChain} />
+                <span className="shrink-0 whitespace-nowrap">· {t("scope_items", { count: currentGroupTotal })}</span>
+                {currentIsContainer && (
+                  <span className="text-muted-foreground/70 shrink-0 whitespace-nowrap">{t("scope_incl_sub")}</span>
+                )}
+                {currentTooMany && (
+                  <span className="text-warning flex shrink-0 items-center gap-0.5 whitespace-nowrap font-medium">
+                    <AlertTriangle className="h-3 w-3" />
+                    {t("scope_too_many", { cap: SCOPE_SOFT_CAP })}
+                  </span>
+                )}
+              </span>
             </>
           ) : (
-            <span>✨ {t("scope_free_practice")}</span>
+            <span className="flex-1">✨ {t("scope_free_practice")}</span>
           )}
           <ChevronDown className="text-muted-foreground ml-auto h-3.5 w-3.5 shrink-0" />
         </button>
+
 
         {/* Singleton audio element — owned here, shared via handlePlay */}
         <audio

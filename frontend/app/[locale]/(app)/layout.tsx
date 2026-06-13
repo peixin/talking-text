@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import { logout } from "./actions";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
+import { Toaster } from "@/components/ui/sonner";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const t = await getTranslations("Navigation");
@@ -36,6 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </header>
       <main className="flex min-h-0 w-full flex-1 flex-col">{children}</main>
+      <Toaster position="top-center" richColors />
     </div>
   );
 }

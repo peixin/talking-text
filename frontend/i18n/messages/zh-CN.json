@@ -86,9 +86,11 @@
       "LEARNER_NAME_REQUIRED": "名称不能为空",
       "LEARNER_CREATE_FAILED": "添加失败",
       "LEARNER_UPDATE_FAILED": "修改失败",
-      "LEARNER_DELETE_FAILED": "删除失败"
+      "LEARNER_DELETE_FAILED": "删除失败",
+      "LEARNER_SET_ACTIVE_FAILED": "切换失败"
     },
-    "back_to_parent": "家长中心"
+    "back_to_parent": "家长中心",
+    "current_badge": "当前"
   },
   "Chat": {
     "title": "对话",
@@ -361,7 +363,13 @@
     "prompt_notes_placeholder": "补充教学要点。例如：重点操练现在进行时、孩子发音不好时重点纠正 /r/ 发音。",
     "kind_placeholder": "选择类型",
     "start_practice_chat": "开始对话练习",
-    "organize_link": "整理素材 →"
+    "organize_link": "整理素材 →",
+    "quick_access": "快捷访问",
+    "assign_failed": "指定失败：{error}",
+    "unassign_failed": "取消失败：{error}",
+    "share_copied_title": "分享链接已复制",
+    "share_code_hint": "分享码：{code}",
+    "share_fallback_title": "分享链接已生成，请手动复制"
   },
   "MaterialPickers": {
     "kind_label": "素材类型（可自由输入）",
